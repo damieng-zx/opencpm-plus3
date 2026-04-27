@@ -205,7 +205,6 @@ parse_cmd:
 
 .do_dir:
     ; Check for optional filename argument
-    ld hl, cmd_buf + 2
 .dir_skip_cmd:
     ld a, (hl)
     or a
@@ -480,7 +479,6 @@ parse_cmd:
 
 .do_type:
     ; Skip past "TYPE" in the command buffer to find the filename
-    ld hl, cmd_buf + 2
 .type_skip_cmd:
     ld a, (hl)
     cp ' '
@@ -570,7 +568,6 @@ parse_cmd:
 
 .do_screen:
     ; Skip past "SCREEN" in the command buffer to find argument
-    ld hl, cmd_buf + 2
 .screen_skip_cmd:
     ld a, (hl)
     cp ' '
