@@ -41,6 +41,7 @@
 
 FID_LOAD       equ 0x9000
 HEADER_SIZE    equ 64
+STATUS_MSG     equ 0x93E0
 RAMDISK_BASE   equ 0x4000          ; Bank 7 in system mode
 RAMDISK_SIZE   equ 16384
 DIR_BLOCK_SIZE equ 1024
@@ -207,6 +208,17 @@ rd_write:
     ld a, 1
     ret
 
+RAMDISK_KB equ RAMDISK_SIZE / 1024
+
+    ds STATUS_MSG - $, 0
+fid_status_msg:
+    db "RAMdisc loaded: "
+    db '0' + (RAMDISK_KB / 10) % 10
+    db '0' + RAMDISK_KB % 10
+    db "K as C:", 0x0D, 0x0A
+    db 0
+
 fid_end:
 
+    assert fid_status_msg == STATUS_MSG, "RAMDISK.FID status message address changed"
     assert fid_end - header <= 1024, "RAMDISK.FID must fit in one 1K disk block"

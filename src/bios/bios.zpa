@@ -47,6 +47,7 @@ MOTOR_BIT   equ 0x08              ; OR this in for motor on
 CCP_ADDR    equ 0x0100            ; CCP loads here in TPA
 JMP_OPCODE  equ 0xC3              ; JP instruction
 COMMON_BASE equ 0xF600            ; Start of bank-3 common memory
+RAMDISK_MSG equ 0x93E0            ; Status string embedded in RAMDISK.FID
 
 
 ; ######################################################################
@@ -183,6 +184,13 @@ cold_boot:
     ; Print signon
     ld hl, signon_msg
     call print_str(hl)
+    ld hl, (drive_table_c_slot)
+    ld a, h
+    or l
+    jr z, .no_fid_msg
+    ld hl, RAMDISK_MSG
+    call print_str(hl)
+.no_fid_msg:
 
     ; Initialize state
     xor a
@@ -629,7 +637,7 @@ print_str:
     inc %str
     jr print_str
 
-BUILD_NUM equ 183
+BUILD_NUM equ 189
 
 TPA_KB equ (bdos_stub - 0x0100) / 1024
 
@@ -648,7 +656,6 @@ signon_msg:
     db "K TPA", 0x0D, 0x0A
     db 0x0D, 0x0A
     db 0
-
 
 ; ==========================================================================
 ; Screen driver (includes font data)
