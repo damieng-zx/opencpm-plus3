@@ -94,6 +94,10 @@ disk_boot
 run 1000
 ```
 
+zx84 snapshots can also be saved and loaded through MCP. After reaching a clean
+prompt, use `save build/prompt.szx`; later use `load build/prompt.szx` to resume
+testing from that prompt without rebooting the disk image.
+
 ### Project Structure
 
 ```

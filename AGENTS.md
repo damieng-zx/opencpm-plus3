@@ -31,6 +31,8 @@ python3 tools/z80lint.py
 
 The zx84 MCP emulator (F:\src\zx84) provides debugging tools. Key workflow:
 - `model +3` → `load build/cpm3.dsk` → `disk_boot` → `run 1000`
+- Snapshots are supported: `save build/prompt.szx` and later `load build/prompt.szx`
+  to resume from a known-good prompt state without rebooting the DSK.
 - Read screen via char_buffer at the address shown in bios.lst for `char_buffer:`
 - `fdc_log` shows all FDC operations (retries = bug)
 - `registers`, `memory`, `disassemble` for debugging

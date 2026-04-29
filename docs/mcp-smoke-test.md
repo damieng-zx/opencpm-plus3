@@ -27,6 +27,19 @@ disk_boot
 run 1000
 ```
 
+After the initial boot reaches a clean `A>` prompt, save a reusable baseline:
+
+```text
+save build/prompt.szx
+```
+
+For individual command checks, reload that snapshot instead of rebooting the
+disk image:
+
+```text
+load build/prompt.szx
+```
+
 Find the screen buffer address from the BIOS listing:
 
 ```text
