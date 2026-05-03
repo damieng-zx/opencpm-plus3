@@ -727,6 +727,7 @@ _do_bs:
 ; ==========================================================================
 ; @proc scr_status
 ; @out   a
+; @clobbers
 ; @end
 scr_status:
     ld a, 0xFF
@@ -1987,6 +1988,7 @@ te_stl_ask:
 ; ==========================================================================
 ; @proc te_stl_on_off
 ; @param %enable:u8 a
+; @clobbers
 ; @end
 te_stl_on_off:
     ret
@@ -2091,6 +2093,7 @@ te_set_border:
 ;   Clobbers: (none)
 ; ==========================================================================
 ; @proc te_set_speed
+; @clobbers
 ; @end
 te_set_speed:
     ret
@@ -2249,6 +2252,7 @@ _apply_screen_attr:
 ;   Clobbers: (none)
 ; ==========================================================================
 ; @proc cd_sa_init
+; @clobbers
 ; @end
 cd_sa_init:
     ret
@@ -2261,6 +2265,7 @@ cd_sa_init:
 ;   Clobbers: (none)
 ; ==========================================================================
 ; @proc cd_sa_baud
+; @clobbers
 ; @end
 cd_sa_baud:
     ret

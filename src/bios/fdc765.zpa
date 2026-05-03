@@ -267,6 +267,9 @@ fdc_login:
     pop af
     ret
 
+; @proc fdc_login_body
+; @clobbers af,bc,de,hl,ix
+; @end
 fdc_login_body:
     call load_drive_xdpb            ; IX = this drive's XDPB
     ld a, (ix + XDPB_FREEZE)
@@ -465,6 +468,9 @@ fdc_read:
     pop af
     pop ix
     ret
+; @proc fdc_read_body
+; @clobbers af,bc,de,hl
+; @end
 fdc_read_body:
     call ensure_sector         ; Ensure correct physical sector in buffer
     ret nz                     ; Return error if read failed
@@ -508,6 +514,10 @@ fdc_write:
     pop af
     pop ix
     ret
+; @proc fdc_write_body
+; @param %wtype:u8 c
+; @clobbers af,bc,de,hl
+; @end
 fdc_write_body:
     push bc                    ; Save write type
     call ensure_sector         ; Ensure correct physical sector in buffer
@@ -642,6 +652,9 @@ flush_deblock:
     pop af
     ret
 
+; @proc flush_deblock_body
+; @clobbers af,bc,de,hl,ix
+; @end
 flush_deblock_body:
     ld a, (deblock_dirty)
     or a

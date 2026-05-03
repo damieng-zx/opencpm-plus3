@@ -271,6 +271,7 @@ con_out:
 
 ; @proc con_out_status
 ; @out a                           ; 0xFF (always ready)
+; @clobbers af
 ; @end
 con_out_status:
     jp scr_status
@@ -281,15 +282,18 @@ con_out_status:
 ; ==========================================================================
 
 ; @proc list_out
+; @clobbers
 ; @end
 list_out:
 ; @proc aux_out
+; @clobbers
 ; @end
 aux_out:
     ret
 
 ; @proc aux_in
 ; @out a                           ; 0x1A (EOF)
+; @clobbers bc,de,hl
 ; @end
 aux_in:
     ld a, 0x1A                     ; Return EOF
@@ -297,20 +301,24 @@ aux_in:
 
 ; @proc list_status
 ; @out a
+; @clobbers
 ; @end
 list_status:
 ; @proc aux_in_status
 ; @out a
+; @clobbers
 ; @end
 aux_in_status:
 ; @proc aux_out_status
 ; @out a                           ; 0 (not ready)
+; @clobbers
 ; @end
 aux_out_status:
     xor a                          ; Not ready
     ret
 
 ; @proc dev_init
+; @clobbers
 ; @end
 dev_init:
     ret
@@ -322,6 +330,7 @@ dev_init:
 
 ; @proc dev_tbl
 ; @out hl                          ; pointer to char_dev_table
+; @clobbers af,bc,de
 ; @end
 dev_tbl:
     ld hl, char_dev_table
@@ -335,6 +344,7 @@ char_dev_table:
 
 ; @proc drv_tbl
 ; @out hl                          ; pointer to drive_table
+; @clobbers af,bc,de
 ; @end
 drv_tbl:
     ld hl, drive_table
@@ -357,6 +367,7 @@ disk_home:
 
 ; @proc set_trk
 ; @param %track:u16  bc
+; @clobbers
 ; @end
 set_trk:
     ld (disk_track), %track
@@ -364,6 +375,7 @@ set_trk:
 
 ; @proc set_sec
 ; @param %sector:u16  bc
+; @clobbers
 ; @end
 set_sec:
     ld (disk_sector), %sector
@@ -371,6 +383,7 @@ set_sec:
 
 ; @proc set_dma
 ; @param %dma:u16  bc
+; @clobbers
 ; @end
 set_dma:
     ld (disk_dma), %dma
@@ -470,6 +483,7 @@ _call_iy:
 ; @param %lsec:u16  bc             ; logical sector
 ; @param %tbl:u16   de             ; translate table (ignored: 1:1)
 ; @out   hl                        ; physical sector
+; @clobbers
 ; @end
 sec_trn:
     ld l, c                        ; no translation: physical = logical (c = low byte of %lsec)
@@ -478,6 +492,7 @@ sec_trn:
 
 ; @proc multi_io
 ; @param %count:u8  a
+; @clobbers
 ; @end
 multi_io:
     ld (multi_count), %count
@@ -485,6 +500,7 @@ multi_io:
 
 ; @proc flush_buf
 ; @out a                           ; 0 = success
+; @clobbers
 ; @end
 flush_buf:
     xor a                          ; Success
@@ -492,6 +508,7 @@ flush_buf:
 
 ; @proc set_bnk
 ; @param %bank:u8  a
+; @clobbers
 ; @end
 set_bnk:
     ld (dma_bank), %bank
@@ -539,6 +556,7 @@ bios_xmove:
 ;
 ; @proc bios_time
 ; @param %mode:u8  c               ; 0 = get, 0FFh = set
+; @clobbers
 ; @end
 bios_time:
     ret
@@ -553,6 +571,7 @@ bios_time:
 ; @proc xbios_handler
 ; @param %func_id:u8 a
 ; @out   af bc de hl
+; @clobbers
 ; @end
 xbios_handler:
     cp 0xE3
