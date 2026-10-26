@@ -23,10 +23,11 @@ Status: `[ ]` open, `[x]` fixed.
   into `bv_shim`).  Dead XBIOS stubs were removed to make room.
   Files: `src/bios/bios.zpa`, `src/bios/common.zpa`, `src/bios/screen.zpa`.
 
-- [ ] **3. `ensure_sector` publishes the deblock cache key before a
-  successful read.**  A seek/read error leaves the cache claiming to hold
-  the requested sector, so the next access returns stale data.  Flush
-  errors are ignored too.
+- [x] **3. `ensure_sector` publishes the deblock cache key before a
+  successful read.**  A seek/read error left the cache claiming to hold
+  the requested sector, so the next access returned stale data.  The key is
+  now invalidated while reading, published only after success, and a failed
+  flush is propagated instead of discarding dirty data.
   File: `src/bios/fdc765.zpa`.
 
 - [ ] **4. F34/F40 random write does not locate or create the target

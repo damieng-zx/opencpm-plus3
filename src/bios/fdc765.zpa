@@ -112,6 +112,7 @@ deblock_drv:  db 0xFF          ; Drive of buffered sector (FF=invalid)
 deblock_trk:  dw 0             ; Track of buffered sector
 deblock_psec: db 0             ; Physical sector of buffered sector (1-9)
 deblock_dirty: db 0            ; 1 = buffer has unwritten data
+_ens_psec:    db 0             ; scratch: physical sector across seek/read
 
 ; Current request (from BIOS disk variables)
 ; These are referenced from the BIOS module:
@@ -590,18 +591,20 @@ ensure_sector:
     jr z, .already_buffered    ; Same sector — no read needed
 
 .need_read:
-    ; Flush any dirty data first
+    ; Flush any dirty data first; do not discard it if the flush fails.
     push bc                    ; Save B = physical sector (flush clobbers BC)
     call flush_deblock_body
     pop bc
+    or a
+    ret nz                     ; flush failed — keep the dirty buffer
 
-    ; Record what we're buffering
-    ld a, (disk_drive)
+    ; Invalidate the cache while the read is in progress.  The key must
+    ; only become valid again after a successful read; otherwise a failed
+    ; seek/read would leave the previous sector advertised as this one.
+    ld a, 0xFF
     ld (deblock_drv), a
-    ld hl, (disk_track)
-    ld (deblock_trk), hl
     ld a, b                    ; B = physical sector (preserved across flush)
-    ld (deblock_psec), a
+    ld (_ens_psec), a          ; motor_on/fdc_seek/fdc_read_sector clobber BC
 
     ; Derive physical cylinder+head from logical track and XDPB_SIDES.
     ; SS      (0): head = 0, cylinder = track
@@ -624,11 +627,21 @@ ensure_sector:
     srl a                      ; cylinder = track / 2
 .do_seek:
     call fdc_seek
-    ret nz                     ; Seek failed
+    ret nz                     ; Seek failed — cache stays invalid
 
-    ld a, (deblock_psec)
+    ld a, (_ens_psec)
     call fdc_read_sector       ; Read sector into deblock_buf
-    ret                        ; Z/NZ from read
+    ret nz                     ; Read failed — cache stays invalid
+
+    ; Success — publish the cache key.
+    ld a, (disk_drive)
+    ld (deblock_drv), a
+    ld hl, (disk_track)
+    ld (deblock_trk), hl
+    ld a, (_ens_psec)
+    ld (deblock_psec), a
+    xor a                      ; Z flag, A=0 (success)
+    ret
 
 .already_buffered:
     xor a                      ; Z flag, A=0 (success)
@@ -653,6 +666,7 @@ flush_deblock:
     ret
 
 ; @proc flush_deblock_body
+; @out   a
 ; @clobbers af,bc,de,hl,ix
 ; @end
 flush_deblock_body:

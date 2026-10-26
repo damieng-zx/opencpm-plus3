@@ -62,5 +62,24 @@ class Issue02IsrVector(unittest.TestCase):
         self.assertIn("31 * 3", text)
 
 
+class Issue03DeblockCache(unittest.TestCase):
+    """The deblock cache key must only be published after a successful read."""
+
+    def test_publish_happens_after_read(self):
+        text = source("src/bios/fdc765.zpa")
+        body = text[text.index("ensure_sector:"):text.index(".already_buffered:")]
+        read = body.index("call fdc_read_sector")
+        publish = body.rindex("ld (deblock_drv), a")
+        self.assertLess(read, publish)
+        # A failed read/seek must invalidate, not advertise, the cache.
+        self.assertIn("ld a, 0xFF\n    ld (deblock_drv), a", body)
+        self.assertLess(body.index("ld a, 0xFF"), read)
+
+    def test_flush_error_is_propagated(self):
+        text = source("src/bios/fdc765.zpa")
+        body = text[text.index(".need_read:"):text.index(".already_buffered:")]
+        self.assertRegex(body, r"call flush_deblock_body\s*\n\s*pop bc\s*\n\s*or a\s*\n\s*ret nz")
+
+
 if __name__ == "__main__":
     unittest.main()
