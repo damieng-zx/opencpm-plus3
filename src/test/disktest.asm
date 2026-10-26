@@ -52,12 +52,12 @@ start:
     add a, c                   ; + second digit
     ld b, a
 .single_digit:
-    ; B = test number (1-13)
+    ; B = test number (1-14)
     ld a, b
     or a
-    jr z, .run_all
-    cp 14
-    jr nc, .run_all            ; Out of range → run all
+    jp z, .run_all
+    cp 15
+    jp nc, .run_all            ; Out of range → run all
     ; Jump to the specific test via table
     dec a                      ; 0-based index
     add a, a                   ; ×2 (word offsets)
@@ -74,6 +74,7 @@ start:
 .test_table:
     dw .run_t1, .run_t2, .run_t3, .run_t4, .run_t5, .run_t6
     dw .run_t7, .run_t8, .run_t9, .run_t10, .run_t11, .run_t12, .run_t13
+    dw .run_t14
 
     ; Single-test runners: run the test then exit
 .run_t1:  call test1
@@ -102,6 +103,8 @@ start:
     jp done
 .run_t13: call test13
     jp done
+.run_t14: call test14
+    jp done
 
 .run_all:
     call test1
@@ -117,6 +120,7 @@ start:
     call test11
     call test12
     call test13
+    call test14
     jp done
 
 test1:
@@ -1026,6 +1030,65 @@ test13:
     call BDOS
     ret
 
+test14:
+    ; === T14: F31 tracks the drive selected by F14 ===
+    ; F31 used to return cached_dpb for the last drive used by a file
+    ; operation, so A: and C: reported the same DPB.
+    ld de, msg_t14
+    ld c, 9
+    call BDOS
+
+    ; Save current drive
+    ld c, 25
+    call BDOS
+    ld (save_drive14), a
+
+    ; F14(A:), F31 -> DPB A
+    xor a
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld c, 31
+    call BDOS
+    ld (dpb_a14), hl
+
+    ; F14(C:), F31 -> DPB C
+    ld a, 2
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld c, 31
+    call BDOS
+    ld (dpb_c14), hl
+
+    ; C: must exist and differ from A:
+    ld a, h
+    or l
+    jr z, .t14_fail
+    ld de, (dpb_a14)
+    or a
+    sbc hl, de
+    jr z, .t14_fail
+
+    ld a, (save_drive14)
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t14_fail:
+    ld a, (save_drive14)
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
 done:
     ld de, msg_end
     ld c, 9
@@ -1065,6 +1128,9 @@ clear_fcb:
 
 ; Filenames (8+3 padded with spaces)
 rec_counter: db 0
+save_drive14: db 0
+dpb_a14: dw 0
+dpb_c14: dw 0
 
 fn_cpm3:  db "CPM3    SYS"
 fn_prof:  db "PROFILE SUB"
@@ -1090,3 +1156,4 @@ msg_t11:  db "T11 RandomR/W$"
 msg_t12:  db "T12 MultiExtent 17K$"
 msg_rec:  db " rec=$"
 msg_t13:  db "T13 Cleanup$"
+msg_t14:  db "T14 F31 tracks drive$"

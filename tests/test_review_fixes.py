@@ -120,5 +120,24 @@ class Issue05SelectDriveErrors(unittest.TestCase):
             self.assertNotIn(label, text)
 
 
+class Issue06GetDpb(unittest.TestCase):
+    """F31/F27 must refresh cached_* for the current drive."""
+
+    def test_f31_and_f27_select_current_drive(self):
+        text = source("src/bdos/bdos.zpa")
+        bodies = [
+            text[text.index("bf_f27:"):text.index("; F28:")],
+            text[text.index("bf_f31:"):text.index("; F32:")],
+        ]
+        for body in bodies:
+            self.assertIn("ld a, (cur_disk)", body)
+            self.assertIn("call select_drive", body)
+
+    def test_showxdpb_test_covers_a_and_c(self):
+        text = source("src/test/disktest.asm")
+        self.assertIn("T14 F31 tracks drive", text)
+        self.assertIn("ld (dpb_c14), hl", text)
+
+
 if __name__ == "__main__":
     unittest.main()

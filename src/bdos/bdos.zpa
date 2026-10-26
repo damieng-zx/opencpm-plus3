@@ -765,8 +765,17 @@ bf_f26:
 bf_f27:
     pop de
     pop bc
+    ; Refresh cached_* for the current drive; F14 deliberately does not
+    ; select, so the last file operation may belong to another drive.
+    ld a, (cur_disk)
+    call select_drive
+    jp c, .f27_err
     ld hl, (cached_alv)
     ld a, l
+    jp bdos_ret
+.f27_err:
+    ld hl, 0
+    xor a
     jp bdos_ret
 
 ; F28: Write Protect Disk
@@ -954,8 +963,16 @@ bf_f30:
 bf_f31:
     pop de
     pop bc
+    ; Make sure cached_dpb belongs to cur_disk (F14 does not select).
+    ld a, (cur_disk)
+    call select_drive
+    jp c, .f31_err
     ld hl, (cached_dpb)
     ld a, l
+    jp bdos_ret
+.f31_err:
+    ld hl, 0
+    xor a
     jp bdos_ret
 
 ; F32: Get/Set user code

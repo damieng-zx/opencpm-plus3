@@ -46,9 +46,10 @@ Status: `[ ]` open, `[x]` fixed.
 
 ## P1 — Functional
 
-- [ ] **6. F31/F27 are stale after F14.**  `SHOWXDPB` prints A:'s DPB for
-  B: because F31 returns `cached_dpb` without selecting `cur_disk`.
-  Files: `src/bdos/bdos.zpa`, `src/tools/showxdpb.asm`.
+- [x] **6. F31/F27 are stale after F14.**  `SHOWXDPB` printed A:'s DPB
+  for B: because F31 returned `cached_dpb` without selecting `cur_disk`.
+  F31/F27 now select `cur_disk` first.  `DISKTEST` T14 checks A: vs C:.
+  Files: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
 - [ ] **7. F28 write-protect and F45 error mode are never enforced.**
   File: `src/bdos/bdos.zpa`.
