@@ -56,7 +56,7 @@ start:
     ld a, b
     or a
     jp z, .run_all
-    cp 16
+    cp 17
     jp nc, .run_all            ; Out of range → run all
     ; Jump to the specific test via table
     dec a                      ; 0-based index
@@ -74,7 +74,7 @@ start:
 .test_table:
     dw .run_t1, .run_t2, .run_t3, .run_t4, .run_t5, .run_t6
     dw .run_t7, .run_t8, .run_t9, .run_t10, .run_t11, .run_t12, .run_t13
-    dw .run_t14, .run_t15
+    dw .run_t14, .run_t15, .run_t16
 
     ; Single-test runners: run the test then exit
 .run_t1:  call test1
@@ -107,6 +107,8 @@ start:
     jp done
 .run_t15: call test15
     jp done
+.run_t16: call test16
+    jp done
 
 .run_all:
     call test1
@@ -124,6 +126,7 @@ start:
     call test13
     call test14
     call test15
+    call test16
     jp done
 
 test1:
@@ -1210,6 +1213,88 @@ test15:
     call BDOS
     ret
 
+test16:
+    ; === T16: SCB writes do not reset unrelated BDOS state ===
+    ld de, msg_t16
+    ld c, 9
+    call BDOS
+
+    ; F45 = 1: return errors
+    ld e, 1
+    ld c, 45
+    call BDOS
+
+    ; User 3 and DMA 0x0200 (both intentionally left stale in the SCB)
+    ld e, 3
+    ld c, 32
+    call BDOS
+    ld de, 0x0200
+    ld c, 26
+    call BDOS
+
+    ; F49 set tempdrv (offset 0x34, op 0xFE, value 0)
+    ld hl, scb_pb
+    ld (hl), 0x34
+    inc hl
+    ld (hl), 0xFE
+    inc hl
+    ld (hl), 0
+    ld de, scb_pb
+    ld c, 49
+    call BDOS
+
+    ; User must still be 3
+    ld e, 0xFF
+    ld c, 32
+    call BDOS
+    cp 3
+    jr nz, .t16_fail
+
+    ; DMA must still be 0x0200: F49 get offset 0x3C
+    ld hl, scb_pb
+    ld (hl), 0x3C
+    inc hl
+    ld (hl), 0
+    ld de, scb_pb
+    ld c, 49
+    call BDOS
+    ld a, h
+    cp 2
+    jr nz, .t16_fail
+    ld a, l
+    or a
+    jr nz, .t16_fail
+
+    ; Restore user 0, DMA 0x0080, error mode 0
+    ld e, 0
+    ld c, 32
+    call BDOS
+    ld de, 0x0080
+    ld c, 26
+    call BDOS
+    ld e, 0
+    ld c, 45
+    call BDOS
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t16_fail:
+    ld e, 0
+    ld c, 32
+    call BDOS
+    ld de, 0x0080
+    ld c, 26
+    call BDOS
+    ld e, 0
+    ld c, 45
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
 done:
     ld de, msg_end
     ld c, 9
@@ -1252,6 +1337,7 @@ rec_counter: db 0
 save_drive14: db 0
 dpb_a14: dw 0
 dpb_c14: dw 0
+scb_pb: ds 4
 
 fn_cpm3:  db "CPM3    SYS"
 fn_prof:  db "PROFILE SUB"
@@ -1280,3 +1366,4 @@ msg_rec:  db " rec=$"
 msg_t13:  db "T13 Cleanup$"
 msg_t14:  db "T14 F31 tracks drive$"
 msg_t15:  db "T15 R/O protect+F45$"
+msg_t16:  db "T16 SCB write isolation$"

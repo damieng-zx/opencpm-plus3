@@ -113,9 +113,10 @@ Status: `[ ]` open, `[x]` fixed.
   DISKTEST T12 re-reads a 136-record file after setting R/O.
   File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
-- [ ] **18. `scb_write_field` syncs unrelated BDOS state from stale SCB
-  fields.**  Writing tempdrv can reset the current drive/user/DMA.
-  File: `src/bdos/bdos.zpa`.
+- [x] **18. `scb_write_field` syncs unrelated BDOS state from stale SCB
+  fields.**  It now refreshes BDOS→SCB first and pulls back only the field
+  written (DMA/current disk/current user).  DISKTEST T16 covers it.
+  File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
 - [ ] **19. F30 ignores the user number.**  Attributes can be changed on
   same-named files in other user areas.

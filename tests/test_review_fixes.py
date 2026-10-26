@@ -323,5 +323,19 @@ class Issue17AttributeExtent(unittest.TestCase):
                       source("src/test/disktest.asm"))
 
 
+class Issue18ScbWrite(unittest.TestCase):
+    """Writing one SCB field must not reset cur_disk/cur_user/DMA."""
+
+    def test_only_the_written_field_is_pulled_back(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("scb_write_field:"):text.index("; F50: Direct BIOS Call")]
+        for needle in ("scb_dma - scb_base", "scb_curdsk - scb_base",
+                       "scb_user - scb_base"):
+            self.assertIn(needle, body)
+
+    def test_disktest_covers_scb_isolation(self):
+        self.assertIn("T16 SCB write isolation", source("src/test/disktest.asm"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -3798,9 +3798,18 @@ scb_read_field:
 ;   Out: E preserved
 ;   Clobbers: AF, HL
 ;
-;   Writes to the in-memory SCB block, then syncs writable fields
-;   back to BDOS state variables.
+;   First refreshes the dynamic SCB fields from BDOS state (so a write to
+;   an unrelated field cannot copy stale state back), then writes the byte,
+;   then pulls back only the field that was actually written.
 scb_write_field:
+    ; Sync dynamic BDOS state -> SCB before writing.
+    ld hl, (bdos_dma)
+    ld (scb_dma), hl
+    ld a, (cur_disk)
+    ld (scb_curdsk), a
+    ld a, (cur_user)
+    ld (scb_user), a
+
     ; Write byte to scb_base + C
     ld l, c
     ld h, 0
@@ -3809,13 +3818,38 @@ scb_write_field:
     add hl, de                     ; HL = &scb_base[offset]
     pop de
     ld (hl), e                     ; Write value
-    ; Sync writable SCB fields → BDOS state
-    ld a, (scb_curdsk)
+
+    ; Pull back only the field that was written.
+    ld a, c
+    cp scb_dma - scb_base
+    jr z, .dma_low
+    cp scb_dma - scb_base + 1
+    jr z, .dma_high
+    cp scb_curdsk - scb_base
+    jr z, .curdisk
+    cp scb_user - scb_base
+    jr z, .curuser
+    ret
+
+.dma_low:
+    ld a, e
+    ld (bdos_dma), a
+    ld a, (scb_dma + 1)
+    ld (bdos_dma + 1), a
+    ret
+.dma_high:
+    ld a, (scb_dma)
+    ld (bdos_dma), a
+    ld a, e
+    ld (bdos_dma + 1), a
+    ret
+.curdisk:
+    ld a, e
     ld (cur_disk), a
-    ld a, (scb_user)
+    ret
+.curuser:
+    ld a, e
     ld (cur_user), a
-    ld hl, (scb_dma)
-    ld (bdos_dma), hl
     ret
 
 
