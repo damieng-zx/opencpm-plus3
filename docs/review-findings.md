@@ -64,9 +64,12 @@ Status: `[ ]` open, `[x]` fixed.
   detection/SHOWXDPB-only.  README no longer claims 720K file I/O.
   Files: `src/bdos/bdos.zpa`, `src/bios/fdc765.zpa`, `README.md`.
 
-- [ ] **9. BIOS MOVE (fn 25) is reversed** relative to
-  `docs/API.md` (`HL=dst, DE=src`) and to `interbank_move`.
-  Files: `src/bios/bios.zpa`, `src/bios/common.zpa`.
+- [x] **9. BIOS MOVE (fn 25) is reversed** relative to
+  `docs/API.md` (`HL=dst, DE=src`) and to `interbank_move`.  `bios_move`
+  now swaps for LDIR, and `bios_call_bank4`/`bv_shim` preserve HL/DE/BC
+  (and IY) so the visible-table path can pass MOVE's arguments.  STACKTEST
+  covers MOVE.
+  Files: `src/bios/bios.zpa`, `src/bios/common.zpa`, `src/test/stacktest.asm`.
 
 - [ ] **10. Loader directory loop counter never terminates.**  `ld de,32`
   clears D, so `dec d` never reaches zero; the "not found" path is

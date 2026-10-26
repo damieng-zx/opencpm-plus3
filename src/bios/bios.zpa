@@ -538,8 +538,11 @@ bios_move:
     or a
     jp nz, interbank_move          ; → common memory routine
 
-    ; Same-bank move: just LDIR
+    ; Same-bank move.  CP/M's convention is HL=dst, DE=src, BC=count
+    ; (LDIR wants the opposite), and HL/DE must be advanced on return.
+    ex de, hl
     ldir
+    ex de, hl
     ret
 
 ; @proc bios_xmove

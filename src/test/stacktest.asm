@@ -53,16 +53,77 @@ start:
     call bios_conout_y
 
     ld de, msg_ok
-    jp print
+    call print
+
+    ; --- 4. BIOS MOVE (fn 25): HL=dst, DE=src, BC=count ----------------
+    ld hl, src_txt
+    ld de, src_buf
+    ld bc, 8
+    ldir                          ; initialise the source
+
+    ld a, 25
+    call compute_bios_entry
+    ld hl, dst_buf                ; HL = destination
+    ld de, src_buf                ; DE = source
+    ld bc, 8
+    call call_bios_ent
+
+    ld hl, src_buf
+    ld de, dst_buf
+    ld b, 8
+.cmp_move:
+    ld a, (de)
+    cp (hl)
+    jr nz, .move_bad
+    inc hl
+    inc de
+    djnz .cmp_move
+    ld de, msg_move_ok
+    jr .print_move
+.move_bad:
+    ld de, msg_move_bad
+.print_move:
+    call print
+    jp 0                          ; warm boot
 
 fail:
+    ld de, msg_bad
+    call print
+    jp 0                          ; warm boot
+
 print:
     ld c, 9
     call BDOS
-    jp 0                          ; warm boot
+    ret
 
-; Call BIOS CONOUT with C='X'.  Uses the visible jump table; if bv_shim was
-; corrupted by the first BDOS call this will jump somewhere else.
+; compute_bios_entry — A = function number; store its bank-4 entry in
+; (bios_ent).  BIOS base = word at 0001h - 3.
+compute_bios_entry:
+    ld l, a
+    ld h, 0
+    add hl, hl
+    ld e, l
+    ld d, h
+    add hl, de                    ; 3*fn
+    ex de, hl
+    ld hl, (0x0001)               ; WBOOT entry = bios_visible + 3
+    dec hl
+    dec hl
+    dec hl                        ; HL = bios_visible (BIOS base)
+    add hl, de
+    ld (bios_ent), hl
+    ret
+
+; call_bios_ent — call (bios_ent) with HL/DE/BC as arguments.
+call_bios_ent:
+    ld iy, (bios_ent)
+    call .jp_iy
+    ret
+.jp_iy:
+    jp (iy)
+
+; Call BIOS CONOUT with C='X'/'Y'.  Uses the visible jump table; if bv_shim
+; was corrupted by the first BDOS call this will jump somewhere else.
 bios_conout_x:
     ld c, 'X'
     jr bios_conout
@@ -78,6 +139,12 @@ bios_conout:
     add hl, de
     jp (hl)                       ; BIOS CONOUT returns to our caller
 
-entry_sp:   dw 0
-msg_ok:     db 0x0D, 0x0A, 'STACK OK', 0x0D, 0x0A, '$'
-msg_bad:    db 0x0D, 0x0A, 'STACK BAD', 0x0D, 0x0A, '$'
+entry_sp:     dw 0
+bios_ent:     dw 0
+src_txt:      db 'MOVE1234'
+src_buf:      ds 8
+dst_buf:      ds 8
+msg_ok:       db 0x0D, 0x0A, 'STACK OK', 0x0D, 0x0A, '$'
+msg_bad:      db 0x0D, 0x0A, 'STACK BAD', 0x0D, 0x0A, '$'
+msg_move_ok:  db 0x0D, 0x0A, 'MOVE OK', 0x0D, 0x0A, '$'
+msg_move_bad: db 0x0D, 0x0A, 'MOVE BAD', 0x0D, 0x0A, '$'

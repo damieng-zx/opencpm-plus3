@@ -136,9 +136,18 @@ bv_tramp:
     assert $ - bv_tramp == 31 * 3, "bv_tramp must be exactly 93 bytes"
 
 bv_shim:
-    pop hl                         ; HL = return addr = bv_tramp + 3*(fn-2) + 3
+    ; lint-exempt: stack  ; pops the trampoline return; caller return stays
+    ; Incoming: HL = caller HL, stack = [trampoline return][caller return].
+    ; Recover the bank-4 target from the trampoline return address while
+    ; preserving HL (BIOS MOVE needs HL=dst) and DE (MOVE needs DE=src).
+    ld (_bc4_callhl), hl           ; save caller HL
+    pop hl                         ; HL = trampoline return address
+    push de                        ; save caller DE
     ld de, BIOS4_BASE + 3 - bv_tramp   ; assembler wraps mod 65536
     add hl, de                     ; HL = BIOS4_BASE + 3*fn — bank-4 target
+    ld (_bc4_target), hl
+    pop de                         ; restore caller DE
+    ld hl, (_bc4_callhl)           ; restore caller HL
     jp bios_call_bank4
 
 
@@ -244,39 +253,40 @@ isr_installed:  db 0               ; 1 = ISR trampoline at 0038h is set up
 ; from bdos_stub and would corrupt code/data placed before it.
 ;
 ; @proc bios_call_bank4
-; @param %target:u16 hl         ; bank 4 BIOS jump table address to call
 ; @out   af                     ; BIOS return values (function-dependent)
 ; @out   hl
-; @clobbers bc
+; @clobbers bc,iy
 ; @end
 bios_call_bank4:
-    ; lint-exempt: stack  ; uses jp (hl) via .jp_hl for the banked CALL (HL)
+    ; lint-exempt: stack  ; uses jp (iy) via .jp_iy for the banked CALL (IY)
     di
-    ld (_bc4_hl), %target          ; Save target address
-    ; Switch to a safe stack in common memory. The user's stack
-    ; may be in bank 1 (0x4000-0x7FFF) which becomes bank 7 after
-    ; the bank switch, making PUSH/POP read wrong data.
+    ; Save the caller's SP and registers.  HL and IY are inputs/outputs for
+    ; BIOS calls (MOVE uses HL), so both are saved; the target address lives
+    ; in _bc4_target.
     ld (_bc4_sp), sp
     ld sp, _bc4_stack
     ; Now PUSH/POP use common memory — safe across bank switches
     push af
     push bc
     push de
+    push hl
+    push iy
     ; Switch to system bank
     ld a, (motor_flag)
     or BANK1_1FFD
     call write_1ffd
-    ; Restore caller's registers
+    ; Restore caller's registers (target is in _bc4_target)
+    pop iy
+    pop hl
     pop de
     pop bc
     pop af
     ; Switch to system stack for the actual BIOS call (the trampoline
     ; stack is too small for screen/keyboard drivers)
     ld sp, bdos_stack - 16         ; Use lower part of BDOS stack area
-    ld hl, (_bc4_hl)               ; HL = target address
-    ; CALL (HL) via push-return trick
+    ld iy, (_bc4_target)
     ei
-    call .jp_hl
+    call .jp_iy
     ; BIOS function returned — save return values on safe stack
     di
     ld sp, _bc4_stack              ; Back to trampoline stack for bank switch
@@ -284,11 +294,13 @@ bios_call_bank4:
     push af
     push bc
     push de
+    push iy
     ; Switch back to TPA
     ld a, (motor_flag)
     or BANK0_1FFD
     call write_1ffd
     ; Restore return values
+    pop iy
     pop de
     pop bc
     pop af
@@ -298,12 +310,14 @@ bios_call_bank4:
     ei
     ret
 
-.jp_hl:
-    jp (hl)                        ; Effectively CALL (HL)
+.jp_iy:
+    jp (iy)                        ; Effectively CALL (IY)
 
 _bc4_hl: dw 0
 _bc4_sp: dw 0
-    ds 12                          ; 6-level trampoline stack (3 push pairs)
+_bc4_target: dw 0
+_bc4_callhl: dw 0
+    ds 16                          ; trampoline stack (5 push pairs)
 _bc4_stack:
 
 
@@ -338,7 +352,10 @@ userf_stub:
     ; Dispatch every XBIOS ID to the bank-4 handler. Common memory is too
     ; tight (F600-FFFF) to inline the per-function return values, and the
     ; bank switch adds only a few hundred T-states per call.
+    push hl                        ; preserve caller HL (XBIOS input)
     ld hl, xbios_handler
+    ld (_bc4_target), hl
+    pop hl
     jp bios_call_bank4
 
 
@@ -799,8 +816,8 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF9AA, "RAMDISK.FID expects copy_record_to_tpa at 0xF9AA"
-    assert copy_record_from_tpa == 0xF9B0, "RAMDISK.FID expects copy_record_from_tpa at 0xF9B0"
+    assert copy_record_to_tpa == 0xF9CB, "RAMDISK.FID expects copy_record_to_tpa at 0xF9CB"
+    assert copy_record_from_tpa == 0xF9D1, "RAMDISK.FID expects copy_record_from_tpa at 0xF9D1"
 
 
 ; ------------------------------------------------------------------

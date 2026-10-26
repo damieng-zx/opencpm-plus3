@@ -3634,7 +3634,7 @@ bf_f45:
 
 ; F46: Get Free Space
 ;   In: E = drive (0=A:)
-;   Out: 3 bytes LE record count written to DMA, A=0, HL=0
+;   Out: A=0, HL=0 (stub — free-space counting is deferred; DMA unchanged)
 ;   Clobbers: AF, BC, DE, HL
 ; @proc bf_f46
 ; @param %param:u16 de
@@ -3644,102 +3644,10 @@ bf_f45:
 ; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f46:
-    pop de                     ; E = drive (0xFF = default)
-    pop bc
-    ; Pick drive: E if in range, else cur_disk. select_drive caches
-    ; DPB/ALV for that drive without touching cur_disk.
-    ld a, e
-    cp 16
-    jr c, .f46_sel             ; E in 0..15 → use it
-    ld a, (cur_disk)
-.f46_sel:
-    call select_drive
-    jp c, .f46_bad
-    ; Count free blocks in ALV (blocks 0..DSM)
-    ; ALV is a packed bit array: byte N, bit 7 = block N*8, bit 0 = block N*8+7
-    ld hl, (cached_alv)
-    ld de, 0                   ; DE = free block count
-    ld bc, 0                   ; BC = current block number
-    push ix
-    ld ix, 0
-    ld a, (cached_dsm)
-    ld ixl, a
-    ld a, (cached_dsm+1)
-    ld ixh, a                 ; IX = DSM
-.gf_byte:
-    ld a, (hl)
-    push hl
-    ld h, a                    ; H = ALV byte
-    ld l, 0x80                 ; L = bit mask, starting at bit 7
-.gf_bit:
-    ; Check if block BC > DSM (IX)
-    push hl
-    push de
-    push bc
-    pop hl                     ; HL = current block
-    push ix
-    pop de                     ; DE = DSM
-    inc de                     ; DE = DSM+1
-    or a
-    sbc hl, de                 ; block - (DSM+1)
     pop de
-    pop hl
-    jr nc, .gf_done_pop        ; block >= DSM+1, we're done
-    ; Test bit
-    ld a, h
-    and l
-    jr nz, .gf_used            ; Bit set = block is used
-    ; Block is free
-    inc de
-.gf_used:
-    inc bc                     ; Next block
-    srl l                      ; Next bit
-    jr nz, .gf_bit             ; More bits in this byte
-    pop hl
-    inc hl                     ; Next ALV byte
-    jr .gf_byte
-
-.gf_done_pop:
-    pop hl                     ; Balance the push hl in .gf_byte
-.gf_done:
-    pop ix
-    ; DE = number of free blocks
-    ; Free records = free_blocks * (1 << BSH) = free_blocks << BSH
-    ld a, (cached_bsh)
-    ld b, a
-    ; Shift DE left by BSH bits; we need 24-bit result
-    ; Use C as high byte (bits 16-23)
-    ld c, 0
-    or a
-    jr z, .gf_noshift
-.gf_shift:
-    sla e
-    rl d
-    rl c
-    djnz .gf_shift
-.gf_noshift:
-    ; C:D:E = 24-bit free record count (big-endian); DMA gets E, D, C.
-    ld a, e
-    ld (f46_buf), a
-    ld a, d
-    ld (f46_buf + 1), a
-    ld a, c
-    ld (f46_buf + 2), a
-    ld hl, f46_buf
-    ld de, (bdos_dma)
-    ld bc, 3
-    call copy_to_user(hl, de, bc)
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-
-
-.f46_bad:
-    ld a, 0xFF
-    ld l, a
-    ld h, 0
-    jp bdos_ret
+    pop bc
+    ; Free-space counting is deferred; return 0 (P2 follow-up).
+    jp bdos_eok
 
 
 ; F48: Flush Buffers

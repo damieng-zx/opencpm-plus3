@@ -224,8 +224,8 @@ FFFF  ────────────────────  hard limit (
 
 | Address  | What                          | Why pinned                                                       |
 |----------|-------------------------------|------------------------------------------------------------------|
-| `0xF9AA` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa:801.              |
-| `0xF9B0` | `copy_record_from_tpa`        | Same - assert at common.zpa:802.                                 |
+| `0xF9CB` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa:796.              |
+| `0xF9D1` | `copy_record_from_tpa`        | Same - assert at common.zpa:797.                                 |
 | `bdos_stub` | itself                     | scb_tpa = this address; user stacks set SP to it.                |
 | SCB offsets `0x05, 0x1A, 0x3A, 0x3C, 0x3E, 0x44, 0x58-0x5C, 0x62` | DRI documented | Programs index off scb_base.    |
 

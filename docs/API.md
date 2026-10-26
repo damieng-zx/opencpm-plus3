@@ -288,9 +288,8 @@ Programs should close any open files before exiting (BDOS F16).
 
 #### F46 — Get Free Disk Space
 - **In**: E=drive (0=default, 1=A, ...)
-- **Out**: DMA[0..2] = 24-bit little-endian free record count
-- **Note**: Free records = free_blocks × records_per_block. To get free K:
-  `free_K = (DMA[0] | DMA[1]<<8 | DMA[2]<<16) / 8` (for 1K blocks).
+- **Out**: A=0, HL=0; DMA is unchanged
+- **Note**: Currently a stub — free-space counting is deferred (P2).
 
 #### F49 — Get/Set System Control Block
 - **In**: DE=PB (parameter block address)

@@ -186,5 +186,25 @@ class Issue08AlvSize(unittest.TestCase):
         self.assertIn("16-bit block file I/O is not implemented", text)
 
 
+class Issue09BiosMove(unittest.TestCase):
+    """BIOS MOVE uses HL=dst, DE=src; HL must survive bios_call_bank4."""
+
+    def test_bios_move_swaps_for_ldir(self):
+        text = source("src/bios/bios.zpa")
+        body = text[text.index("bios_move:"):text.index("; @proc bios_xmove")]
+        self.assertIn("ex de, hl", body)
+        self.assertIn("ldir", body)
+
+    def test_bios_call_bank4_preserves_hl(self):
+        text = source("src/bios/common.zpa")
+        body = text[text.index("bios_call_bank4:"):text.index(".jp_iy:")]
+        self.assertIn("push hl", body)
+        self.assertIn("pop hl", body)
+        self.assertIn("ld iy, (_bc4_target)", body)
+
+    def test_stacktest_checks_move(self):
+        self.assertIn("MOVE OK", source("src/test/stacktest.asm"))
+
+
 if __name__ == "__main__":
     unittest.main()
