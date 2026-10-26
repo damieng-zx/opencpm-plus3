@@ -88,8 +88,8 @@ Status: `[ ]` open, `[x]` fixed.
   seconds without making BDOS calls and requires CLOCK OK.
   Files: `src/bios/common.zpa`, `src/test/stacktest.asm`, docs.
 
-- [ ] **13. `echo_sub_line` never runs.**  `xor a` before `call nz`
-  makes the SETDEF DISPLAY path dead.
+- [x] **13. `echo_sub_line` never runs.**  `xor a` before `call nz` made
+  the SETDEF DISPLAY path dead; it now tests `and CON_MODE_DISPLAY`.
   File: `src/ccp/miniccp.zpa`.
 
 - [ ] **14. COM loader FCB sits at F5DC (inside the TPA) and can be

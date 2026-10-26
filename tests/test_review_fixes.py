@@ -248,5 +248,13 @@ class Issue12TpaClock(unittest.TestCase):
         self.assertIn("(0xF63A)", source("src/test/stacktest.asm"))
 
 
+class Issue13SubEcho(unittest.TestCase):
+    def test_echo_uses_display_bit(self):
+        text = source("src/ccp/miniccp.zpa")
+        body = text[text.index("try_sub:"):text.index("echo_sub_line:")]
+        self.assertIn("and CON_MODE_DISPLAY", body)
+        self.assertNotIn("xor a\n    call nz, echo_sub_line", body)
+
+
 if __name__ == "__main__":
     unittest.main()
