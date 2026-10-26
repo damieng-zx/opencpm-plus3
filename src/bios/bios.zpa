@@ -169,7 +169,6 @@ disk_head:    db 0                 ; Physical head (0 or 1; set by ensure_sector
 disk_track:   dw 0                 ; Current track
 disk_sector:  dw 0                 ; Current sector
 disk_dma:     dw 0                 ; Current DMA address
-multi_count:  db 0                 ; Multi-sector count
 
 
 ; ==========================================================================
@@ -205,7 +204,6 @@ cold_boot:
     xor a
     ld (xmove_active), a
     ld (dma_bank), a
-    ld (multi_count), a
 
     ; Set up ISR vector in bank 4 (system mode uses bank 4 at 0x0000)
     ld a, 0xC3                     ; JP opcode
@@ -246,7 +244,6 @@ warm_boot:
     xor a
     ld (xmove_active), a
     ld (dma_bank), a
-    ld (multi_count), a
 
     ; Switch to TPA, set up page zero, start CCP
     jp start_tpa                   ; Common-memory routine (never returns)
@@ -503,8 +500,8 @@ sec_trn:
 ; @param %count:u8  a
 ; @clobbers
 ; @end
+; Multi-sector I/O is not implemented; accept and ignore the count.
 multi_io:
-    ld (multi_count), %count
     ret
 
 ; @proc flush_buf

@@ -139,5 +139,31 @@ class Issue06GetDpb(unittest.TestCase):
         self.assertIn("ld (dpb_c14), hl", text)
 
 
+class Issue07WriteProtect(unittest.TestCase):
+    """F28 must actually block writes and F45 must select return/abort."""
+
+    def test_write_functions_check_readonly(self):
+        text = source("src/bdos/bdos.zpa")
+        for start, end in (
+            ("bf_f16:", "; @proc close_dir_update"),
+            ("bf_f19:", "; F20:"),
+            ("bf_f21:", "; F22:"),
+            ("bf_f22:", "; F23:"),
+            ("bf_f23:", "; =========================================================================="),
+            ("bf_f30:", "; F31:"),
+        ):
+            body = text[text.index(start):text.index(end, text.index(start))]
+            self.assertIn("call is_fcb_readonly", body, start)
+
+    def test_ro_error_honours_error_mode(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("ro_error:"):text.index("msg_ro:")]
+        self.assertIn("ld a, (error_mode)", body)
+        self.assertIn("jp warm_boot", body)
+
+    def test_disktest_has_ro_case(self):
+        self.assertIn("T15 R/O protect+F45", source("src/test/disktest.asm"))
+
+
 if __name__ == "__main__":
     unittest.main()

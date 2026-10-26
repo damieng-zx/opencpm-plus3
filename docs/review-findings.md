@@ -51,8 +51,11 @@ Status: `[ ]` open, `[x]` fixed.
   F31/F27 now select `cur_disk` first.  `DISKTEST` T14 checks A: vs C:.
   Files: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
-- [ ] **7. F28 write-protect and F45 error mode are never enforced.**
-  File: `src/bdos/bdos.zpa`.
+- [x] **7. F28 write-protect and F45 error mode are never enforced.**
+  Write functions now call `is_fcb_readonly`; F45 bit 0 chooses between
+  returning 2 and the classic abort (message + warm boot).  `DISKTEST` T15
+  covers F28 with F45 in return mode.
+  File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
 - [ ] **8. `build_alv` size uses the low byte of DSM; block numbers are
   8-bit.**  DSM > 255 (PCW 720K, type 3) gets a 12-byte ALV instead of 44

@@ -71,6 +71,7 @@
 ; The common stub switches to bdos_stack before calling bdos_entry.
 
 rdbuf_ptr:  dw 0               ; Buffer pointer for F10
+f46_buf:    db 0, 0, 0         ; F46 24-bit free-record scratch
 
 ; --- BDOS state ---
 bdos_dma:   dw 0x0080          ; Current DMA address (default 0080h)
@@ -212,38 +213,34 @@ bdos_entry:
     jp z, bf_f37
     cp 40
     jp z, bf_f40
-    cp 44
-    jp z, bf_f44
     cp 45
     jp z, bf_f45
     cp 46
     jp z, bf_f46
     cp 47
-    jp z, bf_f47
+    jp z, bdos_efail
     cp 48
     jp z, bf_f48
     cp 49
     jp z, bf_f49
     cp 50
     jp z, bf_f50
-    cp 98
-    jp z, bf_f98
     cp 99
-    jp z, bf_f99
+    jp z, bdos_efail
     cp 100
-    jp z, bf_f100
+    jp z, bdos_efail
     cp 101
-    jp z, bf_f101
+    jp z, bdos_eok
     cp 102
-    jp z, bf_f102
+    jp z, bdos_efail
     cp 103
-    jp z, bf_f103
+    jp z, bdos_efail
     cp 104
     jp z, bf_f104
     cp 105
     jp z, bf_f105
     cp 106
-    jp z, bf_f106
+    jp z, bdos_eok
     cp 107
     jp z, bf_f107
     cp 108
@@ -255,7 +252,7 @@ bdos_entry:
     cp 111
     jp z, bf_f111
     cp 112
-    jp z, bf_f112
+    jp z, bdos_eok
     cp 120
     jp z, bf_f120
     cp 121
@@ -283,6 +280,30 @@ bdos_ret:
     ; Reset SP to that point regardless of what BDOS functions pushed/popped.
     ld sp, bdos_stack - 2
     ret
+
+
+; Shared return stubs for unimplemented extended functions.
+; @proc bdos_efail
+; @out   a
+; @out   hl
+; @clobbers af,hl
+; @end
+bdos_efail:
+    ld a, 0xFF
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+
+; @proc bdos_eok
+; @out   a
+; @out   hl
+; @clobbers af,hl
+; @end
+bdos_eok:
+    xor a
+    ld l, a
+    ld h, a
+    jp bdos_ret
 
 
 ; ==========================================================================
@@ -847,6 +868,8 @@ bf_f30:
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call select_fcb_drive
     jp c, .f30_not_found       ; invalid drive → not found
+    call is_fcb_readonly
+    jp nz, .f30_not_found      ; read-only → not found
 
     ; Scan directory for matching entries
     ld de, 0
@@ -1219,6 +1242,85 @@ select_fcb_drive:
 .has_drive:
     dec a                      ; A = 0-based drive
     jp select_drive
+
+
+; ==========================================================================
+; @proc drive_ro_status
+; @param %drive:u8 a
+; @out   a
+; @clobbers af,bc,de,hl
+; @end
+; drive_ro_status — A = 0 if drive A is writable, A = 2 if read-only.
+drive_ro_status:
+    ld b, a
+    ld de, 1
+    inc b
+.shift:
+    dec b
+    jr z, .test
+    sla e
+    rl d
+    jr .shift
+.test:
+    ld hl, (ro_vec)
+    ld a, l
+    and e
+    ld c, a
+    ld a, h
+    and d
+    or c
+    jr z, .writable
+    ld a, 2
+    ret
+.writable:
+    xor a
+    ret
+
+
+; ==========================================================================
+; @proc is_fcb_readonly
+; @out   a
+; @out   zero
+; @clobbers af,bc,de,hl
+; @end
+; is_fcb_readonly — A = 0 if the FCB's drive is writable, 2 if R/O.
+;   Calls ro_error so error_mode decides between returning 2 and aborting.
+;   IX is preserved on the returning path.
+is_fcb_readonly:
+    ld a, (ix + 0)
+    or a
+    jr nz, .has_drive
+    ld a, (cur_disk)
+    inc a
+.has_drive:
+    dec a
+    call drive_ro_status
+    or a
+    ret z
+    jp ro_error
+
+
+; ==========================================================================
+; @proc ro_error
+; @param %code:u8 a
+; @out   a
+; @clobbers af,bc,de,hl,ix
+; @end
+; ro_error — Handle a read-only write.
+;   error_mode bit 0 = 1: return A=2 to the caller.
+;   error_mode bit 0 = 0: print the classic message and warm boot.
+ro_error:
+    ld c, a
+    ld a, (error_mode)
+    and 1
+    ld a, c
+    ret nz
+    ld hl, msg_ro
+    call print_str
+    jp warm_boot
+
+msg_ro:
+    db 0x0D, 0x0A, "Bdos Err: R/O", 0x0D, 0x0A, 0
 
 
 ; ==========================================================================
@@ -1888,11 +1990,18 @@ bf_f16:
     ; directory using cached_*.
     call select_fcb_drive
     jp c, .f16_err
+    call is_fcb_readonly
+    jp nz, .f16_ro
 
     call flush_deblock         ; Flush any pending write data
     call close_dir_update
     call writeback_fcb()
     xor a
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+
+.f16_ro:
     ld l, a
     ld h, 0
     jp bdos_ret
@@ -2013,6 +2122,8 @@ bf_f19:
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call select_fcb_drive
     jp c, .del_none            ; invalid drive → not found
+    call is_fcb_readonly
+    jp nz, .del_none           ; read-only → not deleted
 
     ld de, 0                   ; Directory entry index
     ld b, 0                    ; B = found count
@@ -2325,6 +2436,8 @@ bf_f21_core:
     ; this operation.
     call select_fcb_drive
     jp c, .wseq_error
+    call is_fcb_readonly
+    jp nz, .wseq_ro
 
     ; If CR == 128 this extent is full — create a new extent first
     ld a, (ix + 32)            ; CR
@@ -2430,6 +2543,11 @@ bf_f21_core:
 
 .wseq_full:
     ld a, 1                    ; No disk space
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+
+.wseq_ro:
     ld l, a
     ld h, 0
     jp bdos_ret
@@ -2559,6 +2677,8 @@ bf_f22:
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call select_fcb_drive
     jp c, .mk_full             ; invalid drive → error
+    call is_fcb_readonly
+    jp nz, .mk_full            ; read-only → error
 
     ; Scan directory for a free (E5h) entry
     ld de, 0
@@ -2651,6 +2771,8 @@ bf_f23:
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call select_fcb_drive
     jp c, .ren_none            ; invalid drive → not found
+    call is_fcb_readonly
+    jp nz, .ren_none           ; read-only → not renamed
 
     ; Scan directory for entries matching old name (bytes 1-11)
     ld de, 0
@@ -3167,6 +3289,8 @@ bf_f34:
     ; use the current FCB's allocation map and corrupt an earlier extent.
     call select_fcb_drive
     jp c, .wrrand_range
+    call is_fcb_readonly
+    jp nz, .wrrand_ro
     call find_fcb_extent
     jr z, .wrrand_write
     call create_fcb_extent
@@ -3174,6 +3298,11 @@ bf_f34:
 
 .wrrand_write:
     jp bf_f21_core
+
+.wrrand_ro:
+    ld l, a
+    ld h, 0
+    jp bdos_ret
 
 .wrrand_full:
     ld a, 5                    ; directory full
@@ -3381,12 +3510,18 @@ bf_f40:
     jp nz, .wrrand0_err
     call select_fcb_drive
     jp c, .wrrand0_range
+    call is_fcb_readonly
+    jp nz, .wrrand0_ro
     call find_fcb_extent
     jr z, .wrrand0_write
     call create_fcb_extent
     jp c, .wrrand0_full
 .wrrand0_write:
     jp bf_f21_core
+.wrrand0_ro:
+    ld l, a
+    ld h, 0
+    jp bdos_ret
 .wrrand0_full:
     ld a, 5                    ; directory full
     ld l, a
@@ -3443,38 +3578,8 @@ div_hl_bc:
 
 
 ; ==========================================================================
-; Extended BDOS Functions (F44-F112)
+; Extended BDOS Functions (F45-F112)
 ; ==========================================================================
-
-; F44: Set Multi-Sector Count
-;   In: E = count (1-128)
-;   Out: A = 0 (OK) or 0xFF (error)
-;   Clobbers: AF, DE, BC, HL
-; @proc bf_f44
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f44:
-    pop de
-    pop bc
-    ld a, e
-    or a
-    jr z, .bad
-    cp 129
-    jr nc, .bad
-    ld (multi_count), a
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-.bad:
-    ld a, 0xFF
-    ld l, a
-    ld h, 0
-    jp bdos_ret
 
 
 ; F45: Set BDOS Error Mode
@@ -3585,33 +3690,17 @@ bf_f46:
     rl c
     djnz .gf_shift
 .gf_noshift:
-    ; C:D:E = 24-bit free record count (big-endian)
-    ; Write to DMA as 3 bytes little-endian: E, D, C
-    push de
-    push bc                    ; Save C (high byte)
+    ; C:D:E = 24-bit free record count (big-endian); DMA gets E, D, C.
+    ld a, e
+    ld (f46_buf), a
+    ld a, d
+    ld (f46_buf + 1), a
+    ld a, c
+    ld (f46_buf + 2), a
+    ld hl, f46_buf
     ld de, (bdos_dma)
-    pop bc
-    ld a, e                    ; Low byte (was pushed from DE)
-    ; Actually let me redo this more carefully
-    pop de                     ; DE restored = mid:low of free records
-    ; Now C = high byte, D = mid byte, E = low byte
-    push bc                    ; Save C
-    push de                    ; Save DE
-    ld de, (bdos_dma)
-    pop bc                     ; BC = old DE (B=mid, C=low)
-    ld a, c                    ; Byte 0 = low
-    push bc                    ; Save B (mid byte) — write_user_byte clobbers BC
-    call write_user_byte(a, de) preserving %func
-    pop bc
-    inc de
-    ld a, b                    ; Byte 1 = mid
-    push bc                    ; Save C (high byte is on stack below)
-    call write_user_byte(a, de) preserving %func
-    pop bc
-    inc de
-    pop bc                     ; Restore C = high
-    ld a, c                    ; Byte 2 = high
-    call write_user_byte(a, de) preserving %func
+    ld bc, 3
+    call copy_to_user(hl, de, bc)
     xor a
     ld l, a
     ld h, a
@@ -3619,25 +3708,6 @@ bf_f46:
 
 
 .f46_bad:
-    ld a, 0xFF
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-
-
-; F47: Chain to Program
-;   Out: A = 0xFF (not supported)
-;   Clobbers: AF, DE, BC, HL
-; @proc bf_f47
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f47:
-    pop de
-    pop bc
     ld a, 0xFF
     ld l, a
     ld h, 0
@@ -3917,121 +3987,6 @@ _f50_h:      db 0
 _f50_target: dw 0
 
 
-; F98: Free Blocks — Rebuild ALV from directory
-;   Out: A = 0
-;   Clobbers: AF, BC, DE, HL, IX
-; @proc bf_f98
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl,ix
-; @end
-bf_f98:
-    pop de
-    pop bc
-    call build_alv
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-
-
-; F99: Truncate File (stub)
-;   Out: A = 0xFF
-;   Clobbers: AF, DE, BC, HL
-; @proc bf_f99
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f99:
-    pop de
-    pop bc
-    ld a, 0xFF
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-
-
-; F100: Set Directory Label (stub)
-;   Out: A = 0xFF
-;   Clobbers: AF, DE, BC, HL
-; @proc bf_f100
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f100:
-    pop de
-    pop bc
-    ld a, 0xFF
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-
-
-; F101: Get Directory Label
-;   Out: A = 0 (no labels)
-;   Clobbers: AF, DE, BC, HL
-; @proc bf_f101
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f101:
-    pop de
-    pop bc
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-
-
-; F102: Read File XFCB (stub)
-;   Out: A = 0xFF
-;   Clobbers: AF, DE, BC, HL
-; @proc bf_f102
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f102:
-    pop de
-    pop bc
-    ld a, 0xFF
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-
-
-; F103: Write File XFCB (stub)
-;   Out: A = 0xFF
-;   Clobbers: AF, DE, BC, HL
-; @proc bf_f103
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f103:
-    pop de
-    pop bc
-    ld a, 0xFF
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-
-
 ; F104: Set Date and Time
 ;   In: DE = pointer to 4-byte DAT in TPA [days_lo, days_hi, hour, min]
 ;   Out: A = 0
@@ -4229,25 +4184,6 @@ div_hl_60:
     ret
 
 
-; F106: Set Default Password (stub)
-;   Out: A = 0
-;   Clobbers: AF, DE, BC, HL
-; @proc bf_f106
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f106:
-    pop de
-    pop bc
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-
-
 ; F107: Get Serial Number
 ;   Out: 6 bytes "CPM31\0" written to DMA
 ;        A = 0
@@ -4434,25 +4370,6 @@ bf_f111:
     dec hl                     ; Length--
     jr .pb_loop
 .pb_done:
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-
-
-; F112: List Block to Printer (stub, no printer)
-;   Out: A = 0
-;   Clobbers: AF, DE, BC, HL
-; @proc bf_f112
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f112:
-    pop de
-    pop bc
     xor a
     ld l, a
     ld h, a

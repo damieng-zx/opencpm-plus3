@@ -56,7 +56,7 @@ start:
     ld a, b
     or a
     jp z, .run_all
-    cp 15
+    cp 16
     jp nc, .run_all            ; Out of range → run all
     ; Jump to the specific test via table
     dec a                      ; 0-based index
@@ -74,7 +74,7 @@ start:
 .test_table:
     dw .run_t1, .run_t2, .run_t3, .run_t4, .run_t5, .run_t6
     dw .run_t7, .run_t8, .run_t9, .run_t10, .run_t11, .run_t12, .run_t13
-    dw .run_t14
+    dw .run_t14, .run_t15
 
     ; Single-test runners: run the test then exit
 .run_t1:  call test1
@@ -105,6 +105,8 @@ start:
     jp done
 .run_t14: call test14
     jp done
+.run_t15: call test15
+    jp done
 
 .run_all:
     call test1
@@ -121,6 +123,7 @@ start:
     call test12
     call test13
     call test14
+    call test15
     jp done
 
 test1:
@@ -1089,6 +1092,55 @@ test14:
     call BDOS
     ret
 
+test15:
+    ; === T15: F28 write-protect is enforced; F45 return mode ===
+    ld de, msg_t15
+    ld c, 9
+    call BDOS
+
+    ; F45 = 1: return errors instead of aborting
+    ld e, 1
+    ld c, 45
+    call BDOS
+
+    ; F28: write-protect the current drive (A:)
+    ld c, 28
+    call BDOS
+
+    ; F22 Make must fail with 0xFF
+    call clear_fcb
+    ld hl, fn_ro
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 22
+    call BDOS
+    cp 0xFF
+    jr nz, .t15_fail
+
+    ; Clear the R/O bit and restore error mode
+    ld c, 13
+    call BDOS
+    ld e, 0
+    ld c, 45
+    call BDOS
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t15_fail:
+    ld c, 13
+    call BDOS
+    ld e, 0
+    ld c, 45
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
 done:
     ld de, msg_end
     ld c, 9
@@ -1136,6 +1188,7 @@ fn_cpm3:  db "CPM3    SYS"
 fn_prof:  db "PROFILE SUB"
 fn_test:  db "TEST    TMP"
 fn_test2: db "TEST2   TMP"
+fn_ro:    db "TEST    RO "
 
 msg_hdr:  db "DISKTEST v6", 13, 10, "$"
 msg_pass: db " PASS", 13, 10, "$"
@@ -1157,3 +1210,4 @@ msg_t12:  db "T12 MultiExtent 17K$"
 msg_rec:  db " rec=$"
 msg_t13:  db "T13 Cleanup$"
 msg_t14:  db "T14 F31 tracks drive$"
+msg_t15:  db "T15 R/O protect+F45$"
