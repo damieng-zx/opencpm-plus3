@@ -337,5 +337,16 @@ class Issue18ScbWrite(unittest.TestCase):
         self.assertIn("T16 SCB write isolation", source("src/test/disktest.asm"))
 
 
+class Issue19F30User(unittest.TestCase):
+    def test_f30_checks_directory_user(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f30:"):text.index("; F31:")]
+        self.assertIn("ld a, (cur_user)", body)
+        self.assertIn("cp (hl)", body)
+
+    def test_disktest_covers_user_area(self):
+        self.assertIn("T17 F30 user area", source("src/test/disktest.asm"))
+
+
 if __name__ == "__main__":
     unittest.main()

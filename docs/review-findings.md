@@ -118,9 +118,10 @@ Status: `[ ]` open, `[x]` fixed.
   written (DMA/current disk/current user).  DISKTEST T16 covers it.
   File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
-- [ ] **19. F30 ignores the user number.**  Attributes can be changed on
-  same-named files in other user areas.
-  File: `src/bdos/bdos.zpa`.
+- [x] **19. F30 ignores the user number.**  It now checks the directory
+  entry's user against `cur_user`; DISKTEST T17 covers a user-0 file while
+  user 1 is current.
+  File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
 - [ ] **20. BSH=0 hangs F20/F21; F46 uses undocumented IXH/IXL.**
   File: `src/bdos/bdos.zpa`.

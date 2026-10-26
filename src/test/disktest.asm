@@ -56,7 +56,7 @@ start:
     ld a, b
     or a
     jp z, .run_all
-    cp 17
+    cp 18
     jp nc, .run_all            ; Out of range → run all
     ; Jump to the specific test via table
     dec a                      ; 0-based index
@@ -74,7 +74,7 @@ start:
 .test_table:
     dw .run_t1, .run_t2, .run_t3, .run_t4, .run_t5, .run_t6
     dw .run_t7, .run_t8, .run_t9, .run_t10, .run_t11, .run_t12, .run_t13
-    dw .run_t14, .run_t15, .run_t16
+    dw .run_t14, .run_t15, .run_t16, .run_t17
 
     ; Single-test runners: run the test then exit
 .run_t1:  call test1
@@ -109,6 +109,8 @@ start:
     jp done
 .run_t16: call test16
     jp done
+.run_t17: call test17
+    jp done
 
 .run_all:
     call test1
@@ -127,6 +129,7 @@ start:
     call test14
     call test15
     call test16
+    call test17
     jp done
 
 test1:
@@ -1295,6 +1298,100 @@ test16:
     call BDOS
     ret
 
+test17:
+    ; === T17: F30 respects the current user area ===
+    ld de, msg_t17
+    ld c, 9
+    call BDOS
+
+    ; Create TEST.TMP in user 0
+    ld e, 0
+    ld c, 32
+    call BDOS
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 19
+    call BDOS                ; delete stale (ignore)
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 22
+    call BDOS
+    cp 0xFF
+    jp z, .t17_fail
+
+    ; Switch to user 1 and try to set R/O on the user-0 file
+    ld e, 1
+    ld c, 32
+    call BDOS
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld a, (FCB1 + 9)
+    or 0x80
+    ld (FCB1 + 9), a
+    ld de, FCB1
+    ld c, 30
+    call BDOS
+    cp 0xFF
+    jr nz, .t17_fail         ; must not find it in user 1
+
+    ; Back to user 0: the attribute must still be clear
+    ld e, 0
+    ld c, 32
+    call BDOS
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    jp z, .t17_fail
+    ld a, (FCB1 + 9)
+    and 0x80
+    jr nz, .t17_fail
+
+    ; Close and delete
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+    ld de, FCB1
+    ld c, 19
+    call BDOS
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t17_fail:
+    ld e, 0
+    ld c, 32
+    call BDOS
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 19
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
 done:
     ld de, msg_end
     ld c, 9
@@ -1367,3 +1464,4 @@ msg_t13:  db "T13 Cleanup$"
 msg_t14:  db "T14 F31 tracks drive$"
 msg_t15:  db "T15 R/O protect+F45$"
 msg_t16:  db "T16 SCB write isolation$"
+msg_t17:  db "T17 F30 user area$"

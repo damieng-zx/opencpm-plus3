@@ -880,6 +880,14 @@ bf_f30:
     pop de
     jp c, .f30_done
 
+    ; Only entries for the current user (0xE5 = deleted).
+    ld a, (hl)
+    cp 0xE5
+    jp z, .f30_next
+    ld a, (cur_user)
+    cp (hl)
+    jp nz, .f30_next
+
     ; Match name (bytes 1-8, ignoring attribute bits)
     push de
     push bc
