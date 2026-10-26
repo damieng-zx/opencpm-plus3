@@ -272,15 +272,17 @@ class Issue14ComFcb(unittest.TestCase):
 
 
 class Issue15FdcTimeouts(unittest.TestCase):
-    """FDC polling must be bounded and the transfer loops must honour EXM."""
+    """FDC polling must be bounded; the data loop must not race EXM."""
 
-    def test_transfer_loops_check_exm(self):
+    def test_transfer_loops_have_poll_timeouts(self):
         text = source("src/bios/fdc765.zpa")
         read = text[text.index("fdc_read_sector:"):text.index("fdc_write_sector:")]
         write = text[text.index("fdc_write_sector:"):text.index("fdc_send_byte:")]
         for body in (read, write):
-            self.assertIn("bit 5, a", body)
             self.assertIn("fdc_poll", body)
+            # EXM is 0 during the command phase; aborting there caused
+            # zero-byte reads.  The loop counts 512 bytes instead.
+            self.assertNotIn("bit 5, a", body)
 
     def test_command_and_seek_polls_have_timeouts(self):
         text = source("src/bios/fdc765.zpa")
@@ -363,6 +365,82 @@ class Issue20BshZero(unittest.TestCase):
         text = source("src/bdos/bdos.zpa")
         self.assertNotIn("ixh", text.lower())
         self.assertNotIn("ixl", text.lower())
+
+
+class VerificationDirCacheKey(unittest.TestCase):
+    """The directory sector number must survive the BIOS call.
+
+    Regression found by DISKTEST T4: the sector was read from BC after
+    set_dma/disk_read had already replaced BC with the dirbuf address, so
+    write_dir_entry wrote the directory to track 7 and file creation was
+    silently lost.
+    """
+
+    def test_sector_is_saved_before_bios_calls(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("read_dir_entry:"):text.index("write_dir_entry:")]
+        self.assertRegex(
+            body, r"\.need_read:\s*\n\s*ld a, b\s*\n\s*push af")
+        self.assertRegex(
+            body,
+            r"pop hl[^\n]*\n\s*ld \(bdos_dma\), hl[^\n]*\n\s*pop bc[^\n]*\n"
+            r"\s*ld a, b[^\n]*\n\s*ld \(last_dir_sec\), a")
+        self.assertIn("ld a, (disk_drive)\n    ld (last_dir_drv), a", body)
+
+    def test_error_path_pops_the_saved_sector(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index(".read_error_dma:"):text.index("write_dir_entry:")]
+        self.assertRegex(body, r"pop hl[^\n]*\n\s*ld \(bdos_dma\), hl")
+        self.assertRegex(body, r"pop bc[^\n]*\n\s*pop af")
+
+
+class VerificationExtentFlush(unittest.TestCase):
+    """F21 must persist RC/allocation after every write.
+
+    Regression found by DISKTEST T11: writing records in EX=0 and then a
+    record in EX=1 left EX=0's directory entry at RC=0/allocation=0,
+    because only the final extent was flushed by close.
+    """
+
+    def test_write_flushes_current_extent(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index(".wseq_no_rc:"):text.index(".wseq_alloc:")]
+        self.assertRegex(body, r"call writeback_fcb\(\)[^\n]*\n"
+                               r"\s*call close_dir_update[^\n]*\n"
+                               r"\s*jp bdos_eok")
+
+    def test_f34_still_uses_the_random_write_path(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f34:"):text.index("; F35:")]
+        self.assertIn("jp bf_f21_core", body)
+
+
+class VerificationStackTestMath(unittest.TestCase):
+    """STKTEST's BIOS entry calculation must use 3 bytes per entry."""
+
+    def test_compute_bios_entry_is_three_times_fn(self):
+        text = source("src/test/stacktest.asm")
+        body = text[text.index("compute_bios_entry:"):text.index("call_bios_ent:")]
+        self.assertRegex(
+            body,
+            r"ld e, l[^\n]*\n\s*ld d, h[^\n]*\n\s*add hl, hl[^\n]*\n\s*add hl, de")
+
+    def test_move_selects_tpa_banks_with_xmove(self):
+        text = source("src/test/stacktest.asm")
+        self.assertIn("ld a, 29", text)
+        self.assertIn("B = dest bank 0 (TPA), C = src bank 0", text)
+
+
+class VerificationF46Stub(unittest.TestCase):
+    """F46 is a documented stub; the runtime test must assert that contract."""
+
+    def test_disktest_checks_stub_contract(self):
+        text = source("src/test/disktest.asm")
+        body = text[text.index("test10:"):text.index("test11:")]
+        self.assertIn("0xAA", body)          # DMA sentinel
+        self.assertIn("or a", body)          # A = 0
+        self.assertIn("or l", body)          # HL = 0
+        self.assertIn("T10 F46 stub", text)
 
 
 if __name__ == "__main__":

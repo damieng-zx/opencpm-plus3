@@ -121,8 +121,26 @@ run 2000
 Require `STACK OK`, `MOVE OK`, and `CLOCK OK` in `char_buffer`.  This
 checks that the initial SP is `0xF600` (`TPA_TOP`), that a direct BIOS call
 through `bios_visible` works after BDOS calls, that BIOS MOVE passes HL/DE
-correctly, that a 1K-deep TPA stack does not touch the common stub, and that
-the clock ticks in TPA mode without BDOS calls.
+correctly (after `XMOVE` selects the TPA banks), that a 1K-deep TPA stack
+does not touch the common stub, and that the clock ticks in TPA mode without
+BDOS calls.
+
+### BDOS file regression suite
+
+Run:
+
+```text
+type "DISKTEST`enter`"
+run 3000
+```
+
+Require every line from `T1 Search PASS` through `T17 F30 user area PASS`
+and `All tests done.` in `char_buffer`.  T10 checks the documented F46
+stub (`A=0`, `HL=0`, DMA untouched), not real free-space accounting.
+
+`fdc_log` must stay retry-free.  A `FAIL` on T4 usually means the directory
+cache key/sector was corrupted; a `FAIL` on T11 means an extent's RC/alloc
+was not flushed.
 
 ### 1. Boot and initial directory
 

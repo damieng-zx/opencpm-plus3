@@ -576,8 +576,10 @@ test9:
     ret
 
 test10:
-    ; === T10: Free space (F46) ===
-    ; F46: DE = drive (0=A), returns free 128-byte records in DMA[0..2] (24-bit LE)
+    ; === T10: F46 Get Free Space (documented stub) ===
+    ; F46 is deliberately deferred (P2 follow-up): it returns A=0 and HL=0
+    ; and leaves the DMA buffer untouched.  Assert that contract so a
+    ; future implementation has to update this test deliberately.
     ld de, msg_t10
     ld c, 9
     call BDOS
@@ -586,29 +588,33 @@ test10:
     ld c, 26
     call BDOS
 
-    ; Clear DMA first
+    ; Put a sentinel in DMA[0..2] so a clobber would be visible
     ld hl, DMA
-    ld (hl), 0
+    ld (hl), 0xAA
     inc hl
-    ld (hl), 0
+    ld (hl), 0xAA
     inc hl
-    ld (hl), 0
+    ld (hl), 0xAA
 
     ld de, 0                ; Drive A
-    ld c, 46                ; F46: Get Disk Free Space
+    ld c, 46                ; F46: Get Disk Free Space (stub)
     call BDOS
 
-    ; Result at DMA[0..2]: 24-bit record count (LE)
-    ; For a 180K disk with ~99K free = ~99*8 = ~792 records
-    ; Should be non-zero
+    or a
+    jr nz, .t10_fail        ; Stub must report success
+    ld a, h
+    or l
+    jr nz, .t10_fail        ; HL must be 0
+
     ld a, (DMA)
-    ld b, a
+    cp 0xAA
+    jr nz, .t10_fail
     ld a, (DMA + 1)
-    or b
-    ld b, a
+    cp 0xAA
+    jr nz, .t10_fail
     ld a, (DMA + 2)
-    or b
-    jr z, .t10_fail         ; Zero free space = fail
+    cp 0xAA
+    jr nz, .t10_fail
 
     ld de, msg_pass
     ld c, 9
@@ -1455,7 +1461,7 @@ msg_t6:   db "T6 Originals intact$"
 msg_t7:   db "T7 FileSize (3 recs)$"
 msg_t8:   db "T8 Rename$"
 msg_t9:   db "T9 Cleanup$"
-msg_t10:  db "T10 FreeSpace$"
+msg_t10:  db "T10 F46 stub$"
 msg_free: db " free=0x$"
 msg_t11:  db "T11 RandomR/W$"
 msg_t12:  db "T12 MultiExtent 17K$"

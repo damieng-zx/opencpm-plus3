@@ -56,6 +56,14 @@ start:
     call print
 
     ; --- 4. BIOS MOVE (fn 25): HL=dst, DE=src, BC=count ----------------
+    ; MOVE works in the bank selected by XMOVE (fn 29).  Select TPA->TPA
+    ; so the source and destination addresses below COMMON_BASE resolve
+    ; to our own memory rather than the system bank.
+    ld a, 29
+    call compute_bios_entry
+    ld bc, 0                      ; B = dest bank 0 (TPA), C = src bank 0
+    call call_bios_ent
+
     ld hl, src_txt
     ld de, src_buf
     ld bc, 8
@@ -127,9 +135,9 @@ print:
 compute_bios_entry:
     ld l, a
     ld h, 0
-    add hl, hl
     ld e, l
     ld d, h
+    add hl, hl                    ; 2*fn
     add hl, de                    ; 3*fn
     ex de, hl
     ld hl, (0x0001)               ; WBOOT entry = bios_visible + 3

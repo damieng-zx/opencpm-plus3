@@ -98,9 +98,10 @@ Status: `[ ]` open, `[x]` fixed.
   Files: `src/ccp/miniccp.zpa`, `src/bios/common.zpa`.
 
 - [x] **15. FDC has no timeouts and ignores EXM in the 512-byte transfer
-  loops.**  `fdc_send_byte`/`fdc_read_byte` have bounded RQM polls,
-  `fdc_wait_seek` has a 0x2000-poll timeout, and both transfer loops break
-  on EXM=0.  The loader's transfer loop also checks EXM.
+  loops.**  `fdc_send_byte`/`fdc_read_byte` have bounded RQM polls and
+  `fdc_wait_seek` has a 0x2000-poll timeout.  The data loops count 512 bytes
+  with a per-byte RQM timeout (an EXM check there raced the command phase
+  and produced zero-byte reads); the loader still checks EXM.
   Files: `src/bios/fdc765.zpa`, `src/boot/loader.asm`.
 
 - [x] **16. ISR motor-off does not clear the spin-up flag.**
@@ -127,6 +128,51 @@ Status: `[ ]` open, `[x]` fixed.
   All six `CR >> BSH` / `block << BSH` loops now skip the loop when BSH=0;
   the F46 IXH/IXL body was replaced by a stub earlier.
   File: `src/bdos/bdos.zpa`.
+
+## Verification follow-ups (zx84 MCP run)
+
+These were found while running the smoke tests in `docs/mcp-smoke-test.md`
+after the 20 fixes landed.  They are fixed on `main` alongside the review
+set.
+
+- **Directory cache key was taken from `BC` after it had been reloaded.**
+  `read_dir_entry` saved the directory sector number in `B`, then called
+  `dir_sector_to_bios`/`set_dma`/`disk_read`, all of which clobber `BC`.
+  The key was therefore stored as 0xFA/0xCF (the `dirbuf` pointer), so
+  `write_dir_entry` wrote the directory buffer to track 7.  `DISKTEST T4`
+  exposed it as a file that could be created and closed but never
+  reopened.  The sector is now saved on the stack before the BIOS calls
+  and restored in the correct LIFO order.
+  File: `src/bdos/bdos.zpa`.
+
+- **F21/F34 only flushed the last extent.**  Random writes into a second
+  extent left the first extent's directory entry at RC=0/alloc=0 because
+  only `CLOSE` updated the directory.  `bf_f21_core` now runs
+  `close_dir_update` after every successful write (using the existing
+  `bdos_eok` tail to stay within the 16K image).  `DISKTEST T11` covers
+  records in EX=0 and EX=1.
+  File: `src/bdos/bdos.zpa`.
+
+- **FDC execution phase poll polarity/EXM.**  `fdc_send_byte`/
+  `fdc_read_byte` treated RQM=0 as ready and timed out after 256 polls;
+  the 512-byte loops also aborted on EXM during the command phase.  The
+  polls now test RQM correctly, use a 16-bit counter, and count the 512
+  data bytes.  `fdc_init` leaves the motor off, so `load_fonts` now calls
+  `motor_on` explicitly.
+  Files: `src/bios/fdc765.zpa`, `src/bios/bios.zpa`.
+
+- **`STKTEST` computed BIOS entries as 4×fn, not 3×fn.**  The test
+  therefore called 0xF6C8 (mid-trampoline) for fn 25 and landed in its own
+  `fail` label.  It now computes 3×fn.  `MOVE` is also preceded by
+  `XMOVE` (fn 29) selecting TPA→TPA banks, since `MOVE` executes in the
+  bank chosen by `XMOVE`.
+  File: `src/test/stacktest.asm`.
+
+- **`DISKTEST T10` expected a working F46.**  F46 is deliberately a
+  documented stub (#20), so the test now asserts the stub contract
+  (`A=0`, `HL=0`, DMA untouched) with a sentinel rather than expecting
+  free-space data.
+  File: `src/test/disktest.asm`.
 
 ## P2 — Later candidates
 
