@@ -217,5 +217,21 @@ class Issue10LoaderScan(unittest.TestCase):
         self.assertIn("entry_count:  db 0", text)
 
 
+class Issue11SubDma(unittest.TestCase):
+    """try_sub must restore DMA and look on the current drive."""
+
+    def test_try_sub_restores_dma(self):
+        text = source("src/ccp/miniccp.zpa")
+        body = text[text.index("try_sub:"):text.index("echo_sub_line:")]
+        self.assertGreaterEqual(body.count("call restore_dma"), 2)
+        self.assertIn("ld de, 0x0080", text)
+
+    def test_try_sub_uses_current_drive(self):
+        text = source("src/ccp/miniccp.zpa")
+        body = text[text.index("try_sub:"):text.index(".opened:")]
+        self.assertIn("ld c, 25", body)
+        self.assertIn("ld (sub_fcb), a", body)
+
+
 if __name__ == "__main__":
     unittest.main()

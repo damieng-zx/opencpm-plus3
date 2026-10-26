@@ -1277,12 +1277,18 @@ try_sub:
     ld bc, 36
     ldir
 
+    ; SUBMIT creates $$$.SUB on the current drive, not necessarily A:.
+    ld c, 25                   ; F25: Return Current Disk
+    call BDOS
+    inc a                      ; 1-based drive for the FCB
+    ld (sub_fcb), a
+
     ld de, sub_fcb
     ld c, 15                   ; F15: Open File
     call BDOS
     cp 0xFF
     jr nz, .opened
-    scf                        ; No $$$.SUB on A:
+    scf                        ; No $$$.SUB on the current drive
     ret
 
 .opened:
@@ -1358,6 +1364,7 @@ try_sub:
     ld de, sub_fcb
     ld c, 16                   ; F16: Close File
     call BDOS
+    call restore_dma
 
     ld de, 0xFFFF
     ld c, F_CONMODE
@@ -1376,7 +1383,21 @@ try_sub:
     ld de, sub_fcb
     ld c, 19                   ; F19: Delete File
     call BDOS
+    call restore_dma
     scf
+    ret
+
+
+; ------------------------------------------------------------------
+; restore_dma — point the BDOS DMA back at 0x0080 after $$$.SUB I/O.
+;   The CCP's DIR built-in (and loaded programs) expect 0x0080.
+; @proc restore_dma
+; @clobbers af,bc,de
+; @end
+restore_dma:
+    ld de, 0x0080
+    ld c, 26                   ; F26: Set DMA
+    call BDOS
     ret
 
 

@@ -76,9 +76,10 @@ Status: `[ ]` open, `[x]` fixed.
   unreachable.  The counter now lives in `entry_count`.
   File: `src/boot/loader.asm`.
 
-- [ ] **11. CCP `try_sub` leaves DMA at `sub_dma`.**  `DIR` after a
-  SUBMIT line reads 0080h instead of the buffer F17 filled.  Also SUBMIT
-  is A:-only.
+- [x] **11. CCP `try_sub` leaves DMA at `sub_dma`.**  `DIR` after a
+  SUBMIT line read 0080h instead of the buffer F17 filled.  `try_sub` now
+  restores DMA to 0080h and looks for $$$.SUB on the current drive (not
+  just A:).
   File: `src/ccp/miniccp.zpa`.
 
 - [ ] **12. RTC only ticks in system mode.**  TPA 0038h is `EI; RETI`, so
