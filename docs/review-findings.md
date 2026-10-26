@@ -38,9 +38,10 @@ Status: `[ ]` open, `[x]` fixed.
   still sparse (P2).
   File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
-- [ ] **5. `select_drive` errors are ignored by most file functions.**
-  Invalid-drive operations proceed against the previously cached drive,
-  e.g. `CLOSE` can update a same-named file on the wrong drive.
+- [x] **5. `select_drive` errors are ignored by most file functions.**
+  Invalid-drive operations proceeded against the previously cached drive;
+  `CLOSE` could update a same-named file on the wrong drive.  A shared
+  `select_fcb_drive` now returns CF and every file function checks it.
   File: `src/bdos/bdos.zpa`.
 
 ## P1 — Functional

@@ -97,6 +97,18 @@ already exercises `load_fid` on every build. Watch for `A>` to appear —
 if the boot hangs after `Open CP/M +3`, suspect a FID/layout regression
 in page-zero setup, the BDOS stack, or the bank-4 system image.
 
+### Invalid drive
+
+Run:
+
+```text
+DIR D:
+```
+
+Require `No files` and no directory listing from the previous drive.  An
+invalid drive must return "not found" instead of searching the last cached
+drive.
+
 ### Stack / visible-BIOS regression
 
 Run:

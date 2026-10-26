@@ -101,5 +101,24 @@ class Issue04RandomExtent(unittest.TestCase):
         self.assertIn("; Clear DMA and read record 200: expect 'C'", text)
 
 
+class Issue05SelectDriveErrors(unittest.TestCase):
+    """File functions must not continue after a failed drive select."""
+
+    def test_every_select_fcb_drive_checks_carry(self):
+        text = source("src/bdos/bdos.zpa")
+        calls = list(re.finditer(r"call select_fcb_drive\n((?:.*\n){0,3})", text))
+        self.assertGreaterEqual(len(calls), 7)
+        for m in calls:
+            self.assertRegex(
+                m.group(1), r"\b(jp|jr|ret)\s+c\b",
+                "select_fcb_drive call is not followed by a carry check")
+
+    def test_old_duplicated_select_blocks_are_gone(self):
+        text = source("src/bdos/bdos.zpa")
+        for label in ("f16_drv", "del_drv", "f20_drv", "f21_drv",
+                      "mk_drv", "ren_drv", "f33_drv", "fsz_drv"):
+            self.assertNotIn(label, text)
+
+
 if __name__ == "__main__":
     unittest.main()

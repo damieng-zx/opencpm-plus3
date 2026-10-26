@@ -101,7 +101,6 @@ bdos_order:     db 0           ; 0=COM→SUB, 1=SUB→COM, 2=COM only, 3=SUB onl
 ; Date/time fields are in the SCB (common.asm): scb_date, scb_minute, scb_sec
 
 ; Directory search state
-search_drv: db 0               ; Drive being searched
 search_pos: dw 0               ; Next directory entry to examine
 search_fcb: dw 0               ; FCB being searched for
 last_dir_sec: db 0xFF          ; Directory sector of last read_dir_entry (0xFF=invalid)
@@ -837,14 +836,8 @@ bf_f30:
     call setup_fcb(de)         ; IX = fcb_buf
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    ld a, (ix + 0)
-    or a
-    jr nz, .f30_drv
-    ld a, (cur_disk)
-    inc a
-.f30_drv:
-    dec a                      ; A = 0-based drive
-    call select_drive
+    call select_fcb_drive
+    jp c, .f30_not_found       ; invalid drive → not found
 
     ; Scan directory for matching entries
     ld de, 0
@@ -1629,17 +1622,16 @@ bf_f17:
     ld (search_pos), hl        ; Start from entry 0
 
     ; Make sure drive is selected
-    ld a, (de)                 ; FCB byte 0 from fcb_buf (common memory — OK)
-    or a
-    jp nz, .has_drive
-    ld a, (cur_disk)
-    inc a                      ; Convert to 1-based
-.has_drive:
-    dec a                      ; Back to 0-based
-    ld (search_drv), a
-    call select_drive          ; A = drive — doesn't touch cur_disk
+    call select_fcb_drive
+    jp c, .f17_bad
 
     jp search_next_entry
+
+.f17_bad:
+    ld a, 0xFF
+    ld l, a
+    ld h, 0
+    jp bdos_ret
 
 ; F18: Search Next
 ; @proc bf_f18
@@ -1793,14 +1785,7 @@ bf_f15:
     push de
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    ld a, (de)                 ; fcb_buf[0] — common memory, OK
-    or a
-    jr nz, .has_drv
-    ld a, (cur_disk)
-    inc a
-.has_drv:
-    dec a                      ; A = 0-based drive
-    call select_drive
+    call select_fcb_drive
     jp c, .not_found           ; invalid drive → treat as "file not found"
 
     ; Search for the file in the directory
@@ -1884,19 +1869,19 @@ bf_f16:
 
     ; Cache DPB/ALV for the FCB's drive — close_dir_update walks the
     ; directory using cached_*.
-    ld a, (ix + 0)
-    or a
-    jr nz, .f16_drv
-    ld a, (cur_disk)
-    inc a
-.f16_drv:
-    dec a
-    call select_drive
+    call select_fcb_drive
+    jp c, .f16_err
 
     call flush_deblock         ; Flush any pending write data
     call close_dir_update
     call writeback_fcb()
     xor a
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+
+.f16_err:
+    ld a, 0xFF
     ld l, a
     ld h, 0
     jp bdos_ret
@@ -2009,14 +1994,8 @@ bf_f19:
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    ld a, (ix + 0)
-    or a
-    jr nz, .del_drv
-    ld a, (cur_disk)
-    inc a
-.del_drv:
-    dec a                      ; A = 0-based drive
-    call select_drive
+    call select_fcb_drive
+    jp c, .del_none            ; invalid drive → not found
 
     ld de, 0                   ; Directory entry index
     ld b, 0                    ; B = found count
@@ -2099,14 +2078,8 @@ bf_f20:
     ; Cache DPB/ALV for the FCB's drive so cached_* is consistent with
     ; this operation (and unaffected by what some earlier BDOS call left
     ; cached for a different drive).
-    ld a, (ix + 0)
-    or a
-    jr nz, .f20_drv
-    ld a, (cur_disk)
-    inc a
-.f20_drv:
-    dec a
-    call select_drive
+    call select_fcb_drive
+    jp c, .read_drv_err
 
     ; Get current position from FCB
     ; CR (byte 32) = current record within extent (0-127)
@@ -2298,6 +2271,12 @@ bf_f20:
     ld h, 0
     jp bdos_ret
 
+.read_drv_err:
+    ld a, 0xFF
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+
 .read_err:
     pop ix
     ld a, 0xFF
@@ -2327,14 +2306,8 @@ bf_f21_core:
 
     ; Cache DPB/ALV for the FCB's drive so cached_* is consistent with
     ; this operation.
-    ld a, (ix + 0)
-    or a
-    jr nz, .f21_drv
-    ld a, (cur_disk)
-    inc a
-.f21_drv:
-    dec a
-    call select_drive
+    call select_fcb_drive
+    jp c, .wseq_error
 
     ; If CR == 128 this extent is full — create a new extent first
     ld a, (ix + 32)            ; CR
@@ -2567,14 +2540,8 @@ bf_f22:
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    ld a, (ix + 0)
-    or a
-    jr nz, .mk_drv
-    ld a, (cur_disk)
-    inc a
-.mk_drv:
-    dec a                      ; A = 0-based drive
-    call select_drive
+    call select_fcb_drive
+    jp c, .mk_full             ; invalid drive → error
 
     ; Scan directory for a free (E5h) entry
     ld de, 0
@@ -2665,14 +2632,8 @@ bf_f23:
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    ld a, (ix + 0)
-    or a
-    jr nz, .ren_drv
-    ld a, (cur_disk)
-    inc a
-.ren_drv:
-    dec a                      ; A = 0-based drive
-    call select_drive
+    call select_fcb_drive
+    jp c, .ren_none            ; invalid drive → not found
 
     ; Scan directory for entries matching old name (bytes 1-11)
     ld de, 0
@@ -2831,14 +2792,8 @@ bf_f33:
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
 
     ; Cache DPB/ALV for the FCB's drive.
-    ld a, (ix + 0)
-    or a
-    jr nz, .f33_drv
-    ld a, (cur_disk)
-    inc a
-.f33_drv:
-    dec a
-    call select_drive
+    call select_fcb_drive
+    jp c, .rdrand_range
 
     ; Convert random record to EX/CR
     call rand_to_seq
@@ -3004,6 +2959,8 @@ bf_f33:
     ld h, 0
     jp bdos_ret
 
+.rdrand_range:
+    ld a, 6                    ; invalid drive / random record out of range
 .rdrand_err:
     ld l, a
     ld h, 0
@@ -3236,14 +3193,8 @@ bf_f35:
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    ld a, (ix + 0)
-    or a
-    jr nz, .fsz_drv
-    ld a, (cur_disk)
-    inc a
-.fsz_drv:
-    dec a                      ; A = 0-based drive
-    call select_drive
+    call select_fcb_drive
+    jp c, .fsz_bad             ; invalid drive
 
     ; Initialize result to 0
     ld (ix + 33), 0
@@ -3338,6 +3289,12 @@ bf_f35:
 .fsz_cmp_fail:
     pop hl
     jp .fsz_skip
+
+.fsz_bad:
+    ld a, 0xFF
+    ld l, a
+    ld h, 0
+    jp bdos_ret
 
 .fsz_done:
     call writeback_fcb()
@@ -3547,6 +3504,7 @@ bf_f46:
     ld a, (cur_disk)
 .f46_sel:
     call select_drive
+    jp c, .f46_bad
     ; Count free blocks in ALV (blocks 0..DSM)
     ; ALV is a packed bit array: byte N, bit 7 = block N*8, bit 0 = block N*8+7
     ld hl, (cached_alv)
@@ -3640,6 +3598,13 @@ bf_f46:
     xor a
     ld l, a
     ld h, a
+    jp bdos_ret
+
+
+.f46_bad:
+    ld a, 0xFF
+    ld l, a
+    ld h, 0
     jp bdos_ret
 
 
