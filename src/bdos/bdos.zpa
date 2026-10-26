@@ -71,7 +71,7 @@
 ; The common stub switches to bdos_stack before calling bdos_entry.
 
 rdbuf_ptr:  dw 0               ; Buffer pointer for F10
-f46_buf:    db 0, 0, 0         ; F46 24-bit free-record scratch
+; f46_buf removed: F46 is a deferred stub
 
 ; --- BDOS state ---
 bdos_dma:   dw 0x0080          ; Current DMA address (default 0080h)
@@ -1649,6 +1649,7 @@ read_dir_entry:
     ; Read this directory sector via BIOS
 .need_read:
     ld a, b
+    push af                    ; Save directory sector (BIOS calls clobber BC)
     call dir_sector_to_bios    ; Set BIOS track/sector
 
     ; Save user DMA, then redirect to our internal directory buffer
@@ -1658,21 +1659,18 @@ read_dir_entry:
     call set_dma
 
     ; Read via BIOS
-    push bc                    ; Preserve cache key across disk_read clobbers
     call disk_read
     or a
-    pop bc
     jp nz, .read_error_dma
 
     ; Cache is valid only after a successful read.
+    pop hl                     ; Saved user DMA (pushed last)
+    ld (bdos_dma), hl
+    pop bc                     ; B = directory sector saved above
     ld a, b
     ld (last_dir_sec), a       ; Save sector number for write_dir_entry
-    ld a, c
+    ld a, (disk_drive)
     ld (last_dir_drv), a
-
-    ; Restore user DMA
-    pop hl
-    ld (bdos_dma), hl
 
 .dir_cached:
     pop af                     ; A = original entry number (from line 913)
@@ -1701,6 +1699,7 @@ read_dir_entry:
     ld a, 0xFF
     ld (last_dir_sec), a
     ld (last_dir_drv), a
+    pop bc                     ; discard saved directory sector
     pop af                     ; entry-number af pushed at top of routine
     scf
     ret
@@ -2570,10 +2569,8 @@ bf_f21_core:
 .wseq_no_rc:
     inc (ix + 32)              ; CR++
     call writeback_fcb()
-    xor a
-    ld l, a
-    ld h, 0
-    jp bdos_ret
+    call close_dir_update      ; Persist RC/alloc for this extent
+    jp bdos_eok
 
 .wseq_alloc:
     ; HL = &FCB[16 + block_index] — need to allocate a block here
