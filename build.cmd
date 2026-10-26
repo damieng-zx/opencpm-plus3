@@ -46,17 +46,25 @@ python3 tools\patchsum.py build\bootsect.bin
 
 echo   Assembling test programs...
 %SJASMPLUS% --raw=build\bdostest.com src\test\bdostest.asm
+if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\xtetest.com src\test\xtetest.asm
+if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\disktest.com src\test\disktest.asm
+if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\termtest.com src\test\termtest.asm
+if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\stacktest.com src\test\stacktest.asm
 if errorlevel 1 goto :fail
 
 echo   Assembling utilities...
 %SJASMPLUS% --raw=build\date.com build\zpa\date.asm
+if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\showxdpb.com src\tools\showxdpb.asm
+if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\dump.com src\tools\dump.asm
+if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\setdef.com src\tools\setdef.asm
+if errorlevel 1 goto :fail
 
 echo   Assembling FID modules...
 %SJASMPLUS% --raw=build\RAMDISK.FID src\fid\ramdisk.asm
