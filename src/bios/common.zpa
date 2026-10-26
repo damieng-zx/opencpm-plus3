@@ -81,11 +81,11 @@ scb_tpa:
 ; that address - 3. Each entry here dispatches to the real BIOS in
 ; bank 4 via bios_call_bank4.
 ;
-; The 27 dispatched entries (fn 2..29 except 27) share a tight trampoline
-; block: each slot is a single `call bv_shim` (3 bytes). bv_shim recovers
-; the bank-4 target address from the call-site return address, with no
-; per-entry `ld hl,nn` needed. Fn 27 (BNKSEL) lives in common already, so
-; its slot in the block is a dead entry — cheaper than splitting the block.
+; The dispatched entries (fn 2..32) share a trampoline block: each slot is a
+; single `call bv_shim` (3 bytes). bv_shim recovers the bank-4 target address
+; from the call-site return address, with no per-entry `ld hl,nn` needed.
+; Fn 27 (BNKSEL) lives in common already and fn 30 (USERF) is handled inline,
+; so their slots are dead entries — cheaper than splitting the block.
 bios_visible:
     jp warm_boot_stub              ;  0: BOOT (cold → warm from TPA)
     jp warm_boot_stub              ;  1: WBOOT
@@ -121,24 +121,24 @@ bios_visible:
     jp 0                           ; 31: reserved
     jp bv_tramp + 3*(32 - 2)       ; 32: SCRMODE
 
-; Trampoline block: one `call bv_shim` per BIOS fn 2..29. Slot fn=27 is
-; dead space (fn 27 is dispatched direct to bank_sel above), kept so that
-; the call-site address maps linearly to the bank-4 target.
+; Trampoline block: one `call bv_shim` per BIOS fn 2..32, so the call-site
+; address maps linearly to the bank-4 target.  The fn 27 and fn 30/31 slots
+; are unused (fn 27 and fn 30 jump direct, fn 31 is reserved), but keeping
+; them makes the arithmetic a simple 3*fn.
 ;
 ; When bv_shim is entered, the return address on the stack is the address
 ; of the instruction *after* the CALL, i.e. bv_tramp + 3*(fn-2) + 3. The
-; shim converts that back into the bank-4 target (3*fn) with a constant
-; DE added in:  bank4_target = ret_addr + 3 - bv_tramp  = 3*fn.
+; shim converts that back into the bank-4 target (BIOS4_BASE + 3*fn).
 bv_tramp:
-    dup 28
-        call bv_shim               ; 28 × 3 bytes = 84 bytes total
+    dup 31
+        call bv_shim               ; 31 × 3 bytes = 93 bytes total
     edup
-    assert $ - bv_tramp == 28 * 3, "bv_tramp must be exactly 84 bytes"
+    assert $ - bv_tramp == 31 * 3, "bv_tramp must be exactly 93 bytes"
 
 bv_shim:
     pop hl                         ; HL = return addr = bv_tramp + 3*(fn-2) + 3
-    ld de, 3 - bv_tramp            ; assembler wraps mod 65536
-    add hl, de                     ; HL = 3*fn — the bank-4 target
+    ld de, BIOS4_BASE + 3 - bv_tramp   ; assembler wraps mod 65536
+    add hl, de                     ; HL = BIOS4_BASE + 3*fn — bank-4 target
     jp bios_call_bank4
 
 
@@ -799,8 +799,8 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF9A1, "RAMDISK.FID expects copy_record_to_tpa at 0xF9A1"
-    assert copy_record_from_tpa == 0xF9A7, "RAMDISK.FID expects copy_record_from_tpa at 0xF9A7"
+    assert copy_record_to_tpa == 0xF9AA, "RAMDISK.FID expects copy_record_to_tpa at 0xF9AA"
+    assert copy_record_from_tpa == 0xF9B0, "RAMDISK.FID expects copy_record_from_tpa at 0xF9B0"
 
 
 ; ------------------------------------------------------------------

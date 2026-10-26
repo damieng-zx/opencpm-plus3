@@ -50,6 +50,10 @@ COMMON_BASE equ 0xF600            ; Start of bank-3 common memory
 TPA_TOP     equ COMMON_BASE       ; First byte of common memory = top of TPA
 RAMDISK_MSG equ 0x93E0            ; Status string embedded in RAMDISK.FID
 
+; Bank-4 BIOS jump table base.  It must not overlap the IM 1 vector at
+; 0038h, so the table starts at 0040h and 0000-003F is page-zero/ISR space.
+BIOS4_BASE  equ 0x0040
+
 
 ; ######################################################################
 ; INIT — One-shot setup code (runs at C000h, copies code to banks)
@@ -106,6 +110,10 @@ _copy_common_size equ common_image_end - common_image
 
 system_image:
     PHASE 0x0000
+
+; Reserve page zero (0000-003F) for the IM 1 vector at 0038; the BIOS
+; jump table starts at BIOS4_BASE so the vector cannot overwrite entries.
+    block BIOS4_BASE, 0
 
 ; ==========================================================================
 ; BIOS Jump Table — 33 entry points, 3 bytes each (JP addr)

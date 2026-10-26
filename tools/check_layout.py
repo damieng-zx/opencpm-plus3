@@ -84,6 +84,17 @@ def check(sections: list[Section]) -> list[str]:
         errors.append(
             f"system_end 0x{system_end.addr:04X} exceeds bank 4 limit 0x{system_section.limit:04X}")
 
+    # The IM 1 vector lives at 0038h in bank 4.  No BIOS jump-table entry
+    # (fn_*) may cover those three bytes, or the ISR write corrupts it.
+    bios_base = labels.get("bios_base")
+    if bios_base and bios_base.addr <= 0x0038:
+        errors.append(
+            f"bios_base 0x{bios_base.addr:04X} overlaps the IM1 vector at 0038h")
+    for name, lbl in labels.items():
+        if name.startswith("fn_") and lbl.addr <= 0x0038 < lbl.addr + 3:
+            errors.append(
+                f"{name} at 0x{lbl.addr:04X} overlaps the IM1 vector at 0038h")
+
     bdos_stack_base = labels.get("bdos_stack_base")
     bdos_stack_top = bdos_stack_base.addr + 128 if bdos_stack_base else None
     if bdos_stack_top and bdos_stack_top > 0x10000:

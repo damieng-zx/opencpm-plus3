@@ -36,5 +36,31 @@ class Issue01TpaStackTop(unittest.TestCase):
         self.assertGreaterEqual(table["bdos_stub"].addr, table["scb_base"].addr)
 
 
+class Issue02IsrVector(unittest.TestCase):
+    """The bank-4 BIOS jump table must not overlap the IM 1 vector at 0038h."""
+
+    def test_jump_table_starts_after_vector(self):
+        text = source("src/bios/bios.zpa")
+        self.assertIn("BIOS4_BASE  equ 0x0040", text)
+        self.assertRegex(text, r"block BIOS4_BASE, 0")
+
+    def test_listing_entries_do_not_cover_0038(self):
+        table = labels()
+        if not table:
+            self.skipTest("build/bios.lst not present; run build.cmd first")
+        self.assertEqual(table["bios_base"].addr, 0x0040)
+        for name, lbl in table.items():
+            if not name.startswith("fn_"):
+                continue
+            self.assertFalse(
+                lbl.addr <= 0x0038 < lbl.addr + 3,
+                f"{name} at 0x{lbl.addr:04X} overlaps the IM1 vector at 0038h")
+
+    def test_trampoline_block_covers_fn32(self):
+        text = source("src/bios/common.zpa")
+        self.assertIn("dup 31", text)
+        self.assertIn("31 * 3", text)
+
+
 if __name__ == "__main__":
     unittest.main()

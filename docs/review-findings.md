@@ -16,10 +16,12 @@ Status: `[ ]` open, `[x]` fixed.
   Files: `src/ccp/miniccp.zpa`, `src/bios/bios.zpa`, `src/bios/common.zpa`,
   `docs/API.md`, `docs/boot.md`.
 
-- [ ] **2. IM 1 ISR at 0038h overwrites BIOS jump-table entries 18/19.**
-  `cold_boot` writes a `JP` at 0038h; `fn_auxis` is at 0036h and
-  `fn_auxos` at 0039h.  BIOS AUXIST/AUXOST become garbage.
-  Files: `src/bios/bios.zpa`.
+- [x] **2. IM 1 ISR at 0038h overwrites BIOS jump-table entries 18/19.**
+  `cold_boot` wrote a `JP` at 0038h; `fn_auxis`/`fn_auxos` used to start at
+  0036h/0039h.  The bank-4 table now starts at `BIOS4_BASE=0040h`; the
+  visible trampoline block covers fn 2..32 (fn 32 was previously mapping
+  into `bv_shim`).  Dead XBIOS stubs were removed to make room.
+  Files: `src/bios/bios.zpa`, `src/bios/common.zpa`, `src/bios/screen.zpa`.
 
 - [ ] **3. `ensure_sector` publishes the deblock cache key before a
   successful read.**  A seek/read error leaves the cache claiming to hold

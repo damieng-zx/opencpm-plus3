@@ -3723,6 +3723,8 @@ bf_f50:
     ld e, l
     add hl, hl
     add hl, de                     ; HL = func * 3
+    ld de, BIOS4_BASE
+    add hl, de                     ; HL = BIOS4_BASE + func * 3
     ld (_f50_target), hl
 
     ; Set up registers from PB and call the resolved target via RET trick.

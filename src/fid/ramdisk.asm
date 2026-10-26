@@ -48,8 +48,8 @@ DIR_BLOCK_SIZE equ 1024
 MAGIC_OFFSET   equ RAMDISK_SIZE - 8
 
 ; --- BIOS ABI (must match common.zpa; asserted there) -------------------
-COPY_RECORD_TO_TPA   equ 0xF9A1     ; HL=src(system), DE=dst(TPA), 128 bytes
-COPY_RECORD_FROM_TPA equ 0xF9A7     ; HL=src(TPA), DE=dst(system), 128 bytes
+COPY_RECORD_TO_TPA   equ 0xF9AA     ; HL=src(system), DE=dst(TPA), 128 bytes
+COPY_RECORD_FROM_TPA equ 0xF9B0     ; HL=src(TPA), DE=dst(system), 128 bytes
 
 ; --- Header (64 bytes) ----------------------------------------------------
 header:
