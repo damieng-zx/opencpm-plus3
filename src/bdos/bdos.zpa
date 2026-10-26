@@ -2796,13 +2796,7 @@ rand_to_seq:
     ld c, a
     and 0x7F
     ld (ix + 32), a            ; CR = R & 0x7F
-    ; EX = (B << 1) | (C >> 7)
-    ld a, c
-    rlca                       ; bit 7 -> carry and bit 0
-    and 0x01                   ; A = bit 7 of R0
-    rl b                       ; B = (R1 << 1), old carry (bit7 of R0) goes to bit 0... no
-    ; Let me redo this. R = R1*256 + R0. R/128 = R1*2 + R0/128.
-    ; R0/128 = bit 7 of R0. So EX = R1*2 + (R0 >> 7).
+    ; EX = R1*2 + (R0 >> 7)
     ld a, c                    ; A = R0
     rlca                       ; rotate left, bit 7 -> bit 0, old bit 7 -> carry
     and 0x01                   ; A = R0 >> 7 (just the top bit)
@@ -3303,29 +3297,7 @@ bf_f35:
     add hl, de                 ; HL = &entry[15]
     ld c, (hl)                 ; RC
 
-    ; last_record = EX * 128 + RC = (B << 7) + C
-    ; Low byte: (B << 7) gives bit 7, plus C (0-128)
-    ld a, b
-    rrca                       ; rotate right: bit 0 -> bit 7
-    and 0x80                   ; A = (EX & 1) << 7
-    add a, c                   ; A = low byte of last_record
-    ld e, a                    ; E = R0 candidate
-    ld a, b
-    srl a                      ; A = EX >> 1 = high byte
-    jp nc, .fsz_no_carry
-    ; If (EX&1)<<7 + RC overflowed, increment high byte
-    ; Actually: E + C might overflow if C >= 128 - (EX&1)*128
-    ; Since RC <= 128 and (EX&1)<<7 is 0 or 128:
-    ;   if EX is odd, A_low = 128 + RC. If RC > 0, this overflows to 0 + carry.
-    ; Let me just do proper 16-bit math.
-.fsz_no_carry:
-    ld d, a                    ; D = R1 candidate
-
-    ; Actually let me redo this cleanly.
-    ; last_record = B * 128 + C  (B=EX, C=RC)
-    ; = B * 128 + C
-    ; Low byte = (B & 1) * 128 + C. If >= 256, carry.
-    ; High byte = B >> 1 + carry.
+    ; last_record = EX * 128 + RC (16-bit)
     pop hl
 
     ; Clean 16-bit calculation
