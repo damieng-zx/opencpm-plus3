@@ -710,7 +710,9 @@ signon_msg:
 ;   font files and loads them into bank 7 (always-visible in system mode):
 ;     FONT51.BIN → 0x4000 (5px-wide, used for 51-col mode)
 ;     FONT32.BIN → 0x4800 (8px-wide, used for 32-col mode)
-;   Called from cold_boot after fdc_init; motor is already on.
+;   Called from cold_boot after fdc_init.  fdc_init leaves the motor off,
+;   so spin it up here and leave it on for load_fid (cold_boot spins it
+;   down after both loaders).
 ;   In:  nothing
 ;   Out: nothing
 ;   Clobbers: AF, BC, DE, HL
@@ -727,6 +729,8 @@ load_fonts:
     ld (_font32_blk0), a
     ld (_font32_blk1), a
     ld (_fid_block), a              ; FID not yet found; load_fid will check this
+
+    call motor_on                   ; fdc_init left the motor off
 
     ; Seek to track 1 (first data track: OFF=1)
     ld a, 1

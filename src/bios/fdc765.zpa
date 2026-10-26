@@ -121,7 +121,7 @@ _ens_psec:    db 0             ; scratch: physical sector across seek/read
 ; FDC state
 ; Per-drive cached head position (FF = unknown, needs recalibrate)
 fdc_current_track: db 0xFF, 0xFF
-fdc_poll:          db 0        ; RQM poll timeout counter
+fdc_poll:          dw 0        ; RQM poll timeout counter (16-bit)
 fdc_seek_timeout:  dw 0        ; seek/recalibrate poll timeout
 
 
@@ -935,9 +935,9 @@ fdc_read_sector:
     ld a, 0xFF                 ; DTL
     call fdc_send_byte
 
-    ; Read execution phase — up to 512 bytes into deblock_buf.  EXM tells
-    ; us when the controller has left the execution phase (abort/end), and
-    ; the poll counter prevents a stuck RQM from hanging the machine.
+    ; Read execution phase — up to 512 bytes into deblock_buf.  The poll
+    ; counter prevents a stuck RQM from hanging the machine; an aborted
+    ; command is caught by the result-phase timeout/status checks.
     ld hl, deblock_buf
     ld bc, PORT_FDC_ST
     ld d, 2                    ; 2 pages (D is free — sector ID was pushed)
@@ -948,15 +948,15 @@ fdc_read_sector:
     ld (fdc_poll), a
 .exec_wait:
     in a, (c)
-    jp p, .exec_ready
+    jp p, .exec_poll
+    jr .exec_ready
+.exec_poll:
     ld a, (fdc_poll)
     dec a
     ld (fdc_poll), a
     jr nz, .exec_wait
     jr .result
 .exec_ready:
-    bit 5, a                   ; EXM = 0 → left execution phase
-    jr z, .result
     ld b, high PORT_FDC_DT
     in a, (c)                  ; Read data byte
     ld (hl), a
@@ -1047,8 +1047,8 @@ fdc_write_sector:
     ld a, 0xFF                 ; DTL
     call fdc_send_byte
 
-    ; Write execution phase — up to 512 bytes from deblock_buf.  Bail out
-    ; when EXM clears (abort) or the RQM poll times out.
+    ; Write execution phase — up to 512 bytes from deblock_buf.  The poll
+    ; counter prevents a stuck RQM from hanging the machine.
     ld hl, deblock_buf
     ld bc, PORT_FDC_ST
     ld d, 2                    ; 2 pages of 256
@@ -1059,15 +1059,15 @@ fdc_write_sector:
     ld (fdc_poll), a
 .exec_wait:
     in a, (c)
-    jp p, .exec_ready
+    jp p, .exec_poll
+    jr .exec_ready
+.exec_poll:
     ld a, (fdc_poll)
     dec a
     ld (fdc_poll), a
     jr nz, .exec_wait
     jr .result
 .exec_ready:
-    bit 5, a                   ; EXM = 0 → left execution phase
-    jr z, .result
     ld b, high PORT_FDC_DT
     ld a, (hl)
     out (c), a                 ; Write byte to FDC
@@ -1130,12 +1130,19 @@ fdc_send_byte:
     ld bc, PORT_FDC_ST
     ld a, 0xFF
     ld (fdc_poll), a
+    ld (fdc_poll + 1), a
 .wait:
     in a, (c)
-    jp p, .ready               ; Wait for RQM
+    jp p, .poll                ; RQM = 0 → keep polling
+    jr .ready
+.poll:
     ld a, (fdc_poll)
     dec a
     ld (fdc_poll), a
+    jr nz, .wait
+    ld a, (fdc_poll + 1)
+    dec a
+    ld (fdc_poll + 1), a
     jr nz, .wait
     pop af                     ; timeout — drop the byte
     ret
@@ -1160,12 +1167,19 @@ fdc_read_byte:
     ld bc, PORT_FDC_ST
     ld a, 0xFF
     ld (fdc_poll), a
+    ld (fdc_poll + 1), a
 .wait:
     in a, (c)
-    jp p, .ready               ; Wait for RQM
+    jp p, .poll                ; RQM = 0 → keep polling
+    jr .ready
+.poll:
     ld a, (fdc_poll)
     dec a
     ld (fdc_poll), a
+    jr nz, .wait
+    ld a, (fdc_poll + 1)
+    dec a
+    ld (fdc_poll + 1), a
     jr nz, .wait
     ld a, 0xFF                 ; timeout
     ret
