@@ -13,7 +13,7 @@ The goal is to catch:
 - boot regressions
 - CCP command regressions
 - BBC BASIC launch/exit regressions
-- file operation regressions (`TYPE`, `REN`, wildcard `DIR`)
+- file operation regressions (`TYPE`, `RENAME`, wildcard `DIR`)
 - disk-performance regressions (extra retries or materially higher cycle counts)
 
 ## Setup
@@ -214,10 +214,13 @@ Check:
 
 ### 5. Rename the SUB file
 
+`miniccp` has no built-in `REN`; the disk ships `RENAME.COM`, whose syntax is
+`RENAME NEWNAME OLDNAME` (destination first).
+
 Run:
 
 ```text
-REN RPED.SUB TEST.SUB
+RENAME TEST.SUB RPED.SUB
 DIR A:*.SUB
 ```
 
@@ -232,7 +235,7 @@ Check:
 To restore the original filename before finishing:
 
 ```text
-REN TEST.SUB RPED.SUB
+RENAME RPED.SUB TEST.SUB
 DIR A:*.SUB
 ```
 
@@ -294,6 +297,6 @@ Before committing, this smoke test should pass with:
 - successful boot
 - correct screen-buffer contents at each checkpoint
 - BBC BASIC launch, `RUN`, and `QUIT` working
-- successful `TYPE`, `REN`, and wildcard `DIR`
+- successful `TYPE`, `RENAME`, and wildcard `DIR`
 - no FDC retries
 - no unexplained cycle-count regression
