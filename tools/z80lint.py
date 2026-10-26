@@ -1074,6 +1074,11 @@ def check_clobbers_in_file(filepath, all_lines, routine_map):
             # Get writes from this instruction to track restores
             _, inst_writes = get_effects(mnemonic, ops)
 
+            # A PUSH is a save, not a use: `push af` after a call that
+            # clobbers A is exactly how callers preserve the value.
+            if mnemonic == 'push':
+                continue
+
             # Check for reads of still-clobbered registers BEFORE updating
             # restored set (the write on THIS line restores for FUTURE lines)
             inst_reads, _ = get_effects(mnemonic, ops)
