@@ -30,11 +30,13 @@ Status: `[ ]` open, `[x]` fixed.
   flush is propagated instead of discarding dirty data.
   File: `src/bios/fdc765.zpa`.
 
-- [ ] **4. F34/F40 random write does not locate or create the target
-  extent.**  A random write to `EX > 0` uses the current FCB map, writes
-  the wrong block, and is not closed into the directory.  Also breaks
-  `SUBMIT` beyond one 16K extent.
-  File: `src/bdos/bdos.zpa`.
+- [x] **4. F34/F40 random write does not locate or create the target
+  extent.**  A random write to `EX > 0` used the current FCB map, wrote
+  the wrong block, and was not closed into the directory.  F34/F40 now
+  use `find_fcb_extent` and create the target extent when needed.
+  `DISKTEST` T11 now writes/reads record 200 (EX=1).  F40 zero-fill is
+  still sparse (P2).
+  File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
 - [ ] **5. `select_drive` errors are ignored by most file functions.**
   Invalid-drive operations proceed against the previously cached drive,

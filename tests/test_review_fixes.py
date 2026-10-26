@@ -81,5 +81,25 @@ class Issue03DeblockCache(unittest.TestCase):
         self.assertRegex(body, r"call flush_deblock_body\s*\n\s*pop bc\s*\n\s*or a\s*\n\s*ret nz")
 
 
+class Issue04RandomExtent(unittest.TestCase):
+    """F34/F40 must resolve the target extent, not reuse the current map."""
+
+    def test_random_write_looks_up_or_creates_extent(self):
+        text = source("src/bdos/bdos.zpa")
+        f34 = text[text.index("bf_f34:"):text.index("; F35:")]
+        f40 = text[text.index("bf_f40:"):text.index("; @proc div_hl_bc")]
+        for body in (f34, f40):
+            self.assertIn("call find_fcb_extent", body)
+            self.assertIn("call create_fcb_extent", body)
+            self.assertLess(body.index("call find_fcb_extent"),
+                            body.index("jp bf_f21_core"))
+
+    def test_random_test_covers_second_extent(self):
+        text = source("src/test/disktest.asm")
+        self.assertIn("; --- Write record 200 with 'C'", text)
+        self.assertIn("ld a, 200", text)
+        self.assertIn("; Clear DMA and read record 200: expect 'C'", text)
+
+
 if __name__ == "__main__":
     unittest.main()

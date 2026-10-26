@@ -124,23 +124,6 @@ cached_drive: db 0xFF          ; Drive the cached_* above refer to (0xFF = none)
 
 
 ; ==========================================================================
-; @proc bdos_warm_init
-; @clobbers af,bc,de,hl
-; @end
-; bdos_warm_init — Called by BIOS warm_boot to reset BDOS state
-;   Resets DMA, clears R/O vector, rebuilds ALV from directory.
-;   Must be called from system mode (bank 4 at 0000h).
-;   Clobbers: AF, BC, DE, HL
-; ==========================================================================
-bdos_warm_init:
-    ld hl, 0x0080
-    ld (bdos_dma), hl
-    ld hl, 0
-    ld (ro_vec), hl
-    call build_alv
-    ret
-
-; ==========================================================================
 ; BDOS entry point
 ; ==========================================================================
 
@@ -1206,6 +1189,26 @@ select_drive:
 .sb_err:
     scf                        ; CF=1 → invalid drive
     ret
+
+
+; ==========================================================================
+; @proc select_fcb_drive
+; @out   carry
+; @clobbers af,bc,de,hl
+; @end
+; select_fcb_drive — Select the drive named by IX+0 (0 = current drive).
+;   In:  IX = FCB (fcb_buf)
+;   Out: CF=0 success, CF=1 invalid drive
+;   Clobbers: AF, BC, DE, HL (IX preserved by select_drive)
+select_fcb_drive:
+    ld a, (ix + 0)
+    or a
+    jr nz, .has_drive
+    ld a, (cur_disk)
+    inc a
+.has_drive:
+    dec a                      ; A = 0-based drive
+    jp select_drive
 
 
 ; ==========================================================================
@@ -3013,6 +3016,164 @@ bf_f33:
     jp bdos_ret
 
 
+; ==========================================================================
+; @proc find_fcb_extent
+; @out   zero
+; @clobbers af,bc,de,hl
+; @end
+; find_fcb_extent — Find the directory extent for IX's EX.
+;   In:  IX = FCB (fcb_buf) with EX set
+;   Out: Z = found; RC and the 16-byte allocation map are copied into FCB
+;        NZ = no entry with this user/name/EX
+;   Clobbers: AF, BC, DE, HL
+find_fcb_extent:
+    ld hl, 0
+    ld (search_pos), hl
+.loop:
+    ld de, (search_pos)
+    push de                    ; save search position across read_dir_entry
+    call read_dir_entry
+    jp c, .not_found_pop
+    push hl                    ; save entry pointer
+    ld a, (hl)
+    cp 0xE5
+    jp z, .skip
+    ld a, (cur_user)
+    cp (hl)
+    jp nz, .skip
+
+    push hl                    ; save entry for the failure path
+    inc hl                     ; HL = &entry[1]
+    push ix
+    pop de
+    inc de                     ; DE = &fcb[1]
+    ld b, 11
+.cmp:
+    ld a, (de)
+    and 0x7F
+    ld c, a
+    ld a, (hl)
+    and 0x7F
+    cp c
+    jp nz, .cmp_fail
+    inc hl
+    inc de
+    djnz .cmp
+    ; HL = &entry[12]; match EX
+    ld a, (hl)
+    ld b, a
+    ld a, (ix + 12)
+    cp b
+    jp nz, .cmp_fail
+
+    ; Found — HL = &entry[12].
+    ld de, 3
+    add hl, de                 ; HL = &entry[15] (RC)
+    ld a, (hl)
+    ld (ix + 15), a
+    inc hl                     ; HL = &entry[16]
+    push ix
+    pop de
+    ld a, e
+    add a, 16
+    ld e, a
+    jr nc, .no_carry
+    inc d
+.no_carry:
+    ld bc, 16
+    ldir                       ; entry alloc map -> FCB[16..31]
+    pop hl                     ; discard entry (cmp save)
+    pop hl                     ; discard entry
+    pop de                     ; discard search position
+    xor a
+    ret
+.cmp_fail:
+    pop hl                     ; discard entry (cmp save)
+.skip:
+    pop hl                     ; discard entry
+    pop de                     ; discard search position
+    inc de
+    ld (search_pos), de
+    jp .loop
+.not_found_pop:
+    pop de                     ; discard search position
+.not_found:
+    or 1
+    ret
+
+
+; ==========================================================================
+; @proc create_fcb_extent
+; @out   carry
+; @clobbers af,bc,de,hl
+; @end
+; create_fcb_extent — Create an empty directory extent for IX's current EX.
+;   In:  IX = FCB (fcb_buf) with user/name and EX set
+;   Out: CF=1 = directory full; CF=0 = entry created, FCB RC/alloc cleared
+;   Clobbers: AF, BC, DE, HL
+create_fcb_extent:
+    push ix
+    ld de, 0
+.scan:
+    push de
+    call read_dir_entry
+    pop de
+    jr c, .full
+    ld a, (hl)
+    cp 0xE5
+    jr z, .found
+    inc de
+    jr .scan
+.found:
+    push hl
+    ld b, 32
+.zero:
+    ld (hl), 0
+    inc hl
+    djnz .zero
+    pop hl                     ; HL = entry base
+    ld a, (cur_user)
+    ld (hl), a
+    inc hl                     ; HL = &entry[1]
+    push ix
+    pop de
+    inc de                     ; DE = &fcb[1]
+    ex de, hl                  ; HL = &fcb[1], DE = &entry[1]
+    ld b, 11
+.copy:
+    ld a, (hl)
+    and 0x7F
+    ld (de), a
+    inc hl
+    inc de
+    djnz .copy                 ; DE = &entry[12]
+    ld a, (ix + 12)
+    ld (de), a                 ; entry.EX = FCB.EX
+    call write_dir_entry
+
+    ; The new extent starts with no records and no allocated blocks.
+    xor a
+    ld (ix + 13), a            ; S1
+    ld (ix + 14), a            ; S2
+    ld (ix + 15), a            ; RC
+    push ix
+    pop hl
+    ld de, 16
+    add hl, de
+    ld b, 16
+.clear:
+    ld (hl), 0
+    inc hl
+    djnz .clear
+    pop ix
+    xor a                      ; CF=0
+    ret
+.full:
+    pop ix
+    scf
+    ret
+
+
 ; F34: Write Random
 ;   In:  DE = FCB (R0/R1/R2 set)
 ;   Out: A = 0 (OK), 5 (directory full), 6 (out of range)
@@ -3033,10 +3194,30 @@ bf_f34:
     or a
     jp nz, .wrrand_err
 
-    ; EX and CR are now set. Find/create the correct extent,
-    ; then use the write-sequential core logic.
-    ; We re-enter bf_f21 at its public entry with IX already set.
+    ; Look up the target extent; create it when the random record lies
+    ; beyond the current end of file.  Without this the write below would
+    ; use the current FCB's allocation map and corrupt an earlier extent.
+    call select_fcb_drive
+    jp c, .wrrand_range
+    call find_fcb_extent
+    jr z, .wrrand_write
+    call create_fcb_extent
+    jp c, .wrrand_full
+
+.wrrand_write:
     jp bf_f21_core
+
+.wrrand_full:
+    ld a, 5                    ; directory full
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+
+.wrrand_range:
+    ld a, 6                    ; random record out of range
+    ld l, a
+    ld h, 0
+    jp bdos_ret
 
 .wrrand_err:
     ld l, a
@@ -3235,8 +3416,9 @@ bf_f36:
 
 
 ; F40: Write Random with Zero Fill
-;   Same as F34 but should fill unwritten blocks with zeros.
-;   For now, identical to F34 (no pre-fill).
+;   Same as F34, but the intervening records of a newly created extent
+;   should be zero-filled.  The extent lookup/creation is shared with F34;
+;   zero-fill is still sparse (documented P2 follow-up).
 ; @proc bf_f40
 ; @param %fcb:u16   de
 ; @param %func:u8   c
@@ -3251,7 +3433,24 @@ bf_f40:
     call rand_to_seq
     or a
     jp nz, .wrrand0_err
+    call select_fcb_drive
+    jp c, .wrrand0_range
+    call find_fcb_extent
+    jr z, .wrrand0_write
+    call create_fcb_extent
+    jp c, .wrrand0_full
+.wrrand0_write:
     jp bf_f21_core
+.wrrand0_full:
+    ld a, 5                    ; directory full
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+.wrrand0_range:
+    ld a, 6                    ; random record out of range
+    ld l, a
+    ld h, 0
+    jp bdos_ret
 .wrrand0_err:
     ld l, a
     ld h, 0

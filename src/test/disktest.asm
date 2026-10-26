@@ -690,6 +690,32 @@ test11:
     or a
     jp nz, .t11_fail
 
+    ; --- Write record 200 with 'C' (second extent, EX=1 CR=72) ---
+    ld hl, DMA
+    ld b, 128
+.t11_fc:
+    ld (hl), 'C'
+    inc hl
+    djnz .t11_fc
+
+    ld de, DMA
+    ld c, 26
+    call BDOS
+
+    ; R = 200 = EX 1, CR 72.  This must create the EX=1 extent; the old
+    ; code wrote into the EX=0 allocation map and lost the record.
+    ld a, 200
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+
+    ld de, FCB1
+    ld c, 34                ; F34: Write Random
+    call BDOS
+    or a
+    jp nz, .t11_fail
+
     ; Close
     ld de, FCB1
     ld c, 16
@@ -767,6 +793,37 @@ test11:
 
     ld a, (DMA)
     cp 'B'
+    jp nz, .t11_fail
+
+    ; Clear DMA and read record 200: expect 'C'
+    ld hl, DMA
+    ld b, 128
+.t11_clr3:
+    ld (hl), 0
+    inc hl
+    djnz .t11_clr3
+
+    ld de, DMA
+    ld c, 26
+    call BDOS
+
+    ld a, 200
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+
+    ld de, FCB1
+    ld c, 33                ; F33: Read Random
+    call BDOS
+    or a
+    jp nz, .t11_fail
+
+    ld a, (DMA)
+    cp 'C'
+    jp nz, .t11_fail
+    ld a, (DMA + 127)
+    cp 'C'
     jp nz, .t11_fail
 
     ld de, msg_pass
