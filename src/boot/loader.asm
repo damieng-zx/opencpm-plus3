@@ -336,6 +336,8 @@ fdc_read_common:
 .byte:
     in a, (c)
     jp p, .byte
+    bit 5, a                   ; EXM = 0 → command left execution phase
+    jr z, .read_done
     ld b, high PORT_FDC_DT
     in a, (c)
     ld (hl), a
@@ -346,6 +348,7 @@ fdc_read_common:
     dec d
     jr nz, .page
 
+.read_done:
     ; Read 7 result bytes — save ST0/ST1 before fdc_recv clobbers BC
     call fdc_recv              ; ST0
     push af

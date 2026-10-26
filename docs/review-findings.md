@@ -97,9 +97,11 @@ Status: `[ ]` open, `[x]` fixed.
   (`ccp_fcb`, asserted at 0xFB91), above `COMMON_BASE`.
   Files: `src/ccp/miniccp.zpa`, `src/bios/common.zpa`.
 
-- [ ] **15. FDC has no timeouts and ignores EXM in the 512-byte transfer
-  loops.**  A missing drive or aborted command can hang the machine.
-  File: `src/bios/fdc765.zpa`.
+- [x] **15. FDC has no timeouts and ignores EXM in the 512-byte transfer
+  loops.**  `fdc_send_byte`/`fdc_read_byte` have bounded RQM polls,
+  `fdc_wait_seek` has a 0x2000-poll timeout, and both transfer loops break
+  on EXM=0.  The loader's transfer loop also checks EXM.
+  Files: `src/bios/fdc765.zpa`, `src/boot/loader.asm`.
 
 - [ ] **16. ISR motor-off does not clear the spin-up flag.**
   `fdc_motor_on` stays 1, so the next `motor_on` skips spin-up.

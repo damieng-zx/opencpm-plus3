@@ -87,7 +87,6 @@ iobyte:     db 0               ; IOBYTE (F7/F8)
 login_vec:  dw 0               ; Login vector (bit N = drive N logged in)
 ro_vec:     dw 0               ; Read-only vector
 error_mode: db 0               ; F45: BDOS error mode
-return_code: dw 0              ; F108: program return code
 con_mode:   dw 0x0003          ; F109: console mode word (default: PAGE + DISPLAY on)
                                ; bit 0 = PAGE    (SETDEF [PAGE]/[NOPAGE])
                                ; bit 1 = DISPLAY (SETDEF [DISPLAY]/[NO DISPLAY])
@@ -241,15 +240,15 @@ bdos_entry:
     cp 106
     jp z, bdos_eok
     cp 107
-    jp z, bf_f107
+    jp z, bdos_eok
     cp 108
-    jp z, bf_f108
+    jp z, bdos_eok
     cp 109
     jp z, bf_f109
     cp 110
     jp z, bdos_eok
     cp 111
-    jp z, bf_f111
+    jp z, bdos_eok
     cp 112
     jp z, bdos_eok
     cp 120
@@ -4120,74 +4119,6 @@ div_hl_60:
     ret
 
 
-; F107: Get Serial Number
-;   Out: 6 bytes "CPM31\0" written to DMA
-;        A = 0
-;   Clobbers: AF, BC, DE, HL
-; @proc bf_f107
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f107:
-    pop de
-    pop bc
-    ld de, (bdos_dma)
-    ld a, 'C'
-    call write_user_byte(a, de) preserving %func
-    inc de
-    ld a, 'P'
-    call write_user_byte(a, de) preserving %func
-    inc de
-    ld a, 'M'
-    call write_user_byte(a, de) preserving %func
-    inc de
-    ld a, '3'
-    call write_user_byte(a, de) preserving %func
-    inc de
-    ld a, '1'
-    call write_user_byte(a, de) preserving %func
-    inc de
-    xor a
-    call write_user_byte(a, de) preserving %func
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-
-
-; F108: Get/Set Program Return Code
-;   In: DE = 0xFFFF to get, else sets return_code = DE
-;   Out: HL = return_code (get) or A = 0 (set)
-;   Clobbers: AF, BC, DE, HL
-; @proc bf_f108
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f108:
-    pop de
-    pop bc
-    ld a, d
-    and e
-    cp 0xFF                    ; DE == 0xFFFF?
-    jr nz, .rc_set
-    ; Get: return current return_code in HL
-    ld hl, (return_code)
-    ld a, l
-    jp bdos_ret
-.rc_set:
-    ld (return_code), de
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-
-
 ; F109: Get/Set Console Mode
 ;   In: DE = 0xFFFF to get, else sets con_mode = DE
 ;   Out: HL = con_mode (get) or A = 0 (set)
@@ -4211,70 +4142,6 @@ bf_f109:
     jp bdos_ret
 .cm_set:
     ld (con_mode), de
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-
-
-; F111: Print Block to Console
-;   In: DE = pointer to CCB in TPA: [addr_lo, addr_hi, len_lo, len_hi]
-;   Out: A = 0
-;   Clobbers: AF, BC, DE, HL
-; @proc bf_f111
-; @param %ccb:u16   de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f111:
-    pop de
-    pop bc
-    ; Read CCB from TPA: [addr_lo, addr_hi, len_lo, len_hi]
-    push de
-    call read_user_byte(de) preserving %func    ; A = addr_lo
-    ld c, a
-    pop de
-    inc de
-    push de
-    push bc                    ; lint: ignore — save C (addr_lo), B is don't-care
-    call read_user_byte(de) preserving %func    ; A = addr_hi
-    pop bc
-    ld b, a                    ; BC = text address in TPA
-    pop de
-    inc de
-    push de
-    push bc                    ; Save BC (TPA addr) — read_user_byte clobbers BC
-    call read_user_byte(de) preserving %func    ; A = len_lo
-    pop bc
-    ld l, a
-    pop de
-    inc de
-    push de
-    push bc
-    call read_user_byte(de) preserving %func    ; A = len_hi
-    pop bc
-    ld h, a                    ; HL = length
-    pop de
-    ; BC = TPA address of text, HL = length
-.pb_loop:
-    ld a, h
-    or l
-    jr z, .pb_done
-    push hl                    ; Save remaining length
-    push bc                    ; Save TPA pointer
-    ld d, b
-    ld e, c                    ; DE = current TPA address
-    call read_user_byte(de) preserving %func    ; A = char from TPA
-    ld c, a
-    call bdos_con_out          ; Output character (with paging if enabled)
-    pop bc
-    inc bc                     ; Next TPA address
-    pop hl
-    dec hl                     ; Length--
-    jr .pb_loop
-.pb_done:
     xor a
     ld l, a
     ld h, a

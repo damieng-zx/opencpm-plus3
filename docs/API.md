@@ -316,23 +316,19 @@ Programs should close any open files before exiting (BDOS F16).
 - **Out**: A=seconds, HL=day counter
 
 #### F107 — Get Serial Number
-- **Out**: DMA gets 6 bytes: `"CPM31\0"`
+- **Out**: A=0, HL=0 (stub — serial string is not written; deferred)
 
 #### F108 — Get/Set Program Return Code
-- **In**: DE=0xFFFF → get; DE=value → set
-- **Out**: HL=current return code (when getting)
+- **Out**: A=0, HL=0 (stub — return code is not stored; deferred)
 
 #### F109 — Get/Set Console Mode
 - **In**: DE=0xFFFF → get; DE=value → set
 
 #### F110 — Get/Set Output Delimiter
-- **In**: E=0xFF → get; E=char → set
-- **Note**: Default delimiter is '$' (0x24).
+- **Note**: Stub — returns 0; F9 always terminates on '$'.
 
 #### F111 — Print Block to Console
-- **In**: DE=CCB address
-- **CCB format**: `[addr_lo, addr_hi, len_lo, len_hi]`
-- **Note**: Outputs `length` characters from `addr` to console.
+- **Note**: Stub — returns 0; the block is not printed.
 
 ---
 

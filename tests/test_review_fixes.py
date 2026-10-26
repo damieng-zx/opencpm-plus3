@@ -271,5 +271,26 @@ class Issue14ComFcb(unittest.TestCase):
         self.assertIn("ccp_fcb == 0xFB91", text)
 
 
+class Issue15FdcTimeouts(unittest.TestCase):
+    """FDC polling must be bounded and the transfer loops must honour EXM."""
+
+    def test_transfer_loops_check_exm(self):
+        text = source("src/bios/fdc765.zpa")
+        read = text[text.index("fdc_read_sector:"):text.index("fdc_write_sector:")]
+        write = text[text.index("fdc_write_sector:"):text.index("fdc_send_byte:")]
+        for body in (read, write):
+            self.assertIn("bit 5, a", body)
+            self.assertIn("fdc_poll", body)
+
+    def test_command_and_seek_polls_have_timeouts(self):
+        text = source("src/bios/fdc765.zpa")
+        self.assertGreaterEqual(text.count("(fdc_poll), a"), 2)
+        self.assertIn("fdc_seek_timeout", text)
+        self.assertIn("0x2000", text)
+
+    def test_loader_checks_exm(self):
+        self.assertIn("bit 5, a", source("src/boot/loader.asm"))
+
+
 if __name__ == "__main__":
     unittest.main()
