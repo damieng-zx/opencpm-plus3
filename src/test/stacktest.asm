@@ -1,5 +1,5 @@
 ; ==========================================================================
-; STACKTEST.COM — regression test for the TPA stack top / bv_shim path
+; STKTEST.COM — regression test for the TPA stack top / bv_shim path
 ; ==========================================================================
 ; Checks:
 ;   1. The initial SP is TPA_TOP (0xF600), not the BDOS entry (bdos_stub).
@@ -7,7 +7,7 @@
 ;   3. A deep TPA stack does not overwrite the common stub.
 ; Prints "STACK OK" or "STACK BAD".
 ;
-; Build: sjasmplus --raw=build/stacktest.com src/test/stacktest.asm
+; Build: sjasmplus --raw=build/stktest.com src/test/stacktest.asm
 ; ==========================================================================
 
     org 0x0100

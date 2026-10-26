@@ -114,7 +114,7 @@ drive.
 Run:
 
 ```text
-type "STACKTEST`enter`"
+type "STKTEST`enter`"
 run 2000
 ```
 
