@@ -166,6 +166,8 @@ xdpb_std_table:
 ; (DirBlocks=2, DRM=127, AL0=C0h, CKS=32). fdc_login overlays
 ; AL0/AL1/DRM/CKS from the disc's own boot-sector byte 7 (DirBlocks), so
 ; these values are only a fallback for when the boot sector can't be read.
+; NOTE: DSM=351 needs 16-bit block numbers; the BDOS currently rejects
+; file I/O on this format (detection/SHOWXDPB only).
     dw 36
     db 4, 15, 0
     dw 351, 127

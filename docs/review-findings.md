@@ -57,9 +57,11 @@ Status: `[ ]` open, `[x]` fixed.
   covers F28 with F45 in return mode.
   File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
-- [ ] **8. `build_alv` size uses the low byte of DSM; block numbers are
-  8-bit.**  DSM > 255 (PCW 720K, type 3) gets a 12-byte ALV instead of 44
-  and 16-bit directory block pointers are misread.
+- [x] **8. `build_alv` size uses the low byte of DSM; block numbers are
+  8-bit.**  The ALV size is now computed in 16 bits (44 bytes for DSM=351).
+  Full 16-bit block I/O is not implemented yet, so `select_fcb_drive`
+  rejects DSM>255 with CF=1 and the ALV marks all blocks used; the drive is
+  detection/SHOWXDPB-only.  README no longer claims 720K file I/O.
   Files: `src/bdos/bdos.zpa`, `src/bios/fdc765.zpa`, `README.md`.
 
 - [ ] **9. BIOS MOVE (fn 25) is reversed** relative to

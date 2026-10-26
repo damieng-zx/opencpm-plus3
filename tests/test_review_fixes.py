@@ -165,5 +165,26 @@ class Issue07WriteProtect(unittest.TestCase):
         self.assertIn("T15 R/O protect+F45", source("src/test/disktest.asm"))
 
 
+class Issue08AlvSize(unittest.TestCase):
+    """DSM > 255 must not be handled with 8-bit arithmetic."""
+
+    def test_alv_size_uses_16bit_dsm(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("build_alv:"):text.index(".mark_dir:")]
+        self.assertIn("srl h", body)
+        self.assertIn("rr l", body)
+        self.assertIn("(cached_dsm + 1)", body)
+
+    def test_16bit_drive_is_rejected(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("select_fcb_drive:"):text.index("; @proc drive_ro_status")]
+        self.assertIn("(cached_dsm + 1)", body)
+        self.assertIn("scf", body)
+
+    def test_readme_qualifies_pcw(self):
+        text = source("README.md")
+        self.assertIn("16-bit block file I/O is not implemented", text)
+
+
 if __name__ == "__main__":
     unittest.main()

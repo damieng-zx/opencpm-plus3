@@ -92,7 +92,6 @@ con_mode:   dw 0x0003          ; F109: console mode word (default: PAGE + DISPLA
                                ; bit 0 = PAGE    (SETDEF [PAGE]/[NOPAGE])
                                ; bit 1 = DISPLAY (SETDEF [DISPLAY]/[NO DISPLAY])
 bdos_page_row: db 0            ; LFs output since last pause/input
-out_delim:  db '$'             ; F110: output delimiter (default '$')
 
 ; Private SETDEF state (F120..F123). Not in the SCB — only reachable via
 ; our own BDOS functions. Default: no search path (current drive only),
@@ -248,7 +247,7 @@ bdos_entry:
     cp 109
     jp z, bf_f109
     cp 110
-    jp z, bf_f110
+    jp z, bdos_eok
     cp 111
     jp z, bf_f111
     cp 112
@@ -1231,7 +1230,7 @@ select_drive:
 ; @end
 ; select_fcb_drive — Select the drive named by IX+0 (0 = current drive).
 ;   In:  IX = FCB (fcb_buf)
-;   Out: CF=0 success, CF=1 invalid drive
+;   Out: CF=0 success, CF=1 invalid drive or 16-bit (DSM>255) format
 ;   Clobbers: AF, BC, DE, HL (IX preserved by select_drive)
 select_fcb_drive:
     ld a, (ix + 0)
@@ -1241,7 +1240,16 @@ select_fcb_drive:
     inc a
 .has_drive:
     dec a                      ; A = 0-based drive
-    jp select_drive
+    call select_drive
+    ret c                      ; invalid drive
+    ; DSM > 255 uses 16-bit directory block pointers, which this BDOS
+    ; does not implement yet.  Treat the drive as unusable for file I/O
+    ; instead of misreading the 8-bit allocation map.
+    ld a, (cached_dsm + 1)
+    or a
+    ret z
+    scf
+    ret
 
 
 ; ==========================================================================
@@ -1336,20 +1344,40 @@ build_alv:
     ld a, 0xFF
     ld (last_dir_sec), a
     ld (last_dir_drv), a
-    ; Clear ALV
+    ; Clear ALV.  Size = (DSM >> 3) + 1, computed in 16 bits so DSM>255
+    ; (PCW 720K, DSM=351) gets 44 bytes instead of the low byte's 12.
+    ld hl, (cached_dsm)
+    srl h
+    rr l
+    srl h
+    rr l
+    srl h
+    rr l
+    inc hl
+    ld b, l
     ld hl, (cached_alv)
-    ld a, (cached_dsm)
-    srl a
-    srl a
-    srl a
-    inc a                      ; Bytes needed: (DSM/8)+1
-    ld b, a
+    ld a, (cached_dsm + 1)
+    or a
+    jr nz, .all_used
     xor a
 .clr:
     ld (hl), a
     inc hl
     djnz .clr
+    jr .mark_dir
 
+.all_used:
+    ; 16-bit block pointers are not implemented yet.  Mark every block
+    ; used so the BDOS cannot allocate over existing data; file I/O on
+    ; this drive is rejected by select_fcb_drive.
+    ld a, 0xFF
+.clr_used:
+    ld (hl), a
+    inc hl
+    djnz .clr_used
+    ret
+
+.mark_dir:
     ; Mark directory blocks as used (AL0/AL1 from DPB)
     ld hl, (cached_dpb)
     ld de, 9                   ; Offset to AL0
@@ -4275,37 +4303,6 @@ bf_f109:
     jp bdos_ret
 .cm_set:
     ld (con_mode), de
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
-
-
-; F110: Get/Set Output Delimiter
-;   In: E = 0xFF to get, else sets out_delim = E
-;   Out: A = delimiter (get) or A = 0 (set)
-;   Clobbers: AF, BC, DE, HL
-; @proc bf_f110
-; @param %param:u16 de
-; @param %func:u8   c
-; @out   a
-; @out   hl
-; @clobbers af,bc,de,hl
-; @end
-bf_f110:
-    pop de
-    pop bc
-    ld a, e
-    cp 0xFF
-    jr nz, .dl_set
-    ; Get current delimiter
-    ld a, (out_delim)
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-.dl_set:
-    ld a, e
-    ld (out_delim), a
     xor a
     ld l, a
     ld h, a

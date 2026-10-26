@@ -26,7 +26,8 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 - Ed
 - Pip
 - B: drive
-- Custom formats (CPC + XDPB formats like PCW 720K)
+- Custom formats (CPC + XDPB formats; PCW 720K is detected and shown by
+  SHOWXDPB, but 16-bit block file I/O is not implemented)
 - Various other simple CP/M tools
 
 ### Tools
