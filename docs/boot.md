@@ -148,9 +148,10 @@ bank 4 when the user calls BDOS or BIOS.
 | `F600-F5FF`*  | (bank 3, always visible) — common stub starts at F600.  |
 | `F600-FFFF` | SCB, bios_visible jump table, **bdos_stub**, BDOS stack, FCB buf, dirbuf, drive table, XDPHs/XDPBs. |
 
-`bdos_stub`'s address is the published top-of-TPA. Anything mutable placed
-*before* it gets overwritten by the TPA stack growing down. There's a static
-assert on this in `common.zpa:167`.
+`TPA_TOP = 0xF600` (`COMMON_BASE`) is the published top-of-TPA and the
+initial SP. The stack grows down from F600 into the TPA, so everything in
+common memory (F600 and above) is safe. `bdos_stub` is the BDOS entry, not
+the TPA top; `scb_tpa` is patched to `TPA_TOP`.
 
 ### Mode 3 (System — BDOS/BIOS bank)
 
@@ -167,8 +168,8 @@ assert on this in `common.zpa:167`.
 ## 4. Common memory layout (bank 3, `F600-FFFF`)
 
 This is the most fragile region. **Order matters.** The TPA stack grows down
-from `bdos_stub`, so anything writable above `bdos_stub` corrupts on the first
-deep call from a user program. Source: `src/bios/common.zpa`.
+from `TPA_TOP` (F600) into the TPA, so the common stub must start at F600 and
+must not place anything below it. Source: `src/bios/common.zpa`.
 
 ```
 F600  scb_base            ┐
@@ -188,10 +189,10 @@ F664  ───────────────────┘
       bv_tramp (84 B)        Trampoline — 28 × `call bv_shim`.
       bv_shim                Recovers fn# from return addr → bios_call_bank4.
       ────────────────────
-      bdos_stub  ◄═══════════ TOP OF TPA. JP from 0x0005 lands here.
-      ────────────────────    Anything below this label is "safe zone";
-                              anything above (towards F600) is read-only
-                              in practice (TPA stack grows down from here).
+      bdos_stub  ◄═══════════ BDOS entry (JP from 0x0005 lands here).
+      ────────────────────    TPA_TOP = F600 is above the SCB; the TPA stack
+                              grows DOWN from F600, so every label in this
+                              diagram is outside the stack's path.
       saved_sp, motor_flag, motor_countdown, fdc_busy, last_1ffd,
       isr_tick, isr_frac, isr_installed
       bios_call_bank4 + trampoline stack (_bc4_stack)

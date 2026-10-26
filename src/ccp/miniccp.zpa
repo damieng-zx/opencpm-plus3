@@ -18,6 +18,7 @@
 BDOS    equ 0x0005             ; BDOS entry point
 FCB1    equ 0x005C             ; Default FCB 1
 DMA     equ 0x0080             ; Default DMA / command tail
+TPA_TOP equ 0xF600             ; First byte of common memory — initial stack top
 
 ; BDOS function numbers
 F_COUT  equ 2                  ; Console output (E = char)
@@ -1095,8 +1096,10 @@ parse_cmd:
     ld hl, (.stub_fcb_addr)
     ld (0x0008 + .stub_fcb_ref - .stub_src + 1), hl
 
-    ; Set SP to top of TPA so the stack is above the loaded file
-    ld sp, (0x0006)            ; BDOS entry address = top of TPA
+    ; Set SP to the top of the TPA (COMMON_BASE, not bdos_stub — the
+    ; common SCB and visible BIOS table live above F600 and must not be
+    ; overwritten by the program's stack).
+    ld sp, TPA_TOP
     jp 0x0008
 
 .stub_fcb_addr: dw 0          ; Patched FCB address in high TPA

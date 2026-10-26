@@ -47,6 +47,7 @@ MOTOR_BIT   equ 0x08              ; OR this in for motor on
 CCP_ADDR    equ 0x0100            ; CCP loads here in TPA
 JMP_OPCODE  equ 0xC3              ; JP instruction
 COMMON_BASE equ 0xF600            ; Start of bank-3 common memory
+TPA_TOP     equ COMMON_BASE       ; First byte of common memory = top of TPA
 RAMDISK_MSG equ 0x93E0            ; Status string embedded in RAMDISK.FID
 
 
@@ -207,8 +208,8 @@ cold_boot:
     ; Patch SCB dynamic fields
     ld hl, scb_base
     ld (scb_common), hl            ; SCB[0x3A] = common memory base
-    ld hl, bdos_stub
-    ld (scb_tpa), hl               ; SCB[0x62] = top of TPA
+    ld hl, TPA_TOP
+    ld (scb_tpa), hl               ; SCB[0x62] = top of TPA (not bdos_stub)
 
     ; Fall through to warm boot (loads CCP and starts it)
 
@@ -658,7 +659,7 @@ print_str:
 
 BUILD_NUM equ 189
 
-TPA_KB equ (bdos_stub - 0x0100) / 1024
+TPA_KB equ (TPA_TOP - 0x0100) / 1024
 
 signon_msg:
     db 0x0D, 0x0A

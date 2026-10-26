@@ -26,22 +26,23 @@ This document covers the BDOS, BIOS, terminal, and program conventions for writi
 0000h  JP warm_boot          ; WBOOT vector
 0001h  dw bios_base          ; BIOS jump table address - 3
 0005h  JP bdos               ; BDOS entry point
-0006h  dw top_of_tpa         ; high byte = top of usable RAM
-0038h  EI / RETI             ; IM 1 interrupt vector
+0006h  dw bdos_entry         ; BDOS jump target (NOT the TPA top)
+0038h  EI / RETI             ; IM 1 interrupt vector (tick ISR)
 005Ch  FCB1 (36 bytes)       ; first filename argument
 006Ch  FCB2 (36 bytes)       ; second filename argument (overlaps FCB1 AL)
 0080h  db cmd_tail_len       ; command tail length
 0081h  ds 127                ; command tail text (default DMA buffer)
 0100h  ...program code...    ; entry point
        ...
-F600h  common memory starts  ; system stubs, not usable by programs
+F600h  common memory starts  ; SCB/BIOS stubs, not usable by programs
 ```
 
 ### Entry Conditions
 
 When a .COM program starts executing at 0100h:
 
-- **SP** = address of 0006h (top of TPA, use as initial stack)
+- **SP** = 0xF600 (`TPA_TOP` = first byte of common memory). The stack grows
+  down into the TPA; do not use the word at 0006h (that is the BDOS entry).
 - **C** = current default drive (0=A)
 - **Z80 interrupts**: Enabled, IM 1
 - **Page zero**: WBOOT at 0000h, BDOS at 0005h
@@ -60,7 +61,8 @@ Programs should close any open files before exiting (BDOS F16).
 
 ### TPA Size
 
-~61K available (0100h to ~F600h). The exact top is in the word at 0006h.
+~61K available (0100h to F5FFh). The top of the TPA is fixed at 0xF600
+(the first byte of common memory); the word at 0006h is the BDOS entry.
 
 ---
 
@@ -857,7 +859,7 @@ div_hl_c:
 ```
 BDOS Entry:     CALL 5 (C=function, DE=param, returns A/HL)
 Warm Boot:      JP 0
-BDOS Address:   word at 0006h (also = top of TPA address)
+BDOS Address:   word at 0006h (BDOS jump target); TPA top = 0xF600
 
 Console:
   F1  = read char (echo)     F2  = write char

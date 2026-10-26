@@ -7,7 +7,7 @@ Status: `[ ]` open, `[x]` fixed.
 
 ## P0 — Critical
 
-- [ ] **1. TPA stack top is above `COMMON_BASE`.**
+- [x] **1. TPA stack top is above `COMMON_BASE`.**
   The CCP loader sets `SP = word at 0006h` (`bdos_stub`, F723) and
   `scb_tpa` is patched to `bdos_stub`.  The stack therefore grows down
   through `bv_shim` (F71B–F722), `bv_tramp`, `bios_visible`, and the SCB

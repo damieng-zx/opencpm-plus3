@@ -97,6 +97,20 @@ already exercises `load_fid` on every build. Watch for `A>` to appear —
 if the boot hangs after `Open CP/M +3`, suspect a FID/layout regression
 in page-zero setup, the BDOS stack, or the bank-4 system image.
 
+### Stack / visible-BIOS regression
+
+Run:
+
+```text
+type "STACKTEST`enter`"
+run 2000
+```
+
+Require `STACK OK` in `char_buffer`.  This checks that the initial SP is
+`0xF600` (`TPA_TOP`), that a direct BIOS call through `bios_visible` works
+after BDOS calls, and that a 1K-deep TPA stack does not touch the SCB or the
+visible BIOS table.
+
 ### 1. Boot and initial directory
 
 At the CCP prompt, run:
