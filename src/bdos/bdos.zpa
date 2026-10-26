@@ -2269,10 +2269,13 @@ bf_f20:
     ld c, a                    ; Save CR
     ld a, (cached_bsh)
     ld b, a
+    or a
     ld a, c
+    jr z, .shr_cr_done
 .shr_cr:
     srl a
     djnz .shr_cr               ; A = CR >> BSH = block index in extent
+.shr_cr_done:
 
     ; Get block number from allocation map (FCB bytes 16-31)
     ld e, a
@@ -2302,9 +2305,12 @@ bf_f20:
     ld h, 0                    ; HL = block number
     ld a, (cached_bsh)
     ld b, a
+    or a
+    jr z, .shl_blk_done
 .shl_blk:
     add hl, hl
     djnz .shl_blk              ; HL = block << BSH = block * records_per_block
+.shl_blk_done:
     ld b, 0
     add hl, bc                 ; HL = absolute record in data area
 
@@ -2486,10 +2492,13 @@ bf_f21_core:
     ld c, a
     ld a, (cached_bsh)
     ld b, a
+    or a
     ld a, c
+    jr z, .wseq_shr_done
 .wseq_shr:
     srl a
     djnz .wseq_shr             ; A = CR >> BSH = block_index in alloc map
+.wseq_shr_done:
 
     ; Get block number from FCB: FCB[16 + block_index]
     ld e, a
@@ -2519,9 +2528,12 @@ bf_f21_core:
     ld h, 0
     ld a, (cached_bsh)
     ld b, a
+    or a
+    jr z, .wseq_shl_done
 .wseq_shl:
     add hl, hl
     djnz .wseq_shl             ; HL = block << BSH
+.wseq_shl_done:
     ld b, 0
     add hl, bc                 ; HL = absolute record in data area
 
@@ -3053,10 +3065,13 @@ bf_f33:
     ld c, a
     ld a, (cached_bsh)
     ld b, a
+    or a
     ld a, c
+    jr z, .rdrand_shr_done
 .rdrand_shr:
     srl a
     djnz .rdrand_shr
+.rdrand_shr_done:
     ld e, a
     ld d, 0
     push ix
@@ -3079,9 +3094,12 @@ bf_f33:
     ld h, 0
     ld a, (cached_bsh)
     ld b, a
+    or a
+    jr z, .rdrand_shl_done
 .rdrand_shl:
     add hl, hl
     djnz .rdrand_shl
+.rdrand_shl_done:
     ld b, 0
     add hl, bc
 

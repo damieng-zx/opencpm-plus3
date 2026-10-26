@@ -348,5 +348,22 @@ class Issue19F30User(unittest.TestCase):
         self.assertIn("T17 F30 user area", source("src/test/disktest.asm"))
 
 
+class Issue20BshZero(unittest.TestCase):
+    """BSH=0 must not shift 256 times, and no IXH/IXL opcodes."""
+
+    def test_every_bsh_shift_is_zero_safe(self):
+        text = source("src/bdos/bdos.zpa")
+        occurrences = list(re.finditer(r"ld a, \(cached_bsh\)\n((?:.*\n){0,4})", text))
+        self.assertGreaterEqual(len(occurrences), 6)
+        for m in occurrences:
+            self.assertRegex(m.group(1), r"\bor a\b")
+            self.assertRegex(m.group(1), r"\bjr z\b")
+
+    def test_no_undocumented_ixh_ixl(self):
+        text = source("src/bdos/bdos.zpa")
+        self.assertNotIn("ixh", text.lower())
+        self.assertNotIn("ixl", text.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

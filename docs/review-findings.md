@@ -123,7 +123,9 @@ Status: `[ ]` open, `[x]` fixed.
   user 1 is current.
   File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
-- [ ] **20. BSH=0 hangs F20/F21; F46 uses undocumented IXH/IXL.**
+- [x] **20. BSH=0 hangs F20/F21; F46 uses undocumented IXH/IXL.**
+  All six `CR >> BSH` / `block << BSH` loops now skip the loop when BSH=0;
+  the F46 IXH/IXL body was replaced by a stub earlier.
   File: `src/bdos/bdos.zpa`.
 
 ## P2 — Later candidates
