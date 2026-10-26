@@ -82,9 +82,11 @@ Status: `[ ]` open, `[x]` fixed.
   just A:).
   File: `src/ccp/miniccp.zpa`.
 
-- [ ] **12. RTC only ticks in system mode.**  TPA 0038h is `EI; RETI`, so
-  the clock and keyboard repeat stall during TPA execution.
-  Files: `src/bios/common.zpa`, `src/bios/keyboard.zpa`.
+- [x] **12. RTC only ticks in system mode.**  TPA 0038h was `EI; RETI`, so
+  the clock and keyboard repeat stalled during TPA execution.  `start_tpa`
+  now installs `JP isr_handler` (common memory); STACKTEST polls SCB
+  seconds without making BDOS calls and requires CLOCK OK.
+  Files: `src/bios/common.zpa`, `src/test/stacktest.asm`, docs.
 
 - [ ] **13. `echo_sub_line` never runs.**  `xor a` before `call nz`
   makes the SETDEF DISPLAY path dead.

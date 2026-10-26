@@ -509,16 +509,14 @@ start_tpa:
     ld hl, bdos_stub
     ld (0x0006), hl
 
-    ; Install minimal ISR at bank 0's 0x0038 for TPA-mode interrupts.
-    ; Just EI+RETI (no tick counting). Programs like Mallard BASIC
-    ; overwrite this with their own RST 0x38 handler. The full ISR
-    ; with tick counting is at bank 4's 0x0038 for system-mode use.
-    ld a, 0xFB                     ; EI opcode
+    ; Install the common tick/motor ISR at bank 0's 0x0038.  It lives in
+    ; common memory (visible in TPA mode), so the clock and keyboard repeat
+    ; keep running while a TPA program executes.  Programs that need their
+    ; own RST 38 handler can overwrite these three bytes.
+    ld a, JMP_OPCODE
     ld (0x0038), a
-    ld a, 0xED                     ; RETI prefix
-    ld (0x0039), a
-    ld a, 0x4D                     ; RETI suffix
-    ld (0x003A), a
+    ld hl, isr_handler
+    ld (0x0039), hl
 
     ; Enable interrupts and start CCP
     im 1
@@ -816,8 +814,8 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF9CB, "RAMDISK.FID expects copy_record_to_tpa at 0xF9CB"
-    assert copy_record_from_tpa == 0xF9D1, "RAMDISK.FID expects copy_record_from_tpa at 0xF9D1"
+    assert copy_record_to_tpa == 0xF9C7, "RAMDISK.FID expects copy_record_to_tpa at 0xF9C7"
+    assert copy_record_from_tpa == 0xF9CD, "RAMDISK.FID expects copy_record_from_tpa at 0xF9CD"
 
 
 ; ------------------------------------------------------------------

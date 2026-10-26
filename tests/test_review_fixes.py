@@ -233,5 +233,20 @@ class Issue11SubDma(unittest.TestCase):
         self.assertIn("ld (sub_fcb), a", body)
 
 
+class Issue12TpaClock(unittest.TestCase):
+    """The tick ISR must run in TPA mode so the clock does not freeze."""
+
+    def test_start_tpa_installs_real_isr(self):
+        text = source("src/bios/common.zpa")
+        body = text[text.index("start_tpa:"):text.index("bank_sel:")]
+        self.assertIn("ld hl, isr_handler", body)
+        self.assertIn("(0x0038)", body)
+        self.assertNotIn("0xFB", body)
+
+    def test_stacktest_checks_clock(self):
+        self.assertIn("CLOCK OK", source("src/test/stacktest.asm"))
+        self.assertIn("(0xF63A)", source("src/test/stacktest.asm"))
+
+
 if __name__ == "__main__":
     unittest.main()

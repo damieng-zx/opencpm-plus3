@@ -27,7 +27,7 @@ This document covers the BDOS, BIOS, terminal, and program conventions for writi
 0001h  dw bios_base          ; BIOS jump table address - 3
 0005h  JP bdos               ; BDOS entry point
 0006h  dw bdos_entry         ; BDOS jump target (NOT the TPA top)
-0038h  EI / RETI             ; IM 1 interrupt vector (tick ISR)
+0038h  JP isr_handler        ; IM 1 vector: common tick/motor ISR
 005Ch  FCB1 (36 bytes)       ; first filename argument
 006Ch  FCB2 (36 bytes)       ; second filename argument (overlaps FCB1 AL)
 0080h  db cmd_tail_len       ; command tail length

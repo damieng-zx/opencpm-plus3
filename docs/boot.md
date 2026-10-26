@@ -125,7 +125,7 @@ Runs in common memory because it switches *out* of bank 4.
 1FFD ←── motor_flag | BANK0_1FFD     ; mode 0 (TPA banks)
 0000: JP bios_visible+3              ; WBOOT vector — programs read 0001
 0005: JP bdos_stub                   ; BDOS vector — programs read 0006
-0038: EI; RETI                       ; minimal ISR for TPA (Mallard overwrites this)
+0038: JP isr_handler                ; common tick/motor ISR (Mallard may override)
 im 1; ei
 jp 0x0100                            ; CCP entry
 ```
@@ -224,8 +224,8 @@ FFFF  ────────────────────  hard limit (
 
 | Address  | What                          | Why pinned                                                       |
 |----------|-------------------------------|------------------------------------------------------------------|
-| `0xF9CB` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa:796.              |
-| `0xF9D1` | `copy_record_from_tpa`        | Same - assert at common.zpa:797.                                 |
+| `0xF9C7` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa:796.              |
+| `0xF9CD` | `copy_record_from_tpa`        | Same - assert at common.zpa:797.                                 |
 | `bdos_stub` | itself                     | scb_tpa = this address; user stacks set SP to it.                |
 | SCB offsets `0x05, 0x1A, 0x3A, 0x3C, 0x3E, 0x44, 0x58-0x5C, 0x62` | DRI documented | Programs index off scb_base.    |
 

@@ -118,10 +118,11 @@ type "STACKTEST`enter`"
 run 2000
 ```
 
-Require `STACK OK` in `char_buffer`.  This checks that the initial SP is
-`0xF600` (`TPA_TOP`), that a direct BIOS call through `bios_visible` works
-after BDOS calls, and that a 1K-deep TPA stack does not touch the SCB or the
-visible BIOS table.
+Require `STACK OK`, `MOVE OK`, and `CLOCK OK` in `char_buffer`.  This
+checks that the initial SP is `0xF600` (`TPA_TOP`), that a direct BIOS call
+through `bios_visible` works after BDOS calls, that BIOS MOVE passes HL/DE
+correctly, that a 1K-deep TPA stack does not touch the common stub, and that
+the clock ticks in TPA mode without BDOS calls.
 
 ### 1. Boot and initial directory
 

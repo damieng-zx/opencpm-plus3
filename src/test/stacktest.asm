@@ -84,6 +84,32 @@ start:
     ld de, msg_move_bad
 .print_move:
     call print
+
+    ; --- 5. Clock ticks in TPA mode without any BDOS calls --------------
+    ld hl, (0xF63A)               ; SCB base (patched by cold_boot)
+    ld de, 0x5C
+    add hl, de                    ; HL = &scb_sec
+    ld a, (hl)
+    ld c, a                       ; initial seconds
+    ld b, 4                       ; ~2s timeout (4 x 65535 inner loops)
+.clock_outer:
+    ld de, 0xFFFF
+.clock_inner:
+    ld a, (hl)
+    cp c
+    jr nz, .clock_ok
+    dec de
+    ld a, d
+    or e
+    jr nz, .clock_inner
+    dec b
+    jr nz, .clock_outer
+    ld de, msg_clock_bad
+    jr .print_clock
+.clock_ok:
+    ld de, msg_clock_ok
+.print_clock:
+    call print
     jp 0                          ; warm boot
 
 fail:
@@ -148,3 +174,5 @@ msg_ok:       db 0x0D, 0x0A, 'STACK OK', 0x0D, 0x0A, '$'
 msg_bad:      db 0x0D, 0x0A, 'STACK BAD', 0x0D, 0x0A, '$'
 msg_move_ok:  db 0x0D, 0x0A, 'MOVE OK', 0x0D, 0x0A, '$'
 msg_move_bad: db 0x0D, 0x0A, 'MOVE BAD', 0x0D, 0x0A, '$'
+msg_clock_ok: db 0x0D, 0x0A, 'CLOCK OK', 0x0D, 0x0A, '$'
+msg_clock_bad: db 0x0D, 0x0A, 'CLOCK BAD', 0x0D, 0x0A, '$'
