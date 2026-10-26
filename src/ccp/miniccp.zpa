@@ -19,6 +19,7 @@ BDOS    equ 0x0005             ; BDOS entry point
 FCB1    equ 0x005C             ; Default FCB 1
 DMA     equ 0x0080             ; Default DMA / command tail
 TPA_TOP equ 0xF600             ; First byte of common memory — initial stack top
+CCP_FCB_ADDR equ 0xFB91        ; common-memory FCB for the COM loader stub
 
 ; BDOS function numbers
 F_COUT  equ 2                  ; Console output (E = char)
@@ -1072,16 +1073,13 @@ parse_cmd:
     ld (0x0081), a             ; ...with a null at [0x0081] too
 
 .com_tail_ready:
-    ; Copy type_fcb to high TPA where it won't be overwritten by the
-    ; loaded program. Place it just below the SCB base (start of
-    ; common memory). Must NOT use bios_visible-36 which overlaps
-    ; the SCB date/time fields, nor bdos_stub area.
-    ; The BIOS stores scb_common at SCB offset 0x3A. We keep this
-    ; scratch FCB just below common memory so the loaded COM does not
-    ; overwrite it while the page-zero loader stub is still reading.
-    ld hl, 0xF600 - 36         ; Just below SCB base
+    ; Copy type_fcb into the common-memory buffer reserved by the BIOS
+    ; (ccp_fcb, just above COMMON_BASE).  A loaded program cannot reach
+    ; it, unlike the old copy at F5DC which a large .COM overwrote while
+    ; the loader stub was still reading it.
+    ld hl, CCP_FCB_ADDR
     ld (.stub_fcb_addr), hl    ; Save for patching the stub
-    ex de, hl                  ; DE = high TPA FCB address
+    ex de, hl                  ; DE = common FCB address
     ld hl, type_fcb
     ld bc, 36
     ldir

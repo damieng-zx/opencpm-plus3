@@ -92,9 +92,10 @@ Status: `[ ]` open, `[x]` fixed.
   the SETDEF DISPLAY path dead; it now tests `and CON_MODE_DISPLAY`.
   File: `src/ccp/miniccp.zpa`.
 
-- [ ] **14. COM loader FCB sits at F5DC (inside the TPA) and can be
-  overwritten mid-load.**  The comment claims it is in page zero.
-  File: `src/ccp/miniccp.zpa`.
+- [x] **14. COM loader FCB sits at F5DC (inside the TPA) and can be
+  overwritten mid-load.**  The FCB now lives in common memory
+  (`ccp_fcb`, asserted at 0xFB91), above `COMMON_BASE`.
+  Files: `src/ccp/miniccp.zpa`, `src/bios/common.zpa`.
 
 - [ ] **15. FDC has no timeouts and ignores EXM in the 512-byte transfer
   loops.**  A missing drive or aborted command can hang the machine.

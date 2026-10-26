@@ -1039,6 +1039,12 @@ fcb_user_addr:  dw 0               ; TPA address of the user's FCB
 xfer_staging: ds 32
     assert $ - xfer_staging == 32, "xfer_staging must be exactly 32 bytes (copy_to/from_user chunk size)"
 
+; FCB used by the CCP's COM-loader stub.  It must live above COMMON_BASE
+; so a large program cannot overwrite it while the stub is still reading.
+ccp_fcb: ds 36
+    assert $ - ccp_fcb == 36, "ccp_fcb must be exactly 36 bytes (CP/M FCB format)"
+    assert ccp_fcb == 0xFB91, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+
 ; BDOS stack (grows downward from bdos_stack label)
 bdos_stack_base:
 bdos_stack equ bdos_stack_base + 128
