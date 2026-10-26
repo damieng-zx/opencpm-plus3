@@ -108,9 +108,10 @@ Status: `[ ]` open, `[x]` fixed.
   common-memory `motor_running` flag that the ISR clears.
   Files: `src/bios/fdc765.zpa`, `src/bios/common.zpa`.
 
-- [ ] **17. Multi-extent reads fail for files with attribute bits.**
-  F20/F33 mask the directory byte but not the FCB byte.
-  File: `src/bdos/bdos.zpa`.
+- [x] **17. Multi-extent reads fail for files with attribute bits.**
+  F20/F33 now mask the FCB byte with 0x7F as well as the directory byte.
+  DISKTEST T12 re-reads a 136-record file after setting R/O.
+  File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
 - [ ] **18. `scb_write_field` syncs unrelated BDOS state from stale SCB
   fields.**  Writing tempdrv can reset the current drive/user/DMA.

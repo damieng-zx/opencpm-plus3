@@ -305,5 +305,23 @@ class Issue16MotorSpinup(unittest.TestCase):
         self.assertNotIn("fdc_motor_on", text)
 
 
+class Issue17AttributeExtent(unittest.TestCase):
+    """F20/F33 extent comparisons must mask the FCB attribute bit too."""
+
+    def test_f20_masks_both_sides(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index(".next_ext_cmp:"):text.index(".next_ext_name_fail")]
+        self.assertEqual(body.count("and 0x7F"), 2)
+
+    def test_f33_masks_both_sides(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index(".rdrand_cmp:"):text.index(".rdrand_cmp_fail")]
+        self.assertEqual(body.count("and 0x7F"), 2)
+
+    def test_disktest_covers_attr_extents(self):
+        self.assertIn("Attribute-bit extent test",
+                      source("src/test/disktest.asm"))
+
+
 if __name__ == "__main__":
     unittest.main()

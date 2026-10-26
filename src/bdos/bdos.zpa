@@ -2373,6 +2373,7 @@ bf_f20:
     ld b, 11
 .next_ext_cmp:
     ld a, (de)
+    and 0x7F                   ; mask FCB attribute bit too
     ld c, a
     ld a, (hl)
     and 0x7F                   ; strip attribute bit
@@ -2998,6 +2999,7 @@ bf_f33:
     and 0x7F
     ld c, a
     ld a, (de)
+    and 0x7F                   ; mask FCB attribute bit too
     cp c
     jp nz, .rdrand_cmp_fail
     inc hl

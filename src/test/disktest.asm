@@ -988,6 +988,75 @@ test12:
     cp 136
     jr c, .t12_rd_loop
 
+    ; --- Attribute-bit extent test -------------------------------------
+    ; Close, set R/O on all extents, reopen and read across EX=0/EX=1.
+    ; The FCB then carries bit 7 in its type bytes; F20/F33 must mask it.
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld a, (FCB1 + 9)
+    or 0x80
+    ld (FCB1 + 9), a
+    ld de, FCB1
+    ld c, 30                ; F30: Set File Attributes (R/O)
+    call BDOS
+    cp 0xFF
+    jp z, .t12_fail
+
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 15                ; F15: Open
+    call BDOS
+    cp 0xFF
+    jp z, .t12_fail
+
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    xor a
+    ld (rec_counter), a
+.t12_attr_loop:
+    ld de, FCB1
+    ld c, 20                ; F20: crosses EX=1 at record 128
+    call BDOS
+    or a
+    jp nz, .t12_fail
+    ld a, (rec_counter)
+    ld b, a
+    ld a, (DMA)
+    cp b
+    jp nz, .t12_fail
+    ld a, (rec_counter)
+    inc a
+    ld (rec_counter), a
+    cp 136
+    jr c, .t12_attr_loop
+
+    ; Random read record 135 with the R/O FCB (F33 path)
+    ld a, 135
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 33                ; F33: Read Random
+    call BDOS
+    or a
+    jp nz, .t12_fail
+    ld a, (DMA)
+    cp 135
+    jp nz, .t12_fail
+
     ld de, msg_pass
     ld c, 9
     call BDOS
