@@ -71,9 +71,9 @@ Status: `[ ]` open, `[x]` fixed.
   covers MOVE.
   Files: `src/bios/bios.zpa`, `src/bios/common.zpa`, `src/test/stacktest.asm`.
 
-- [ ] **10. Loader directory loop counter never terminates.**  `ld de,32`
-  clears D, so `dec d` never reaches zero; the "not found" path is
-  unreachable.
+- [x] **10. Loader directory loop counter never terminates.**  `ld de,32`
+  cleared D, so `dec d` never reached zero and the "not found" path was
+  unreachable.  The counter now lives in `entry_count`.
   File: `src/boot/loader.asm`.
 
 - [ ] **11. CCP `try_sub` leaves DMA at `sub_dma`.**  `DIR` after a

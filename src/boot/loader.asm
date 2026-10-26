@@ -82,7 +82,8 @@ SYS_NAME:   db "CPM3    SYS"
     ; Scan 16 entries in this sector
     pop hl
     push hl
-    ld d, 16                   ; 16 entries per sector
+    ld a, 16                   ; 16 entries per sector
+    ld (entry_count), a
 
 .dir_entry:
     ; Check user number: we want user 0 entries
@@ -120,7 +121,9 @@ SYS_NAME:   db "CPM3    SYS"
 .next_entry:
     ld de, 32
     add hl, de                 ; Next entry
-    dec d
+    ld a, (entry_count)
+    dec a
+    ld (entry_count), a
     jr nz, .dir_entry
 
     ; Next sector
@@ -227,6 +230,7 @@ read_one_sector:
 
 load_dest:    dw 0
 block_count:  db 0
+entry_count:  db 0
 
 load_error:
     ld a, 2                    ; Red border
