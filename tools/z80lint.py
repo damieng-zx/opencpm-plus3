@@ -612,7 +612,7 @@ STACK_RE = re.compile(r';\s*lint-exempt\s*:\s*stack\b', re.I)
 def parse_annotation_regs(text):
     """Parse register list from annotation: 'AF, BC, DE' -> {'a','f','b','c','d','e'}"""
     regs = set()
-    for part in text.split(','):
+    for part in text.replace(',', ' ').split():
         part = re.sub(r'\(.*?\)', '', part)  # strip parenthetical notes
         part = re.sub(r'=.*', '', part)       # strip "= value" descriptions
         part = part.strip().upper()
