@@ -423,6 +423,7 @@ isr_handler:
     ; Expired — clear motor_flag and physically drop the motor bit.
     xor a
     ld (motor_flag), a
+    ld (motor_running), a       ; next motor_on must spin up again
     ld a, (last_1ffd)
     and ~MOTOR_BIT                 ; = 0xF7
     ld (last_1ffd), a
@@ -814,8 +815,8 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF9C7, "RAMDISK.FID expects copy_record_to_tpa at 0xF9C7"
-    assert copy_record_from_tpa == 0xF9CD, "RAMDISK.FID expects copy_record_from_tpa at 0xF9CD"
+    assert copy_record_to_tpa == 0xF9CA, "RAMDISK.FID expects copy_record_to_tpa at 0xF9CA"
+    assert copy_record_from_tpa == 0xF9D0, "RAMDISK.FID expects copy_record_from_tpa at 0xF9D0"
 
 
 ; ------------------------------------------------------------------
@@ -1016,6 +1017,10 @@ xdpb_b:
 xdpb_c:
     ds 27, 0
 
+; Motor spin-up state, shared with the ISR.  Lives after the pinned copy
+; routines so adding it does not move their addresses.
+motor_running: db 0
+
 
 ; ==========================================================================
 ; Buffers
@@ -1043,7 +1048,7 @@ xfer_staging: ds 32
 ; so a large program cannot overwrite it while the stub is still reading.
 ccp_fcb: ds 36
     assert $ - ccp_fcb == 36, "ccp_fcb must be exactly 36 bytes (CP/M FCB format)"
-    assert ccp_fcb == 0xFB91, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+    assert ccp_fcb == 0xFB95, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
 
 ; BDOS stack (grows downward from bdos_stack label)
 bdos_stack_base:

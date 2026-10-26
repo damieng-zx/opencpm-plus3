@@ -121,7 +121,6 @@ _ens_psec:    db 0             ; scratch: physical sector across seek/read
 ; FDC state
 ; Per-drive cached head position (FF = unknown, needs recalibrate)
 fdc_current_track: db 0xFF, 0xFF
-fdc_motor_on:      db 0        ; Motor state
 fdc_poll:          db 0        ; RQM poll timeout counter
 fdc_seek_timeout:  dw 0        ; seek/recalibrate poll timeout
 
@@ -197,7 +196,7 @@ fdc_init:
     ld (deblock_drv), a
     xor a
     ld (deblock_dirty), a
-    ld (fdc_motor_on), a
+    ld (motor_running), a
     ; Recalibrate drive 0 (drive 1 recalibrates lazily on first access)
     ld (disk_drive), a         ; A = 0 after xor
     call motor_on
@@ -1200,12 +1199,12 @@ motor_on:
     call write_1ffd
 
     ; Check if motor was already on (skip spin-up delay)
-    ld a, (fdc_motor_on)
+    ld a, (motor_running)
     or a
     jr nz, .already_on
 
     ld a, 1
-    ld (fdc_motor_on), a
+    ld (motor_running), a
 
     ; Spin-up delay (~300ms for motor to reach speed)
     ld b, 0                    ; 256 inner iterations
@@ -1228,7 +1227,7 @@ motor_on:
 ; @end
 motor_off:
     xor a
-    ld (fdc_motor_on), a
+    ld (motor_running), a
     ld (motor_flag), a         ; Clear motor flag in common memory
     ld (motor_countdown), a    ; Disarm ISR motor-off timer
     ; Restore 1FFD without motor bit

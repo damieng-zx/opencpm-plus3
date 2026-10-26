@@ -261,14 +261,14 @@ class Issue14ComFcb(unittest.TestCase):
 
     def test_ccp_uses_common_fcb(self):
         text = source("src/ccp/miniccp.zpa")
-        self.assertIn("CCP_FCB_ADDR equ 0xFB91", text)
+        self.assertIn("CCP_FCB_ADDR equ 0xFB95", text)
         self.assertIn("ld hl, CCP_FCB_ADDR", text)
         self.assertNotIn("0xF600 - 36", text)
 
     def test_common_reserves_fcb(self):
         text = source("src/bios/common.zpa")
         self.assertIn("ccp_fcb: ds 36", text)
-        self.assertIn("ccp_fcb == 0xFB91", text)
+        self.assertIn("ccp_fcb == 0xFB95", text)
 
 
 class Issue15FdcTimeouts(unittest.TestCase):
@@ -290,6 +290,19 @@ class Issue15FdcTimeouts(unittest.TestCase):
 
     def test_loader_checks_exm(self):
         self.assertIn("bit 5, a", source("src/boot/loader.asm"))
+
+
+class Issue16MotorSpinup(unittest.TestCase):
+    def test_isr_clears_common_motor_flag(self):
+        text = source("src/bios/common.zpa")
+        body = text[text.index("isr_handler:"):text.index("start_tpa:")]
+        self.assertIn("ld (motor_running), a", body)
+        self.assertIn("motor_running: db 0", text)
+
+    def test_motor_on_uses_common_flag(self):
+        text = source("src/bios/fdc765.zpa")
+        self.assertIn("ld a, (motor_running)", text)
+        self.assertNotIn("fdc_motor_on", text)
 
 
 if __name__ == "__main__":

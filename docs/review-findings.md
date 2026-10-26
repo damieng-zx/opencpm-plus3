@@ -103,8 +103,9 @@ Status: `[ ]` open, `[x]` fixed.
   on EXM=0.  The loader's transfer loop also checks EXM.
   Files: `src/bios/fdc765.zpa`, `src/boot/loader.asm`.
 
-- [ ] **16. ISR motor-off does not clear the spin-up flag.**
-  `fdc_motor_on` stays 1, so the next `motor_on` skips spin-up.
+- [x] **16. ISR motor-off does not clear the spin-up flag.**
+  `fdc_motor_on` (bank 4, unreachable from the ISR) is replaced by a
+  common-memory `motor_running` flag that the ISR clears.
   Files: `src/bios/fdc765.zpa`, `src/bios/common.zpa`.
 
 - [ ] **17. Multi-extent reads fail for files with attribute bits.**

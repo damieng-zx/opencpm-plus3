@@ -124,10 +124,11 @@ def check(sections: list[Section]) -> list[str]:
                 f"{desc}: {start}..{end} = {got} bytes, expected {want}")
 
     # xdpb_c has no adjacent sibling label; compare against dirbuf (next in map).
+    # The gap includes the 1-byte motor_running flag.
     if "xdpb_c" in labels and "dirbuf" in labels:
         got = labels["dirbuf"].addr - labels["xdpb_c"].addr
-        if got != 27:
-            errors.append(f"xdpb_c..dirbuf = {got} bytes, expected 27")
+        if got != 28:
+            errors.append(f"xdpb_c..dirbuf = {got} bytes, expected 28 (27 + motor_running)")
 
     # --- Buffers must sit inside common memory range -------------------------
     for name in ("dirbuf", "fcb_buf", "xfer_staging", "ccp_fcb",
