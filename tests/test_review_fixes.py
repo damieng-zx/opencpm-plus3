@@ -560,5 +560,27 @@ class P2BdosDispatchTable(unittest.TestCase):
         self.assertIn("dw bf_f120, bf_f121, bf_f122, bf_f123", body)
 
 
+class P2F110Delimiter(unittest.TestCase):
+    """F110 sets/gets the F9 output delimiter."""
+
+    def test_f110_handler(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f110:"):text.index("bf_f120:")]
+        self.assertIn("ld (out_delim), a", body)
+        self.assertIn("ld a, (out_delim)", body)
+        self.assertIn("dw bf_f110", text)
+
+    def test_f9_uses_the_delimiter(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f09:"):text.index("bf_f10:")]
+        self.assertIn("ld a, (out_delim)", body)
+        self.assertNotIn("cp '$'", body)
+
+    def test_delimtest_program(self):
+        text = source("src/test/delimtest.asm")
+        self.assertIn("ld c, 110", text)
+        self.assertIn("DELIM PASS", text)
+
+
 if __name__ == "__main__":
     unittest.main()

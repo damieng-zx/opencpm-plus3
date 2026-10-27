@@ -91,6 +91,7 @@ con_mode:   dw 0x0003          ; F109: console mode word (default: PAGE + DISPLA
                                ; bit 0 = PAGE    (SETDEF [PAGE]/[NOPAGE])
                                ; bit 1 = DISPLAY (SETDEF [DISPLAY]/[NO DISPLAY])
 bdos_page_row: db 0            ; LFs output since last pause/input
+out_delim:  db '$'             ; F110: F9 output delimiter
 
 ; Private SETDEF state (F120..F123). Not in the SCB — only reachable via
 ; our own BDOS functions. Default: no search path (current drive only),
@@ -187,7 +188,7 @@ dispatch_ext:                             ; function 99..123
     dw bf_f104, bf_f105
     dw bdos_eok, bdos_eok, bdos_eok       ; 106-108
     dw bf_f109
-    dw bdos_eok, bdos_eok, bdos_eok       ; 110-112
+    dw bf_f110, bdos_eok, bdos_eok        ; 110-112
     dw bdos_eok, bdos_eok, bdos_eok, bdos_eok, bdos_eok, bdos_eok, bdos_eok  ; 113-119
     dw bf_f120, bf_f121, bf_f122, bf_f123
 
@@ -468,9 +469,11 @@ bf_f09:
     pop bc
 .ploop:
     call read_user_byte(de) preserving %func        ; A = byte at (DE) in TPA
-    cp '$'
+    ld b, a
+    ld a, (out_delim)
+    cp b
     jp z, bdos_ret
-    ld c, a
+    ld c, b
     push de
     call bdos_con_out
     pop de
@@ -4125,6 +4128,35 @@ bf_f109:
 .cm_set:
     ld (con_mode), de
     jp bdos_eok
+
+
+; F110: Get/Set Output Delimiter
+;   In: DE = 0xFFFF (get) or E = new delimiter (set)
+;   Out: A = current delimiter, HL = current delimiter
+;   Clobbers: AF, BC, DE, HL
+; @proc bf_f110
+; @param %param:u16 de
+; @param %func:u8   c
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+bf_f110:
+    pop de
+    pop bc
+    ld a, d
+    and e
+    inc a                      ; 0xFF -> DE was 0xFFFF (get)
+    jr z, .dl_get
+    ld a, e
+    ld (out_delim), a
+    jr .dl_ret
+.dl_get:
+    ld a, (out_delim)
+.dl_ret:
+    ld l, a
+    ld h, 0
+    jp bdos_ret
 
 
 ; F120: Get SETDEF order byte

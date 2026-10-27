@@ -331,8 +331,10 @@ Programs should close any open files before exiting (BDOS F16).
 #### F109 — Get/Set Console Mode
 - **In**: DE=0xFFFF → get; DE=value → set
 
-#### F110 — Get/Set Output Delimiter
-- **Note**: Stub — returns 0; F9 always terminates on '$'.
+#### F110 - Get/Set Output Delimiter
+- **In**: DE=0xFFFF (get) or E=delimiter (set)
+- **Out**: A=current delimiter, HL=current delimiter
+- **Note**: F9 terminates on this delimiter. The default is `$`.
 
 #### F111 — Print Block to Console
 - **Note**: Stub — returns 0; the block is not printed.

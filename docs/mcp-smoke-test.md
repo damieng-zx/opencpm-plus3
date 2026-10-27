@@ -155,6 +155,19 @@ Require a screen line reading `A       B` — `A` in column 0 and `B` in
 column 8.  If the line is `AB`, TAB is being discarded instead of padded
 to the next 8-column stop.
 
+### Output delimiter (F110)
+
+Run:
+
+```text
+type "DELIMTEST`enter`"
+run 600
+```
+
+Require `DELIM PASS` (not `DELIM BAD`).  The program sets the F9 delimiter
+to `#`, reads it back, and prints `OK#` through F9; only `OK` should
+appear.
+
 ### 1. Boot and initial directory
 
 At the CCP prompt, run:
