@@ -544,5 +544,21 @@ class P2F6Pagination(unittest.TestCase):
         self.assertNotIn("call bdos_con_out", body)
 
 
+class P2BdosDispatchTable(unittest.TestCase):
+    """BDOS function dispatch uses compact tables, not a linear chain."""
+
+    def test_tables_cover_low_and_extended_ranges(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bdos_entry:"):text.index("; @proc bdos_ret")]
+        self.assertIn("dispatch_low:", body)
+        self.assertIn("dispatch_ext:", body)
+        self.assertIn("cp 51", body)
+        self.assertIn("cp 99", body)
+        self.assertIn("cp 124", body)
+        self.assertIn("jp (hl)", body)
+        self.assertIn("dw bf_f00", body)
+        self.assertIn("dw bf_f120, bf_f121, bf_f122, bf_f123", body)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -126,146 +126,70 @@ cached_drive: db 0xFF          ; Drive the cached_* above refer to (0xFF = none)
 ; ==========================================================================
 
 bdos_entry:
+    ; lint-exempt: stack  ; handlers pop saved BC/DE; bdos_ret rebases SP
     ; SP is already set to bdos_stack by the common stub (bdos_stub).
     ; The common stub also saved the user's SP in saved_sp.
     push bc                    ; Save function and parameter
     push de
 
     ld a, c
-    ; --- Dispatch ---
-    cp 0
-    jp z, bf_f00
-    cp 1
-    jp z, bf_f01
-    cp 2
-    jp z, bf_f02
-    cp 3
-    jp z, bf_f03
-    cp 4
-    jp z, bf_f04
-    cp 5
-    jp z, bf_f05
-    cp 6
-    jp z, bf_f06
-    cp 7
-    jp z, bf_f07
-    cp 8
-    jp z, bf_f08
-    cp 9
-    jp z, bf_f09
-    cp 10
-    jp z, bf_f10
-    cp 11
-    jp z, bf_f11
-    cp 12
-    jp z, bf_f12
-    cp 13
-    jp z, bf_f13
-    cp 14
-    jp z, bf_f14
-    cp 15
-    jp z, bf_f15
-    cp 16
-    jp z, bf_f16
-    cp 17
-    jp z, bf_f17
-    cp 18
-    jp z, bf_f18
-    cp 19
-    jp z, bf_f19
-    cp 20
-    jp z, bf_f20
-    cp 21
-    jp z, bf_f21
-    cp 22
-    jp z, bf_f22
-    cp 23
-    jp z, bf_f23
-    cp 24
-    jp z, bf_f24
-    cp 25
-    jp z, bf_f25
-    cp 26
-    jp z, bf_f26
-    cp 27
-    jp z, bf_f27
-    cp 28
-    jp z, bf_f28
-    cp 29
-    jp z, bf_f29
-    cp 30
-    jp z, bf_f30
-    cp 31
-    jp z, bf_f31
-    cp 32
-    jp z, bf_f32
-    cp 33
-    jp z, bf_f33
-    cp 34
-    jp z, bf_f34
-    cp 35
-    jp z, bf_f35
-    cp 36
-    jp z, bf_f36
-    cp 37
-    jp z, bf_f37
-    cp 40
-    jp z, bf_f40
-    cp 45
-    jp z, bf_f45
-    cp 46
-    jp z, bf_f46
-    cp 47
-    jp z, bdos_efail
-    cp 48
-    jp z, bf_f48
-    cp 49
-    jp z, bf_f49
-    cp 50
-    jp z, bf_f50
+    ; --- Dispatch (compact table lookup) ---
+    cp 51
+    jr c, .low
     cp 99
-    jp z, bdos_efail
-    cp 100
-    jp z, bdos_efail
-    cp 101
-    jp z, bdos_eok
-    cp 102
-    jp z, bdos_efail
-    cp 103
-    jp z, bdos_efail
-    cp 104
-    jp z, bf_f104
-    cp 105
-    jp z, bf_f105
-    cp 106
-    jp z, bdos_eok
-    cp 107
-    jp z, bdos_eok
-    cp 108
-    jp z, bdos_eok
-    cp 109
-    jp z, bf_f109
-    cp 110
-    jp z, bdos_eok
-    cp 111
-    jp z, bdos_eok
-    cp 112
-    jp z, bdos_eok
-    cp 120
-    jp z, bf_f120
-    cp 121
-    jp z, bf_f121
-    cp 122
-    jp z, bf_f122
-    cp 123
-    jp z, bf_f123
+    jp c, bdos_eok              ; 51..98: unsupported -> success/no-op
+    cp 124
+    jp nc, bdos_eok             ; 124+: unsupported
+    sub 99
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, dispatch_ext
+    add hl, de
+    ld a, (hl)
+    inc hl
+    ld h, (hl)
+    ld l, a
+    jp (hl)
+.low:
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, dispatch_low
+    add hl, de
+    ld a, (hl)
+    inc hl
+    ld h, (hl)
+    ld l, a
+    jp (hl)
 
-    ; Unknown function
-    pop de
-    pop bc
-    ld hl, 0
-    ld a, l
-    jp bdos_ret
+; Function number -> handler.  Slots that the old linear chain let fall
+; through use bdos_eok (unknown/no-op) or bdos_efail (explicitly
+; unsupported).  Handlers pop the saved BC/DE themselves; bdos_ret
+; rebases SP, so the eok/efail stubs do not need to.
+dispatch_low:
+    dw bf_f00, bf_f01, bf_f02, bf_f03, bf_f04, bf_f05, bf_f06, bf_f07
+    dw bf_f08, bf_f09, bf_f10, bf_f11, bf_f12, bf_f13, bf_f14, bf_f15
+    dw bf_f16, bf_f17, bf_f18, bf_f19, bf_f20, bf_f21, bf_f22, bf_f23
+    dw bf_f24, bf_f25, bf_f26, bf_f27, bf_f28, bf_f29, bf_f30, bf_f31
+    dw bf_f32, bf_f33, bf_f34, bf_f35, bf_f36, bf_f37
+    dw bdos_eok, bdos_eok                 ; 38, 39
+    dw bf_f40
+    dw bdos_eok, bdos_eok, bdos_eok, bdos_eok  ; 41-44
+    dw bf_f45, bf_f46
+    dw bdos_efail                         ; 47
+    dw bf_f48, bf_f49, bf_f50
+
+dispatch_ext:                             ; function 99..123
+    dw bdos_efail, bdos_efail             ; 99, 100
+    dw bdos_eok                           ; 101
+    dw bdos_efail, bdos_efail             ; 102, 103
+    dw bf_f104, bf_f105
+    dw bdos_eok, bdos_eok, bdos_eok       ; 106-108
+    dw bf_f109
+    dw bdos_eok, bdos_eok, bdos_eok       ; 110-112
+    dw bdos_eok, bdos_eok, bdos_eok, bdos_eok, bdos_eok, bdos_eok, bdos_eok  ; 113-119
+    dw bf_f120, bf_f121, bf_f122, bf_f123
 
 ; @proc bdos_ret
 ; @out   hl
