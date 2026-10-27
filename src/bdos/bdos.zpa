@@ -700,10 +700,7 @@ bf_f13:
     ; Re-login drive A: caches DPH/DPB/ALV pointers and rebuilds ALV
     xor a
     call select_drive
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
+    jp bdos_eok
 
 ; F14: Select disk (E = drive number)
 ; @proc bf_f14
@@ -3653,10 +3650,7 @@ bf_f45:
     pop bc
     ld a, e
     ld (error_mode), a
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
+    jp bdos_eok
 
 
 ; F46: Get Free Space
@@ -3970,10 +3964,7 @@ bf_f50:
     jp bdos_ret
 
 .f50_bad:
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
+    jp bdos_eok
 
 _f50_func:   db 0
 _f50_a:      db 0
@@ -4209,10 +4200,7 @@ bf_f109:
     jp bdos_ret
 .cm_set:
     ld (con_mode), de
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
+    jp bdos_eok
 
 
 ; F120: Get SETDEF order byte
@@ -4248,10 +4236,7 @@ bf_f121:
     pop bc
     ld a, e
     ld (bdos_order), a
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
+    jp bdos_eok
 
 
 ; F122: Get SETDEF search path
@@ -4281,10 +4266,7 @@ bf_f122:
     inc hl
     inc de
     djnz .f122_loop
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
+    jp bdos_eok
 
 
 ; F123: Set SETDEF search path
@@ -4314,7 +4296,4 @@ bf_f123:
     inc hl
     inc de
     djnz .f123_loop
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
+    jp bdos_eok
