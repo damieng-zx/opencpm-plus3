@@ -112,7 +112,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, VER, HELP, DUMP, .COM loading
 - `tools/mkdsk.py` — DSK image builder
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)
-- `tools/z80lint.py` — Z80 linter: stack balance across all return paths + register clobbering after CALL
+- `tools/z80lint.py` — Z80 linter: stack balance across all return paths, register clobbering after CALL, dead stores, and Clobbers/Out annotation verification (declared vs actual effects)
 
 ## Conventions
 
@@ -125,9 +125,14 @@ Every routine MUST document In/Out/Clobbers:
 ;   Clobbers: AF, BC, DE
 ```
 `z80lint.py` validates both the clobber list and stack balance across all return paths.
+It also verifies the annotations themselves: every register a routine (or its callees,
+by actual effect) leaves changed must appear in `Clobbers:` or `Out:`, and every `Out:`
+register must actually be produced. Annotation findings are informational by default
+(pass `--gate-annotations` to enforce once the backlog is cleaned up).
 `Out` registers are return values, not clobbers. `; Stack: …` comments are free-form
 documentation and do not affect the linter. To suppress the stack-balance check on a routine
 that intentionally leaves SP non-zero (e.g. a jp-based shim), add `; lint-exempt: stack`.
+Add `; lint: ignore` to a `Clobbers:` line to skip annotation verification for that routine.
 
 ### Screen Paging
 Screen writes require `_page_in` (switches to mode 2 for bank 5 access) then `_page_out` (restores mode 3). Both preserve the motor bit via `motor_flag` in common memory.

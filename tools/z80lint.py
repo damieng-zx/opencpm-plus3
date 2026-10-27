@@ -17,6 +17,14 @@ Checks:
   2. Register clobber: reads of registers known clobbered by a preceding CALL
      without intervening restore.
   3. Dead stores: writes between push/pop that are discarded by the pop.
+  4. Clobber annotations: the declared Clobbers:/Out: set must cover the
+     registers the routine (or its callees, by actual effect) leaves
+     changed. Also flags Out: registers the body never writes (callers
+     would read garbage believing it a result), and over-declared
+     clobbers (info only — safe direction). SP is never tracked (CALL/RET
+     contract) and F is not tracked (flags are assumed dead across CALL).
+     Routines marked `; lint-exempt: stack` are skipped. Add
+     `; lint: ignore` to the Clobbers: line to skip a routine.
 
 Routine header format:
     ; routine_name - Description
@@ -33,10 +41,14 @@ Suppression:
     Add '; lint: ignore' to any line to suppress warnings on that line.
 
 Usage:
-  python3 tools/z80lint.py [file.asm ...]
+  python3 tools/z80lint.py [--gate-annotations] [file.asm ...]
   (default: scans build/zpa/*.asm plus src/boot, src/fid and src/tools)
 
 Exit code: 0 = clean, 1 = issues found.
+  Check 4 (clobber annotations) is informational by default so an
+  existing annotation backlog does not break the build gate.  Pass
+  --gate-annotations to count its findings toward the exit code once
+  the cleanup is done.
 """
 
 import re
@@ -609,6 +621,22 @@ OUT_RE = re.compile(r';\s*out[:\s]\s*(.+)', re.I)
 STACK_RE = re.compile(r';\s*lint-exempt\s*:\s*stack\b', re.I)
 
 
+def contiguous_comment_block(lines):
+    """
+    Trailing run of non-blank comment lines.  Annotation blocks (In/Out/
+    Clobbers) sit directly above the label; stopping at blank lines keeps
+    file-header prose far above a data label from being parsed as that
+    label's annotations.
+    """
+    out = []
+    for line in reversed(lines):
+        if not line.strip().startswith(';'):
+            break
+        out.append(line)
+    out.reverse()
+    return out
+
+
 def parse_annotation_regs(text):
     """Parse register list from annotation: 'AF, BC, DE' -> {'a','f','b','c','d','e'}"""
     regs = set()
@@ -636,7 +664,7 @@ def parse_annotation_regs(text):
 class Routine:
     """Represents a parsed routine with header annotations."""
     __slots__ = ('name', 'filepath', 'start_lineno', 'lines',
-                 'stack_exempt', 'clobbers', 'out_regs')
+                 'stack_exempt', 'clobber_ignore', 'clobbers', 'out_regs')
 
     def __init__(self, name, filepath, start_lineno):
         self.name = name
@@ -644,6 +672,7 @@ class Routine:
         self.start_lineno = start_lineno
         self.lines = []           # [(lineno, raw_text), ...]
         self.stack_exempt = False
+        self.clobber_ignore = False
         self.clobbers = set()     # register names from Clobbers:
         self.out_regs = set()     # register names from Out:
 
@@ -696,13 +725,21 @@ def parse_file(filepath):
                         break
                 header_lines = list(reversed(tail)) + pending_cmts
 
+            # Only the contiguous comment block directly above the label
+            # carries annotations; anything above a blank line is prose
+            # (e.g. the file header) and must not attach to this label.
+            anno_lines = contiguous_comment_block(header_lines)
+
             in_out_block = False
             for hline in header_lines:
                 if STACK_RE.search(hline):
                     cur.stack_exempt = True
+            for hline in anno_lines:
                 mc = CLOBBER_RE.search(hline)
                 if mc:
                     cur.clobbers |= parse_annotation_regs(mc.group(1))
+                    if 'lint: ignore' in hline.lower():
+                        cur.clobber_ignore = True
                     in_out_block = False
                 mo = OUT_RE.search(hline)
                 if mo:
@@ -1217,11 +1254,397 @@ def check_dead_stores(routine):
 
 
 # -------------------------------------------------------------------------
+# Check 4: Clobber annotation verification (declared vs actual effects)
+# -------------------------------------------------------------------------
+
+def compute_direct_writes(lines):
+    """
+    Net register writes and preserved registers over a sequence of routine
+    body lines.
+
+    A `pop` with no matching push is a data load (real write).  A `pop`
+    with a matching push makes the register's final value equal to what it
+    held at the matching `push`:
+      - if the register held the caller's value (no write recorded), the
+        pop restores it — the pair is "preserved";
+      - if the routine had written it before the push (e.g. a result
+        carried across a bank switch), the write survives the pop.
+    Writes made between a push and its matching pop are always destroyed
+    by the pop.  The same pairing logic covers EXX/EXX and EX AF,AF'
+    swaps: a balanced swap pair preserves the swapped registers.
+
+    SP is always excluded (CALL/RET contract); F is excluded (flags are
+    assumed dead across CALL by convention).
+
+      In:       lines — [(lineno, raw_text), ...]
+      Out:      (writes, preserved) — sets of sub-register names left
+                changed at RET, and sub-registers provably preserved by
+                balanced push/pop or swap pairs
+      Clobbers: none
+    """
+    writes = set()
+    preserved = set()
+    push_stack = {}      # pair -> [snapshot sets]
+    load_pairs = set()   # pairs with an unmatched pop (data load)
+    swap_depth = {'exx': 0, 'afx': 0}
+    swap_seen = {'exx': False, 'afx': False}
+
+    for lineno, raw in lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith(';'):
+            continue
+        mnemonic, ops, raw_ops = parse_instruction(raw)
+        if mnemonic is None:
+            continue
+
+        if mnemonic == 'push' and ops and ops[0].kind == 'reg16':
+            pair = ops[0].value
+            snap = writes & _pair_regs(pair)
+            push_stack.setdefault(pair, []).append(snap)
+            writes -= _pair_regs(pair)
+            continue
+
+        if mnemonic == 'pop' and ops and ops[0].kind == 'reg16':
+            pair = ops[0].value
+            stack = push_stack.get(pair)
+            if stack:
+                snap = stack.pop()
+                writes -= _pair_regs(pair)
+                writes |= snap
+            else:
+                writes |= _pair_regs(pair)   # data load: real write
+                load_pairs.add(pair)
+            continue
+
+        if mnemonic == 'exx':
+            swap_seen['exx'] = True
+            if swap_depth['exx'] == 0:
+                writes |= {'b', 'c', 'd', 'e', 'h', 'l'}
+                swap_depth['exx'] = 1
+            else:
+                writes -= {'b', 'c', 'd', 'e', 'h', 'l'}
+                swap_depth['exx'] = 0
+            continue
+
+        if (mnemonic == 'ex' and len(ops) == 2
+                and ops[0].kind == 'reg16' and ops[0].value == 'af'):
+            swap_seen['afx'] = True
+            if swap_depth['afx'] == 0:
+                writes |= {'a', 'f'}
+                swap_depth['afx'] = 1
+            else:
+                writes -= {'a', 'f'}
+                swap_depth['afx'] = 0
+            continue
+
+        if (mnemonic == 'ex' and len(ops) == 2
+                and ops[0].kind == 'indirect_pair' and ops[0].value == 'sp'
+                and ops[1].kind == 'reg16'):
+            writes |= _pair_regs(ops[1].value)   # HL/IX/IY becomes stack junk
+            continue
+
+        _, inst_writes = get_effects(mnemonic, ops)
+        writes |= inst_writes
+
+    writes.discard('sp')
+    writes.discard('f')
+
+    # Balanced push/pop pairs (no leftover pushes, no data-load pop):
+    # the popped value is the caller's, so the register is preserved.
+    for pair, stack in push_stack.items():
+        if not stack and pair not in load_pairs:
+            preserved |= _pair_regs(pair)
+    # Balanced swap pairs restore the swapped-in registers.
+    if swap_seen['exx'] and swap_depth['exx'] == 0:
+        preserved |= {'b', 'c', 'd', 'e', 'h', 'l'}
+    if swap_seen['afx'] and swap_depth['afx'] == 0:
+        preserved |= {'a', 'f'}
+    preserved.discard('sp')
+    preserved.discard('f')
+
+    return writes, preserved
+
+
+def regs_to_pairs(subregs):
+    """Render a sub-register set as conventional names: {'b','c'} -> 'BC',
+    a partial pair like {'a'} -> 'A'."""
+    remaining = set(subregs)
+    names = []
+    for pair, subs in ANNOT_PAIR_MAP.items():
+        if subs and subs <= remaining:
+            names.append(pair)
+            remaining -= subs
+    for reg in sorted(remaining):
+        names.append(reg.upper())
+    return ', '.join(names)
+
+
+def _routine_last_insn(routine):
+    """Return (lineno, mnemonic, ops, raw_ops) of the last real instruction."""
+    last = None
+    for lineno, raw in routine.lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith(';'):
+            continue
+        mnemonic, ops, raw_ops = parse_instruction(raw)
+        if mnemonic is None:
+            continue
+        last = (lineno, mnemonic, ops, raw_ops)
+    return last
+
+
+def _routine_has_instructions(routine):
+    for lineno, raw in routine.lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith(';'):
+            continue
+        mnemonic, ops, raw_ops = parse_instruction(raw)
+        if mnemonic is not None:
+            return True
+    return False
+
+
+def check_clobber_annotations(routine_list, routine_map):
+    """
+    Verify declared Clobbers:/Out: sets against actual register effects.
+
+    For every annotated routine:
+      missing  — a register the routine (or its callees, by actual effect)
+                 leaves changed but which is declared in neither
+                 Clobbers: nor Out:.  Callers reading it read garbage.
+      out_dead — an Out: register the body never writes (callers trust
+                 it as a result; check 2 wrongly exempts it too).
+      unused   — a declared Clobbers: register that neither the body nor
+                 any callee actually changes (over-declaration; safe).
+
+    Only ACTUAL effects propagate through calls: a callee's declared
+    Clobbers: set is ignored for propagation since it may restore
+    registers before returning.  Registers push/pop-protected around a
+    call site are not propagated from that call.  Control flow reaching
+    the next routine (unconditional tail jp/jr to a routine label, or
+    fall-through) merges that routine's effects too.
+
+    Flag F is not tracked (flags are assumed dead across CALL); SP is
+    never tracked (CALL/RET contract).  Routines that are stack-exempt
+    (never return / shim) or suppressed with `; lint: ignore` on the
+    Clobbers: line are skipped.
+
+      In:       routine_list — every parsed Routine (duplicates allowed)
+                routine_map  — name -> Routine for call resolution
+      Out:      dict with keys missing/out_dead/unused/unannotated/skipped
+      Clobbers: none
+    """
+    # Order routines per file for fall-through successor edges.
+    by_file = {}
+    for r in routine_list:
+        by_file.setdefault(r.filepath, []).append(r)
+    next_in_file = {}
+    for fp, rs in by_file.items():
+        for a, b in zip(rs, rs[1:]):
+            next_in_file[id(a)] = b
+    obj_by_id = {id(r): r for r in routine_list}
+
+    direct = {}
+    preserved = {}
+    eff = {}
+    calls = {}       # rid -> [(callee rid, protected subregs at call site)]
+    succs = {}       # rid -> rid of control-flow successor routine
+    jumps = set()    # (rid, target rid) — any jp/jr to a routine label
+    indirect_exit = set()   # rids with a terminal indirect jump
+    referenced = set()   # routine names reached by call or tail jp
+
+    # Pass 1: structural successors.  An unconditional tail jp/jr to a
+    # known routine, or fall-through into the next routine in the file,
+    # means that routine's code executes as part of this one.
+    for r in routine_list:
+        if not r.lines:
+            continue
+        rid = id(r)
+        last = _routine_last_insn(r)
+        succ = None
+        if last:
+            _, mn, ops, raw_ops = last
+            if (mn in ('jp', 'jr') and ops
+                    and ops[0].kind not in ('cond', 'indirect_pair')
+                    and raw_ops):
+                tgt = routine_map.get(raw_ops[0].strip())
+                if tgt is not None and tgt.lines and tgt is not r:
+                    succ = id(tgt)
+            elif mn in ('ret', 'reti', 'retn', 'djnz'):
+                succ = None
+            elif mn in ('jp', 'jr') and ops and ops[0].kind == 'indirect_pair':
+                succ = None
+                indirect_exit.add(rid)
+            else:
+                nxt = next_in_file.get(rid)
+                if nxt is not None and nxt.lines:
+                    succ = id(nxt)
+        else:
+            # Label-only routine (stubs sharing a tail): falls through
+            # into the next routine.
+            nxt = next_in_file.get(rid)
+            if nxt is not None and nxt.lines:
+                succ = id(nxt)
+        succs[rid] = succ
+
+    # Pass 2: per-routine facts.
+    for r in routine_list:
+        if not r.lines:
+            continue
+        rid = id(r)
+
+        # Chain-folded body: instructions of this routine plus its
+        # structural successor chain, so push/pop pairing across a tail
+        # jump or fall-through is honoured.  (Only for effect tracking;
+        # call sites below stay per-routine.)
+        chain_lines = list(r.lines)
+        seen = {rid}
+        cur = succs.get(rid)
+        while cur is not None and cur not in seen:
+            seen.add(cur)
+            s_routine = obj_by_id[cur]
+            chain_lines.extend(s_routine.lines)
+            cur = succs.get(cur)
+        direct[rid], preserved[rid] = compute_direct_writes(chain_lines)
+        eff[rid] = set(direct[rid])
+
+        # Walk the body: call sites (with push-protected regs) + targets.
+        depth = {}
+        tgts = []
+        for _, raw in r.lines:
+            stripped = raw.strip()
+            if not stripped or stripped.startswith(';'):
+                continue
+            mnemonic, ops, raw_ops = parse_instruction(raw)
+            if mnemonic is None:
+                continue
+            if mnemonic == 'push' and ops and ops[0].kind == 'reg16':
+                pair = ops[0].value
+                depth[pair] = depth.get(pair, 0) + 1
+            elif mnemonic == 'pop' and ops and ops[0].kind == 'reg16':
+                pair = ops[0].value
+                depth[pair] = max(0, depth.get(pair, 0) - 1)
+            elif mnemonic == 'call':
+                m = CALL_TARGET_RE.search(raw)
+                if m:
+                    tgt = routine_map.get(m.group(1))
+                    if tgt is not None and tgt.lines:
+                        prot = set()
+                        for pair, d in depth.items():
+                            if d > 0:
+                                prot |= _pair_regs(pair)
+                        tgts.append((id(tgt), prot))
+                        referenced.add(tgt.name)
+            elif mnemonic in ('jp', 'jr') and ops and raw_ops:
+                tgt_name = raw_ops[0].strip()
+                if ops[0].kind == 'cond':
+                    if len(raw_ops) > 1:
+                        tgt_name = raw_ops[1].strip()
+                    else:
+                        tgt_name = None
+                elif ops[0].kind == 'indirect_pair':
+                    tgt_name = None
+                if tgt_name:
+                    referenced.add(tgt_name)
+                    tgt = routine_map.get(tgt_name)
+                    if tgt is not None and tgt.lines and tgt is not r:
+                        jumps.add((rid, id(tgt)))
+        calls[rid] = tgts
+
+    # Fixpoint: propagate actual callee/successor/jump-target effects,
+    # and propagate opaqueness past indirect jumps.
+    changed = True
+    while changed:
+        changed = False
+        for rid, tgts in calls.items():
+            for tid, prot in tgts:
+                if tid == rid:
+                    continue
+                incoming = eff[tid] - prot
+                if not incoming <= eff[rid]:
+                    eff[rid] |= incoming
+                    changed = True
+                if tid in indirect_exit and rid not in indirect_exit:
+                    indirect_exit.add(rid)
+                    changed = True
+        for rid, succ in succs.items():
+            if succ is None or succ == rid:
+                continue
+            if not eff[succ] <= eff[rid]:
+                eff[rid] |= eff[succ]
+                changed = True
+        for src, dst in jumps:
+            if not eff[dst] <= eff[src]:
+                eff[src] |= eff[dst]
+                changed = True
+
+    # Routines that are the structural successor of another routine are
+    # shared tails: their Out: annotations document the exit state the
+    # jumpers produce, not what the tail itself computes.
+    shared_tails = {s for s in succs.values() if s is not None}
+
+    issues = {'missing': [], 'out_dead': [], 'out_note': [], 'unused': [],
+              'unannotated': [], 'skipped': []}
+
+    for r in routine_list:
+        if not r.lines:
+            continue
+        rid = id(r)
+        if r.stack_exempt:
+            issues['skipped'].append(r)
+            continue
+        if r.clobber_ignore:
+            continue
+        declared = set(r.clobbers)
+        out_regs = {x for x in r.out_regs if x != 'f'}
+        if not declared and not out_regs:
+            # Only contract-relevant routines matter: reachable by a
+            # CALL or tail JP and containing actual instructions.
+            if _routine_has_instructions(r) and r.name in referenced:
+                issues['unannotated'].append(r)
+            continue
+
+        protected = declared | out_regs
+        miss = eff[rid] - protected
+        if miss:
+            body = regs_to_pairs(miss & direct[rid])
+            callees = regs_to_pairs(miss - direct[rid])
+            parts = []
+            if body:
+                parts.append(f"{body} (body)")
+            if callees:
+                parts.append(f"{callees} (callees)")
+            issues['missing'].append({'routine': r, 'regs': '; '.join(parts)})
+
+        unused = {reg for reg in (declared - eff[rid]) if reg != 'f'}
+        if unused:
+            issues['unused'].append(
+                {'routine': r, 'regs': regs_to_pairs(unused)})
+
+        # Out registers neither the body, its successor chain, nor any
+        # callee actually produces.
+        dead_out = out_regs - direct[rid] - eff[rid] - preserved[rid]
+        if dead_out:
+            entry = {'routine': r, 'regs': regs_to_pairs(dead_out)}
+            if rid in shared_tails or rid in indirect_exit:
+                # Shared tail (Out produced by the jumpers) or the chain
+                # disappears into an indirect jump/dispatch table —
+                # reported for information, not as a contract failure.
+                issues['out_note'].append(entry)
+            else:
+                issues['out_dead'].append(entry)
+
+    return issues
+
+
+# -------------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------------
 
 def main():
-    args = sys.argv[1:]
+    argv = sys.argv[1:]
+    gate_anno = '--gate-annotations' in argv
+    args = [a for a in argv if not a.startswith('--')]
 
     if not args:
         # Prefer the ZPA-expanded output (authoritative) if present; fall back
@@ -1331,6 +1754,48 @@ def main():
     if dead_count == 0:
         print("  OK -- no dead stores found.")
     total += dead_count
+
+    print()
+
+    # ---- Check 4: Clobber annotations ----
+    print("=== Clobber Annotations (declared vs actual) ===")
+    anno_count = 0
+    routine_list = [r for rs in file_routines.values() for r in rs]
+    issues = check_clobber_annotations(routine_list, all_routines)
+    for iss in issues['missing']:
+        r = iss['routine']
+        print(f"  ANNO   {r.filepath}:{r.start_lineno}: {r.name}: "
+              f"returns with {iss['regs']} changed, not in Clobbers/Out")
+        anno_count += 1
+    for iss in issues['out_dead']:
+        r = iss['routine']
+        print(f"  OUT    {r.filepath}:{r.start_lineno}: {r.name}: "
+              f"declares Out {iss['regs']} but never produces it")
+        anno_count += 1
+    for iss in issues['out_note']:
+        r = iss['routine']
+        print(f"  note   {r.filepath}:{r.start_lineno}: {r.name}: "
+              f"declares Out {iss['regs']} never produced here "
+              f"(shared tail or indirect dispatch)")
+    for iss in issues['unused']:
+        r = iss['routine']
+        print(f"  note   {r.filepath}:{r.start_lineno}: {r.name}: "
+              f"declares {iss['regs']} clobbered but never changed")
+    if issues['skipped']:
+        print(f"  note: {len(issues['skipped'])} routine(s) skipped "
+              f"(lint-exempt: stack)")
+    if issues['unannotated']:
+        names = sorted(r.name for r in issues['unannotated'])
+        shown = ', '.join(names[:15]) + ('...' if len(names) > 15 else '')
+        print(f"  note: {len(names)} routine(s) have no Clobbers/Out "
+              f"annotation (not verified): {shown}")
+    if anno_count == 0:
+        print("  OK -- declared clobber sets match actual effects.")
+    elif gate_anno:
+        total += anno_count
+    else:
+        print(f"  note: {anno_count} finding(s) not gating the build; "
+              f"pass --gate-annotations to enforce")
 
     print()
     if total:
