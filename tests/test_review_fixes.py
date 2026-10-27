@@ -476,5 +476,18 @@ class P2WriteReturnCodes(unittest.TestCase):
         self.assertIn("jp bdos_efail", body)
 
 
+class P2F36Returns(unittest.TestCase):
+    """F36 must leave a defined success result in A/HL."""
+
+    def test_f36_returns_eok(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f36:"):text.index("; F40:")]
+        self.assertIn("ld (ix + 33), l", body)
+        self.assertIn("ld (ix + 34), h", body)
+        self.assertIn("ld (ix + 35), 0", body)
+        self.assertIn("jp bdos_eok", body)
+        self.assertNotIn("jp bdos_ret", body)
+
+
 if __name__ == "__main__":
     unittest.main()

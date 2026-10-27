@@ -270,7 +270,8 @@ Programs should close any open files before exiting (BDOS F16).
 
 #### F36 — Set Random Record
 - **In**: DE=FCB address
-- **Out**: FCB[33-35] = current sequential position as random record
+- **Out**: A=0, HL=0
+- **Note**: FCB[33-35] = current sequential position as random record.
 
 #### F40 — Write Random with Zero Fill
 - **In**: DE=FCB (R0/R1/R2 set)

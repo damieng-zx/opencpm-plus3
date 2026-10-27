@@ -3542,7 +3542,7 @@ bf_f36:
     ld (ix + 35), 0            ; R2
 
     call writeback_fcb()
-    jp bdos_ret
+    jp bdos_eok                ; A=0, HL=0 on success
 
 
 ; F40: Write Random with Zero Fill
