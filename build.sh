@@ -31,41 +31,41 @@ fi
 
 # Stage 0b: Lint (runs on the ZPA-expanded output, which is authoritative)
 echo "  Linting..."
-python3 tools/z80lint.py || true
+python3 tools/z80lint.py
 
 # Stage 1: Assemble components
 echo "  Assembling CCP..."
-sjasmplus --raw=build/miniccp.bin build/zpa/miniccp.asm
+"$SJASMPLUS" --raw=build/miniccp.bin build/zpa/miniccp.asm
 
 echo "  Assembling BIOS..."
-sjasmplus --raw=build/bios.bin --lst=build/bios.lst -i build/zpa -i src/bios/ -i src/bdos/ -i build/ build/zpa/bios.asm
+"$SJASMPLUS" --raw=build/bios.bin --lst=build/bios.lst -i build/zpa -i src/bios/ -i src/bdos/ -i build/ build/zpa/bios.asm
 
 echo "  Checking layout..."
 python3 tools/build_memory_map.py
 python3 tools/check_layout.py
 
 echo "  Assembling loader..."
-sjasmplus --raw=build/loader.bin src/boot/loader.asm
+"$SJASMPLUS" --raw=build/loader.bin src/boot/loader.asm
 
 echo "  Assembling boot sector..."
-sjasmplus --raw=build/bootsect.bin src/boot/bootsect.asm
+"$SJASMPLUS" --raw=build/bootsect.bin src/boot/bootsect.asm
 python3 tools/patchsum.py build/bootsect.bin
 
 echo "  Assembling test programs..."
-sjasmplus --raw=build/bdostest.com src/test/bdostest.asm
-sjasmplus --raw=build/xtetest.com src/test/xtetest.asm
-sjasmplus --raw=build/disktest.com src/test/disktest.asm
-sjasmplus --raw=build/termtest.com src/test/termtest.asm
-sjasmplus --raw=build/stktest.com src/test/stacktest.asm
+"$SJASMPLUS" --raw=build/bdostest.com src/test/bdostest.asm
+"$SJASMPLUS" --raw=build/xtetest.com src/test/xtetest.asm
+"$SJASMPLUS" --raw=build/disktest.com src/test/disktest.asm
+"$SJASMPLUS" --raw=build/termtest.com src/test/termtest.asm
+"$SJASMPLUS" --raw=build/stktest.com src/test/stacktest.asm
 
 echo "  Assembling utilities..."
-sjasmplus --raw=build/date.com build/zpa/date.asm
-sjasmplus --raw=build/showxdpb.com src/tools/showxdpb.asm
-sjasmplus --raw=build/dump.com src/tools/dump.asm
-sjasmplus --raw=build/setdef.com src/tools/setdef.asm
+"$SJASMPLUS" --raw=build/date.com build/zpa/date.asm
+"$SJASMPLUS" --raw=build/showxdpb.com src/tools/showxdpb.asm
+"$SJASMPLUS" --raw=build/dump.com src/tools/dump.asm
+"$SJASMPLUS" --raw=build/setdef.com src/tools/setdef.asm
 
 echo "  Assembling FID modules..."
-sjasmplus --raw=build/RAMDISK.FID src/fid/ramdisk.asm
+"$SJASMPLUS" --raw=build/RAMDISK.FID src/fid/ramdisk.asm
 
 # Stage 2: Build DSK
 echo "  Building DSK..."

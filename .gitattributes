@@ -1,0 +1,4 @@
+# Keep shell scripts LF so bash can parse them on every platform.
+*.sh text eol=lf
+# Batch files are CRLF by convention.
+*.cmd text eol=crlf
