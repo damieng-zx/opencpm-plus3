@@ -125,48 +125,6 @@ fdc_read_track:
 
 
 ; ==========================================================================
-; fdc_seek_1 — Seek to track 1
-;   In:  nothing
-;   Out: nothing
-;   Clobbers: AF, BC, DE
-;
-;   Issues SEEK command then polls SENSE INTERRUPT STATUS until complete.
-; ==========================================================================
-fdc_seek_1:
-    ; SEEK command: 0x0F, HD/US, NCN (new cylinder number)
-    ld a, 0x0F                 ; SEEK
-    call fdc_send
-    xor a                      ; HD=0, US=0
-    call fdc_send
-    ld a, 1                    ; NCN = track 1
-    call fdc_send
-
-    ; Wait for seek complete: poll with SENSE INTERRUPT STATUS
-.sense:
-    ld a, 0x08                 ; SENSE INTERRUPT STATUS
-    call fdc_send
-    ; Read 2 result bytes: ST0, PCN
-    ld bc, PORT_FDC_ST
-.sw1:
-    in a, (c)
-    jp p, .sw1
-    ld bc, PORT_FDC_DT
-    in a, (c)                 ; ST0
-    ld d, a
-    ld bc, PORT_FDC_ST
-.sw2:
-    in a, (c)
-    jp p, .sw2
-    ld bc, PORT_FDC_DT
-    in a, (c)                 ; PCN (present cylinder)
-
-    ; Check ST0: bits 7:6 = 00 (normal) and SE bit (5) = 1 means seek end
-    bit 5, d                  ; Seek End?
-    jr z, .sense              ; Not yet — re-poll
-    ret
-
-
-; ==========================================================================
 ; fdc_send — Send byte in A to FDC
 ;   In:  A = byte
 ;   Out: nothing
