@@ -41,8 +41,12 @@ Suppression:
     Add '; lint: ignore' to any line to suppress warnings on that line.
 
 Usage:
-  python3 tools/z80lint.py [--gate-annotations] [file.asm ...]
+  python3 tools/z80lint.py [--gate-annotations] [--suggest-anno] [file.asm ...]
   (default: scans build/zpa/*.asm plus src/boot, src/fid and src/tools)
+
+  --suggest-anno prints each routine's computed actual effects as a
+  ready-to-paste Clobbers: line wherever the declaration is short, and
+  exits 0 without running the checks.
 
 Exit code: 0 = clean, 1 = issues found.
   Check 4 (clobber annotations) is informational by default so an
@@ -1650,7 +1654,8 @@ def check_clobber_annotations(routine_list, routine_map):
     shared_tails = {s for s in succs.values() if s is not None}
 
     issues = {'missing': [], 'out_dead': [], 'out_note': [], 'unused': [],
-              'unannotated': [], 'skipped': []}
+              'unannotated': [], 'skipped': [],
+              'eff': eff, 'direct': direct, 'preserved': preserved}
 
     for r in routine_list:
         if not r.lines:
@@ -1707,9 +1712,48 @@ def check_clobber_annotations(routine_list, routine_map):
 # Main
 # -------------------------------------------------------------------------
 
+def suggest_annotations(routine_list, routine_map):
+    """
+    Print computed actual clobber sets as ready-to-paste annotations, for
+    every routine whose declared set does not already cover them.
+
+      In:       routine_list, routine_map as for check_clobber_annotations
+      Out:      None (prints)
+      Clobbers: none
+    """
+    res = check_clobber_annotations(routine_list, routine_map)
+    eff = res['eff']
+    direct = res['direct']
+    shown = 0
+    for r in routine_list:
+        if not r.lines or r.stack_exempt:
+            continue
+        rid = id(r)
+        declared = set(r.clobbers)
+        out_regs = {x for x in r.out_regs if x != 'f'}
+        if r.clobber_ignore or (not declared and not out_regs
+                                and not _routine_has_instructions(r)):
+            continue
+        missing = eff.get(rid, set()) - declared - out_regs
+        if not missing:
+            continue
+        shown += 1
+        print(f"; {r.filepath}:{r.start_lineno}: {r.name}")
+        have = declared - out_regs
+        have_s = regs_to_pairs(have) if have else '(none)'
+        print(f";   Clobbers: {regs_to_pairs(missing)}"
+              f"        # currently: {have_s}")
+    if not shown:
+        print("suggest: every annotated routine already covers its effects.")
+    else:
+        print(f"suggest: {shown} routine(s) could declare more "
+              f"(paste the Clobbers: lines above into each header).")
+
+
 def main():
     argv = sys.argv[1:]
     gate_anno = '--gate-annotations' in argv
+    suggest = '--suggest-anno' in argv
     args = [a for a in argv if not a.startswith('--')]
 
     if not args:
@@ -1747,6 +1791,11 @@ def main():
         file_routines[fp] = routines
         for r in routines:
             all_routines[r.name] = r
+
+    if suggest:
+        routine_list = [r for rs in file_routines.values() for r in rs]
+        suggest_annotations(routine_list, all_routines)
+        return 0
 
     total = 0
 
