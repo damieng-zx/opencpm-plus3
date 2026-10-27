@@ -341,6 +341,254 @@
           ]
         }
       ]
+    },
+    {
+      "id": "zsid",
+      "title": "Microsoft ZSID 1.4",
+      "url": "http://www.retroarchive.org/cpm/lang/zsid.zip",
+      "archive": "zip",
+      "members": [
+        "ZSID.COM"
+      ],
+      "command": "ZSID ZSID.COM",
+      "expect": [
+        "ZSID VERS 1.4"
+      ],
+      "frames": 1500,
+      "steps": [
+        {
+          "text": "D100",
+          "frames": 1200,
+          "expect": [
+            "0100:",
+            "43 4F 50 59 52"
+          ]
+        },
+        {
+          "text": "G0",
+          "frames": 1200,
+          "expect": [
+            "A>"
+          ]
+        }
+      ],
+      "notes": "ZSID 1.4 debugger: loads a .COM, dumps memory at 0100h and warm-boots with G0. Exercises file loading, console output and the warm-boot path."
+    },
+    {
+      "id": "zork2",
+      "title": "Zork II",
+      "url": "http://www.retroarchive.org/cpm/games/zork123_80.zip",
+      "archive": "zip",
+      "members": [
+        "ZORK2.COM",
+        "ZORK2.DAT"
+      ],
+      "command": "ZORK2",
+      "expect": [
+        "Inside the Barrow",
+        ">"
+      ],
+      "frames": 2000,
+      "steps": [
+        {
+          "text": "take lantern",
+          "frames": 1200,
+          "expect": [
+            "Taken"
+          ]
+        },
+        {
+          "text": "save",
+          "frames": 1500,
+          "expect": [
+            "default file name is ZORK2.SAV"
+          ]
+        },
+        {
+          "text": "ZORK2.SAV",
+          "frames": 2500,
+          "expect": [
+            "Type <ENTER> to continue"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 1500,
+          "expect": [
+            "Ok."
+          ]
+        },
+        {
+          "text": "quit",
+          "frames": 1500,
+          "expect": [
+            "Do you wish to leave the game"
+          ]
+        },
+        {
+          "text": "y",
+          "frames": 1500,
+          "expect": [
+            "A>"
+          ]
+        },
+        {
+          "text": "DIR ZORK2.SAV",
+          "frames": 1200,
+          "expect": [
+            "ZORK2    SAV"
+          ]
+        }
+      ],
+      "notes": "Infocom Zork II: large .DAT reads, inventory, save-file write and directory listing."
+    },
+    {
+      "id": "zork3",
+      "title": "Zork III",
+      "url": "http://www.retroarchive.org/cpm/games/zork123_80.zip",
+      "archive": "zip",
+      "members": [
+        "ZORK3.COM",
+        "ZORK3.DAT"
+      ],
+      "command": "ZORK3",
+      "expect": [
+        "ZORK III: The Dungeon Master"
+      ],
+      "frames": 2200,
+      "steps": [
+        {
+          "key": "enter",
+          "frames": 1400,
+          "expect": [
+            "Your old friend, the brass lantern"
+          ]
+        },
+        {
+          "text": "take lantern",
+          "frames": 1200,
+          "expect": [
+            "Taken"
+          ]
+        },
+        {
+          "text": "save",
+          "frames": 1500,
+          "expect": [
+            "default file name is ZORK3.SAV"
+          ]
+        },
+        {
+          "text": "ZORK3.SAV",
+          "frames": 2500,
+          "expect": [
+            "Type <ENTER> to continue"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 1500,
+          "expect": [
+            "Ok."
+          ]
+        },
+        {
+          "text": "quit",
+          "frames": 1500,
+          "expect": [
+            "Do you wish to leave the game"
+          ]
+        },
+        {
+          "text": "y",
+          "frames": 1500,
+          "expect": [
+            "A>"
+          ]
+        },
+        {
+          "text": "DIR ZORK3.SAV",
+          "frames": 1200,
+          "expect": [
+            "ZORK3    SAV"
+          ]
+        }
+      ],
+      "notes": "Infocom Zork III: paged intro (one More prompt), large .DAT reads, save-file write and directory listing."
+    },
+    {
+      "id": "wordmaster",
+      "title": "MicroPro WordMaster 1.07A",
+      "url": "http://www.retroarchive.org/cpm/text/Wrdmastr.zip",
+      "archive": "zip",
+      "members": [
+        "WM.COM"
+      ],
+      "command": "WM",
+      "expect": [
+        "MicroPro WORDMASTER release 1.07A",
+        "NO FILE NAME"
+      ],
+      "frames": 1800,
+      "steps": [
+        {
+          "text": "WM TEST.TXT",
+          "frames": 2500
+        },
+        {
+          "text": "HELLO WORLD",
+          "frames": 1200,
+          "expect": [
+            "HELLO WORLD"
+          ]
+        }
+      ],
+      "notes": "WordMaster 1.07A: start-up banner and the full-screen editor opening a file; typed text is rendered through the BIOS console. Saving needs ESC, which the +3 keyboard cannot produce (Caps+Sym only gives control codes), so the test stops at the editing screen."
+    },
+    {
+      "id": "supercalc1",
+      "title": "SuperCalc 1.05",
+      "url": "http://www.retroarchive.org/cpm/business/Suprcalc.zip",
+      "archive": "zip",
+      "members": [
+        "SCHAZ15.COM",
+        "SC.OVL"
+      ],
+      "command": "SCHAZ15",
+      "expect": [
+        "SuperCalc(tm)",
+        "Version  1.05"
+      ],
+      "frames": 2200,
+      "steps": [
+        {
+          "key": "enter",
+          "frames": 2500,
+          "expect": [
+            "Width:",
+            "Memory:"
+          ]
+        },
+        {
+          "text": "123",
+          "frames": 1000
+        },
+        {
+          "text": "/Q",
+          "frames": 1500,
+          "expect": [
+            "Y(es) or N(o)"
+          ]
+        },
+        {
+          "text": "Y",
+          "frames": 1500,
+          "expect": [
+            "A>"
+          ]
+        }
+      ],
+      "notes": "SuperCalc 1.05, the pre-installed Hazeltine build (SCHAZ15.COM; SC.COM in this archive wants a missing SC.HLP). Spreadsheet start-up, cell entry and quit. Saving a .CAL aborts with 'program diskette MUST remain' - SuperCalc's media check does not accept the image."
     }
   ]
 }

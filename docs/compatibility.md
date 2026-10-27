@@ -17,6 +17,11 @@ Tests were run on 2026-10-27 through the zx84 MCP server.
 | Title | Version | What was checked | Notes |
 |---|---|---|---|
 | **Zork I** | Revision 88 | Boots, prints the Zork banner, reaches “West of House” | Large `.DAT` file, random reads |
+| **Zork II** | Release 48 | Banner, “Inside the Barrow”, inventory, `save` writes `ZORK2.SAV`, `quit` returns to `A>` | Large `.DAT` reads plus a save-file write |
+| **Zork III** | Release 17 | Paged intro (one More prompt), save and quit | Same engine as Zork I/II |
+| **ZSID** | 1.4 | Loads a `.COM`, `D100` dumps memory, `G0` warm-boots | Debugger file load and console output |
+| **SuperCalc** | 1.05 | Banner, grid, cell entry, `/Q` + `Y` quit | `SCHAZ15.COM`, the Hazeltine build. Saving a `.CAL` fails its “program diskette” media check |
+| **WordMaster** | 1.07A | Banner and editor start; typed text is displayed | Editing works, but saving needs `ESC`, which the +3 keyboard cannot send |
 | **dBASE II** | 2.43 | Starts, date prompt, dot prompt, `QUIT` returns to `A>` | FCB random I/O, overlays |
 | **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | ⚠️ VT-100 escapes such as `ESC[?3h`, `ESC[2J`, `ESC[H` remain visible; the screen layer implements VT52 + ADM-3A, not VT-100 |
 | **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
@@ -69,7 +74,7 @@ Pascal via TINST and leave WordStar unchanged.
 
 - [ ] WordStar 3.3
 - [ ] WordStar 4.0
-- [ ] WordMaster
+- [x] WordMaster - starts and edits; saving needs ESC (automated)
 - [ ] Perfect Writer 1.03
 - [ ] SpellStar 3.30
 - [ ] SuperWriter 1.02
@@ -97,11 +102,11 @@ Pascal via TINST and leave WordStar unchanged.
 - [x] Microsoft M80 / L80 - works (automated)
 - [x] Microsoft MACRO-80 package - same binaries as M80 / L80 (automated)
 - [x] SLR Z80 assembler - known issue (needs multi-sector F20)
-- [ ] ZSID debugger
+- [x] ZSID debugger - works (automated)
 
 ### Spreadsheets, business and databases
 
-- [ ] SuperCalc (original)
+- [x] SuperCalc (original) - works; .CAL save blocked by its media check (automated)
 - [ ] Microsoft Multiplan 1.05
 - [ ] Plan-80
 - [ ] MicroStat

@@ -60,6 +60,11 @@ separate, explicitly triggered workflow.
 | `bascom53` | Microsoft BASIC Compiler 5.3 | BASIC-80 → OBSLIB → stand-alone `.COM`, then run | Pass |
 | `aztec106` | Aztec C 1.06D | cc → asm → object → link with C.LIB → run | Pass |
 | `z80asm` | SLR Z80ASM 1.32 | Direct-to-`.COM` macro assembler | Known issue |
+| `zsid` | Microsoft ZSID 1.4 | Debugger: load, memory dump, `G0` | Pass |
+| `zork2` | Zork II | Large `.DAT`, save-file write | Pass |
+| `zork3` | Zork III | Paged intro, large `.DAT`, save-file write | Pass |
+| `wordmaster` | MicroPro WordMaster 1.07A | Full-screen editor, BIOS console | Pass |
+| `supercalc1` | SuperCalc 1.05 | Spreadsheet start, cell entry, quit | Pass |
 
 Known issues are recorded in the manifest and printed by the runner:
 
@@ -91,6 +96,16 @@ Known issues are recorded in the manifest and printed by the runner:
   and it reports `Line Too Long`.  Full multi-sector F20 transfers would
   fix it; the prototype that did so broke PIP's copy, so the documented
   single-record behaviour stands for now.
+
+- **WordMaster 1.07A** starts, opens a file and renders typed text, but
+  leaving insert mode needs `ESC`, which the +3 keyboard cannot produce
+  (`Caps+Sym` only yields control codes), so the package stops at the
+  editing screen instead of saving.
+- **SuperCalc 1.05** runs its grid and accepts cell entries, but saving a
+  `.CAL` aborts with `SuperCalc program diskette MUST remain on disk
+  drive` — its media check does not accept the image.  The archive's
+  `SC.COM` also needs an `SC.HLP` that is not shipped; `SCHAZ15.COM`
+  (the pre-installed Hazeltine build) works.
 
 The assembler/compiler packages use fixtures from
 `tests/realworld/fixtures/` (`HELLO.MAC`, `CHELLO.FOR`, `CHELLO.BAS`,
@@ -155,8 +170,8 @@ need conversion first.
 | MBASIC 5.21 | [Mbasic.com](http://www.retroarchive.org/cpm/lang/Mbasic.com) | Single `.COM` |
 | SuperCalc2 | [sc2.zip](http://www.retroarchive.org/cpm/business/sc2.zip) | `SC2.COM`, `SC2.OVL`, `SC2.HLP` |
 | dBASE II | [DBASEII.ZIP](http://www.retroarchive.org/cpm/dbase/dbaseii.zip) | `DBASE.COM`, `DBASEOVR.COM`, `DBASEMSG.TXT` |
-| Zork I–III | [ZORK123_80.ZIP](http://www.retroarchive.org/cpm/games/zork123_80.zip) | Use one game at a time; Zork I is ~94 KB |
-| VEDIT Plus | [D1](http://www.retroarchive.org/cpm/text/VEDIT_D1.ZIP), [D2](http://www.retroarchive.org/cpm/text/VEDIT_D2.ZIP) | Full-screen editor |
+| Zork I–III | [ZORK123_80.ZIP](http://www.retroarchive.org/cpm/games/zork123_80.zip) | Use one game at a time; Zork I is ~94 KB - Zork II/III automated as `zork2`/`zork3` |
+| VEDIT Plus | [D1](http://www.retroarchive.org/cpm/text/vedit_d1.zip), [D2](http://www.retroarchive.org/cpm/text/vedit_d2.zip) | Full-screen editor |
 | PeachText/PeachCalc | [PEACHTXT.ZIP](http://www.retroarchive.org/cpm/text/PEACHTXT.ZIP) | Word processor + spreadsheet |
 | Kaypro 2X bundle | [KAYPRO2X.ZIP](http://www.retroarchive.org/cpm/os/KAYPRO2X.ZIP) | 279-entry tree of small utilities and apps |
 
@@ -180,13 +195,13 @@ need conversion first.
 | M80 + L80 | [M80.COM](http://www.retroarchive.org/cpm/lang/m80.com), [L80.COM](http://www.retroarchive.org/cpm/lang/l80.com) |
 | Microsoft MACRO-80 package | [MASM-80.ZIP](http://www.retroarchive.org/cpm/lang/MASM-80.ZIP) - automated as `m80l80` |
 | SLR Z80 assembler | [Z80ASM.ZIP](http://www.retroarchive.org/cpm/lang/Z80ASM.ZIP) - automated as `z80asm` |
-| ZSID debugger | [ZSID.ZIP](http://www.retroarchive.org/cpm/lang/ZSID.ZIP) |
+| ZSID debugger | [zsid.zip](http://www.retroarchive.org/cpm/lang/zsid.zip) - automated as `zsid` |
 
 ### Word processing and text
 
 | Software | Download |
 |---|---|
-| WordMaster | [Wrdmastr.zip](http://www.retroarchive.org/cpm/text/Wrdmastr.zip) |
+| WordMaster | [Wrdmastr.zip](http://www.retroarchive.org/cpm/text/Wrdmastr.zip) - automated as `wordmaster` |
 | Perfect Writer 1.03 | [PERF103.ZIP](http://www.retroarchive.org/cpm/text/PERF103.ZIP) |
 | SpellStar 3.30 | [SPELSTAR.ZIP](http://www.retroarchive.org/cpm/text/SPELSTAR.ZIP) |
 | SuperWriter 1.02 | [S_writer.zip](http://www.retroarchive.org/cpm/text/S_writer.zip) |
@@ -199,7 +214,7 @@ need conversion first.
 
 | Software | Download |
 |---|---|
-| SuperCalc | [Suprcalc.zip](http://www.retroarchive.org/cpm/business/Suprcalc.zip) |
+| SuperCalc | [Suprcalc.zip](http://www.retroarchive.org/cpm/business/Suprcalc.zip) - automated as `supercalc1` |
 | Microsoft Multiplan 1.05 | [MP_105.ZIP](http://www.retroarchive.org/cpm/business/MP_105.ZIP) |
 | Multiplan installer | [MULTPLAN.ZIP](http://www.retroarchive.org/cpm/business/MULTPLAN.ZIP) |
 | Plan-80 | [PLAN80.ZIP](http://www.retroarchive.org/cpm/business/PLAN80.ZIP) |
