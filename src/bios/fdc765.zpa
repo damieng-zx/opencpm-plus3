@@ -986,7 +986,7 @@ fdc_read_sector:
     cp 0x80                    ; ST0 bits 7:6 >= 10 = real failure
     jr nc, .error
     ld a, b                    ; ST1
-    and 0x37                   ; Check error bits (OR, ND, NW, DE, MA)
+    and 0x3B                   ; DE, OR, ND, NW, MA (EN is normal)
     jr nz, .error
 
     pop de                     ; Clean stack
@@ -1096,7 +1096,7 @@ fdc_write_sector:
     cp 0x80
     jr nc, .error
     ld a, b
-    and 0x37
+    and 0x3B                   ; DE, OR, ND, NW, MA (EN is normal)
     jr nz, .error
 
     pop de

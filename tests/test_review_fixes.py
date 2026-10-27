@@ -507,5 +507,14 @@ class P2F49Bounds(unittest.TestCase):
         self.assertIn("jp bdos_eok", f49)
 
 
+class P2FdcSt1Mask(unittest.TestCase):
+    """ST1 error mask must include ND (0x08) and exclude reserved bit 2."""
+
+    def test_st1_mask(self):
+        text = source("src/bios/fdc765.zpa")
+        self.assertEqual(text.count("and 0x3B"), 2)
+        self.assertNotIn("and 0x37", text)
+
+
 if __name__ == "__main__":
     unittest.main()
