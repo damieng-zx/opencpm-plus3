@@ -56,7 +56,7 @@ start:
     ld a, b
     or a
     jp z, .run_all
-    cp 29
+    cp 30
     jp nc, .run_all            ; Out of range → run all
     ; Jump to the specific test via table
     dec a                      ; 0-based index
@@ -77,6 +77,7 @@ start:
     dw .run_t14, .run_t15, .run_t16, .run_t17
     dw .run_t18, .run_t19, .run_t20, .run_t21, .run_t22
     dw .run_t23, .run_t24, .run_t25, .run_t26, .run_t27, .run_t28
+    dw .run_t29
 
     ; Single-test runners: run the test then exit
 .run_t1:  call test1
@@ -135,6 +136,8 @@ start:
     jp done
 .run_t28: call test28
     jp done
+.run_t29: call test29
+    jp done
 
 .run_all:
     call test1
@@ -165,6 +168,7 @@ start:
     call test26
     call test27
     call test28
+    call test29
     jp done
 
 test1:
@@ -2524,6 +2528,263 @@ test28:
     call BDOS
     ret
 
+test29:
+    ; === T29: F99 truncate file ===
+    ; Write 40 records, truncate to 20, check the size, the free space and
+    ; that records 0..19 survive; then truncate to 0 and check the disk is
+    ; back to its original free space.
+    ld de, msg_t29
+    ld c, 9
+    call BDOS
+
+    ld hl, fn_test6
+    call delete_name
+
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld e, 0                    ; F46 for A:
+    ld c, 46
+    call BDOS
+    or a
+    jp nz, .t29_fail
+    ld hl, (DMA)
+    ld (t29_before), hl
+
+    ; Create the file and write 40 records.
+    ld hl, fn_test6
+    call set_fcb
+    ld de, FCB1
+    ld c, 22                   ; make
+    call BDOS
+    cp 0xFF
+    jp z, .t29_fail
+
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld hl, DMA
+    ld b, 128
+.t29_fill:
+    ld (hl), 'Z'
+    inc hl
+    djnz .t29_fill
+    ld b, 40
+.t29_write:
+    push bc
+    ld de, FCB1
+    ld c, 21                   ; write sequential
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t29_fail
+    djnz .t29_write
+
+    ld de, FCB1
+    ld c, 16                   ; close
+    call BDOS
+
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld e, 0
+    ld c, 46
+    call BDOS
+    or a
+    jp nz, .t29_fail
+    ld hl, (DMA)
+    ld (t29_written), hl
+
+    ld a, 1
+    ld (t29_step), a
+    ; Reject an attempt to extend the file.
+    ld hl, fn_test6
+    call set_fcb
+    ld de, FCB1
+    ld c, 15                   ; open
+    call BDOS
+    cp 0xFF
+    jp z, .t29_fail
+    ld a, 100                  ; beyond EOF
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 99
+    call BDOS
+    cp 0xFF
+    jp nz, .t29_fail
+
+    ld a, 2
+    ld (t29_step), a
+    ; Truncate to 20 records.
+    ld a, 20
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 99
+    call BDOS
+    or a
+    jp nz, .t29_fail
+
+    ld a, 3
+    ld (t29_step), a
+    ; F35 must now report 20 records.
+    ld de, FCB1
+    ld c, 35
+    call BDOS
+    ld a, (FCB1 + 33)
+    cp 20
+    jp nz, .t29_fail
+    ld a, (FCB1 + 34)
+    or a
+    jp nz, .t29_fail
+    ld a, (FCB1 + 35)
+    or a
+    jp nz, .t29_fail
+
+    ld a, 4
+    ld (t29_step), a
+    ; Free space must have grown by two blocks (16 records).
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld e, 0
+    ld c, 46
+    call BDOS
+    or a
+    jp nz, .t29_fail
+    ld hl, (t29_written)
+    ld de, 16
+    add hl, de
+    ld de, (DMA)
+    ld a, h
+    cp d
+    jp nz, .t29_fail
+    ld a, l
+    cp e
+    jp nz, .t29_fail
+
+    ld a, 5
+    ld (t29_step), a
+    ; Records 0..19 read back, record 20 is EOF.
+    ld hl, fn_test6
+    call set_fcb
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    jp z, .t29_fail
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld b, 20
+.t29_read:
+    push bc
+    ld de, FCB1
+    ld c, 20
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t29_fail
+    ld a, (DMA)
+    cp 'Z'
+    jp nz, .t29_fail
+    djnz .t29_read
+    ld a, 6
+    ld (t29_step), a
+    ld de, FCB1
+    ld c, 20
+    call BDOS
+    cp 1                       ; EOF
+    jp nz, .t29_fail
+
+    ld a, 7
+    ld (t29_step), a
+    ; Truncate to zero: the file stays, but empty.
+    xor a
+    ld (FCB1 + 33), a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 99
+    call BDOS
+    or a
+    jp nz, .t29_fail
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+
+    ld a, 8
+    ld (t29_step), a
+    ld hl, fn_test6
+    call set_fcb
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    jp z, .t29_fail
+    ld de, FCB1
+    ld c, 35
+    call BDOS
+    ld a, (FCB1 + 33)
+    or a
+    jp nz, .t29_fail
+    ld a, (FCB1 + 34)
+    or a
+    jp nz, .t29_fail
+
+    ld a, 9
+    ld (t29_step), a
+    ; All blocks are back.
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld e, 0
+    ld c, 46
+    call BDOS
+    or a
+    jp nz, .t29_fail
+    ld hl, (t29_before)
+    ld de, (DMA)
+    ld a, h
+    cp d
+    jp nz, .t29_fail
+    ld a, l
+    cp e
+    jp nz, .t29_fail
+
+    ld hl, fn_test6
+    call delete_name
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t29_fail:
+    push af
+    ld hl, fn_test6
+    call delete_name
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld de, msg_step
+    ld c, 9
+    call BDOS
+    ld a, (t29_step)
+    call print_hex_a
+    pop af
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
 ; --- shared helpers for T18-T22 ---
 ; set_fcb: HL = 11-byte name; clear FCB1 and copy the name to FCB1+1.
 set_fcb:
@@ -2618,6 +2879,7 @@ fn_fill_all: db "FILL????TMP"
 fn_ram:   db "RAMTEST TMP"
 fn_test4: db "TEST4   TMP"
 fn_test5: db "TEST5   TMP"
+fn_test6: db "TEST6   TMP"
 t10_before: dw 0
 t25_cb:   dw t25_text
           dw t25_end - t25_text
@@ -2631,6 +2893,9 @@ t28_buf:  ds 512
 t28_chk:  ds 128
 t27_ptr:  dw 0
 t28_ptr:  dw 0
+t29_before: dw 0
+t29_written: dw 0
+t29_step: db 0
 
 msg_hdr:  db "DISKTEST v7", 13, 10, "$"
 msg_pass: db " PASS", 13, 10, "$"
@@ -2666,5 +2931,6 @@ msg_t25:  db "T25 F111 write block$"
 msg_t26:  db "T26 F59 load overlay$"
 msg_t27:  db "T27 F44 multi write$"
 msg_t28:  db "T28 F44 multi write C:$"
+msg_t29:  db "T29 F99 truncate$"
 msg_step: db " step=0x$"
 msg_skip: db " SKIP", 13, 10, "$"

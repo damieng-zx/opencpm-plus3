@@ -347,6 +347,21 @@ Programs should close any open files before exiting (BDOS F16).
 - **Out**: A=0
 - **Note**: Our buffers are per-call, so there is nothing to purge.
 
+#### F99 — Truncate File
+- **In**: DE=FCB; R0/R1/R2 = required file length in 128-byte records
+- **Out**: A=0 on success, 0xFF if the file is not found, the target would
+  extend the file, the drive is invalid, the file is read-only, or R2 is
+  non-zero (this filesystem never exceeds 65535 records).
+- **Effect**: Extents past the new length are removed from the directory
+  and their blocks returned to the allocation vector. The extent holding
+  the cut keeps only the blocks that hold records below the target and
+  gets `RC = target - extent_base`. Truncating to zero keeps a single
+  empty extent, so the file still exists with size 0. The FCB is
+  re-synchronised to extent 0 (as F15 would leave it), with `CR = 0`.
+- **Note**: No XFCB is involved — this filesystem has no passwords or
+  date stamps, so the password hook in the CP/M 3 definition is a no-op
+  here.
+
 #### F104 — Set Date/Time
 - **In**: DE=address of 4-byte date/time: `[days_lo, days_hi, hour_BCD, min_BCD]`
 

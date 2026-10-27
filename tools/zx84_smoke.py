@@ -277,18 +277,18 @@ class Smoke:
                 self.mcp.call("key", {"name": "enter"})
                 self.mcp.call("run", {"frames": 1500})
                 continue
-            if "A>" in screen and any("T28 " in line for line in self.history):
+            if "A>" in screen and any("T29 " in line for line in self.history):
                 break
             self.mcp.call("run", {"frames": 1200})
         else:
             self.record()
             screen = self.text()
             if not ("A>" in screen and
-                    any("T28 " in line for line in self.history)):
+                    any("T29 " in line for line in self.history)):
                 raise SmokeError("DISKTEST did not finish:\n" + screen)
 
         history = "\n".join(self.history)
-        missing = [n for n in range(1, 29)
+        missing = [n for n in range(1, 30)
                    if not any(f"T{n} " in line and "PASS" in line
                               for line in self.history)]
         if missing:

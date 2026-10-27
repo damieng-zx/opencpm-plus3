@@ -70,6 +70,30 @@ class ChainAndReturnCode(unittest.TestCase):
         self.assertIn("ld (CCP_CHAIN_ADDR), a", text)
 
 
+class TruncateFile(unittest.TestCase):
+    def test_f99_is_dispatched(self):
+        text = source("src/bdos/bdos.zpa")
+        table = text[text.index("dispatch_ext:"):text.index("; @proc bdos_ret")]
+        self.assertIn("bf_f99", table)
+
+    def test_f99_frees_blocks_and_cuts_rc(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f99:"):text.index("; F120: Get SETDEF order byte")]
+        self.assertIn("call clear_alloc_bit", body)     # via f99_free_from
+        self.assertIn("call write_dir_entry", body)
+        self.assertIn("ld (hl), 0xE5", body)            # drop whole extents
+        self.assertIn("call find_fcb_extent", body)     # re-sync the FCB
+        self.assertIn(".f99_err", body)
+
+    def test_disktest_covers_f99(self):
+        text = source("src/test/disktest.asm")
+        body = text[text.index("test29:"):text.index("; --- shared helpers")]
+        self.assertIn("ld c, 99", body)                 # F99
+        self.assertIn("ld c, 35", body)                 # F35 size check
+        self.assertIn("ld c, 46", body)                 # F46 free-space check
+        self.assertIn("cp 0xFF", body)                  # extension rejected
+
+
 class LoadOverlay(unittest.TestCase):
     def test_f59_reads_load_address_from_fcb(self):
         text = source("src/bdos/bdos.zpa")

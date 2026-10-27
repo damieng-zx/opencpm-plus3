@@ -115,6 +115,13 @@ f59_dma:    dw 0               ; saved DMA address
 f111_addr:  dw 0               ; F111 text address
 f111_len:   dw 0               ; F111 text length
 f111_cb:    dw 0               ; F111 control block pointer
+f99_target: dw 0               ; F99 requested length in records
+f99_size:   dw 0               ; F99 current length in records
+f99_pos:    dw 0               ; F99 directory scan position
+f99_entry:  dw 0               ; F99 current directory entry
+f99_blocks: db 0               ; F99 first alloc slot to free
+f99_newrc:  db 0               ; F99 record count for the cut extent
+f99_found:  db 0               ; F99 saw at least one extent
 
 ; Private SETDEF state (F120..F123). Not in the SCB — only reachable via
 ; our own BDOS functions. Default: no search path (current drive only),
@@ -215,7 +222,7 @@ dispatch_low:
     dw bf_f48, bf_f49, bf_f50
 
 dispatch_ext:                             ; function 99..123
-    dw bdos_efail, bdos_efail             ; 99, 100
+    dw bf_f99, bdos_efail                 ; 99 truncate, 100 set label
     dw bdos_eok                           ; 101
     dw bdos_efail, bdos_efail             ; 102, 103
     dw bf_f104, bf_f105
@@ -4711,6 +4718,338 @@ bf_f111:
 ; @end
 bf_f112:
     jp bdos_eok
+
+
+; F99: Truncate File
+;   In:  DE = FCB; R0/R1/R2 = required length in 128-byte records
+;   Out: A = 0 (truncated) or 0xFF (not found, would extend, bad drive,
+;        read-only file, or R2 != 0)
+;   Extents past the new length are deleted and their blocks returned to
+;   the allocation vector; the extent holding the cut keeps only the
+;   blocks below it and gets RC = target - extent_base.  The FCB is
+;   re-synchronised to extent 0 (like F15), with CR = 0.
+; @proc bf_f99
+; @param %fcb:u16   de
+; @param %func:u8   c
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+bf_f99:
+    pop de
+    pop bc
+    call setup_fcb(de)
+    call select_fcb_drive
+    jp c, .f99_err
+    call is_fcb_readonly
+    jp nz, .f99_err
+
+    ; New length comes from R0/R1; R2 must be zero on this filesystem.
+    ld a, (ix + 35)
+    or a
+    jp nz, .f99_err
+    ld a, (ix + 34)
+    ld (f99_target + 1), a
+    ld a, (ix + 33)
+    ld (f99_target), a
+
+    ; --- pass 1: find the file and its current length -------------------
+    xor a
+    ld (f99_found), a
+    ld hl, 0
+    ld (f99_size), hl
+    ld (f99_pos), hl
+.p1_loop:
+    ld de, (f99_pos)
+    call read_dir_entry
+    jp c, .p1_done
+    ex de, hl                   ; DE = entry
+    call f99_match_de
+    jr nz, .p1_next
+    ld a, 1
+    ld (f99_found), a
+    call f99_base_of            ; HL = extent base in records
+    push de
+    push hl
+    ld hl, de
+    ld bc, 15
+    add hl, bc
+    ld a, (hl)                  ; RC
+    pop hl
+    pop de
+    ld c, a
+    ld b, 0
+    add hl, bc                  ; base + RC = end record of this extent
+    ld de, (f99_size)
+    ld a, h
+    cp d
+    jr c, .p1_next
+    jr nz, .p1_set
+    ld a, l
+    cp e
+    jr c, .p1_next
+.p1_set:
+    ld (f99_size), hl
+.p1_next:
+    ld hl, (f99_pos)
+    inc hl
+    ld (f99_pos), hl
+    jr .p1_loop
+
+.p1_done:
+    ld a, (f99_found)
+    or a
+    jp z, .f99_err
+    ; Target must not exceed the current length (F99 cannot extend).
+    ld hl, (f99_target)
+    ld de, (f99_size)
+    ld a, h
+    cp d
+    jp c, .p2_start
+    jp nz, .f99_err
+    ld a, l
+    cp e
+    jp c, .p2_start
+    jp z, .p2_start
+    jp .f99_err
+
+    ; --- pass 2: cut the extents ---------------------------------------
+.p2_start:
+    ld hl, 0
+    ld (f99_pos), hl
+.p2_loop:
+    ld de, (f99_pos)
+    call read_dir_entry
+    jp c, .p2_done
+    ex de, hl                   ; DE = entry
+    ld (f99_entry), de
+    call f99_match_de
+    jp nz, .p2_next
+    call f99_base_of            ; HL = base
+    ld de, (f99_target)
+    ld a, h
+    cp d
+    jp c, .p2_below
+    jp nz, .p2_above
+    ld a, l
+    cp e
+    jr c, .p2_below
+.p2_above:
+    ; base >= target: drop this extent, unless it is extent 0 and the
+    ; file is being truncated to nothing (keep an empty file).
+    ld a, h
+    or l
+    jr nz, .p2_drop
+    xor a
+    ld (f99_newrc), a
+    ld (f99_blocks), a
+    call f99_free_from
+    ld hl, (f99_entry)
+    ld de, 15
+    add hl, de
+    xor a
+    ld (hl), a                  ; RC = 0
+    call write_dir_entry
+    jr .p2_next
+.p2_below:
+    ; Is the cut inside this extent?  base + 128 > target?
+    push hl
+    ld de, 128
+    add hl, de
+    ld de, (f99_target)
+    ld a, h
+    cp d
+    jr c, .p2_keep
+    jr nz, .p2_partial
+    ld a, l
+    cp e
+    jr c, .p2_keep
+    jr z, .p2_keep
+.p2_partial:
+    pop hl                      ; HL = base
+    ; newrc = target - base
+    ld a, (f99_target)
+    sub l
+    ld (f99_newrc), a
+    ; blocks needed = (newrc + BLM) >> BSH
+    ld a, (cached_blm)
+    ld b, a
+    ld a, (f99_newrc)
+    add a, b
+    ld b, a
+    ld a, (cached_bsh)
+    or a
+    jr z, .p2_blk_ready
+    ld c, a
+    ld a, b
+.p2_blk_shift:
+    srl a
+    dec c
+    jr nz, .p2_blk_shift
+    ld b, a
+.p2_blk_ready:
+    ld a, b
+    ld (f99_blocks), a
+    call f99_free_from
+    ld hl, (f99_entry)
+    ld de, 15
+    add hl, de
+    ld a, (f99_newrc)
+    ld (hl), a                  ; RC = records left in this extent
+    call write_dir_entry
+    jr .p2_next
+.p2_keep:
+    pop hl
+    jr .p2_next
+
+.p2_drop:
+    xor a
+    ld (f99_blocks), a
+    call f99_free_from
+    ld hl, (f99_entry)
+    ld (hl), 0xE5               ; delete the entry
+    call write_dir_entry
+
+.p2_next:
+    ld hl, (f99_pos)
+    inc hl
+    ld (f99_pos), hl
+    jp .p2_loop
+
+.p2_done:
+    ; Re-synchronise the FCB with extent 0, as an open would.
+    ld (ix + 12), 0
+    ld (ix + 14), 0
+    ld (ix + 32), 0
+    call find_fcb_extent        ; fills RC and the allocation map for EX=0
+    jr z, .f99_ok
+    ld (ix + 15), 0
+    push ix
+    pop hl
+    ld de, 16
+    add hl, de
+    ld b, 16
+.f99_clear_map:
+    ld (hl), 0
+    inc hl
+    djnz .f99_clear_map
+.f99_ok:
+    call writeback_fcb
+    xor a
+    ld l, a
+    ld h, a
+    jp bdos_ret
+
+.f99_err:
+    jp bdos_efail
+
+
+; @proc f99_match_de
+; @param %entry:u16 de
+; @out   zero
+; @clobbers af,bc,hl
+; @end
+; f99_match_de — Z set when the directory entry at DE belongs to IX's file.
+f99_match_de:
+    push de
+    ex de, hl
+    ld a, (hl)
+    cp 0xE5
+    jr z, .no
+    ld b, a
+    ld a, (cur_user)
+    cp b
+    jr nz, .no
+    inc hl
+    push ix
+    pop de
+    inc de
+    ld b, 11
+.loop:
+    ld a, (de)
+    and 0x7F
+    ld c, a
+    ld a, (hl)
+    and 0x7F
+    cp c
+    jr nz, .no
+    inc hl
+    inc de
+    djnz .loop
+    pop de
+    xor a                       ; Z set = match
+    ret
+.no:
+    pop de
+    or 1                        ; Z clear = no match
+    ret
+
+
+; @proc f99_base_of
+; @param %entry:u16 de
+; @out   hl
+; @out   de
+; @clobbers af,bc
+; @end
+; f99_base_of — HL = first record of the extent whose directory entry is DE.
+f99_base_of:
+    push de
+    ex de, hl
+    ld bc, 12
+    add hl, bc
+    ld a, (hl)                  ; EX
+    and 0x1F
+    ld e, a
+    inc hl
+    inc hl                      ; +14 = S2
+    ld a, (hl)
+    and 0x07
+    rrca
+    rrca
+    rrca                        ; (S2 & 7) << 5
+    or e
+    ld l, a
+    ld h, 0
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl                  ; * 128
+    pop de
+    ret
+
+
+; @proc f99_free_from
+; @clobbers af,bc,de,hl
+; @end
+; f99_free_from — Free allocation slots (f99_blocks)..15 of the entry at
+; (f99_entry), clearing them in the directory entry.
+f99_free_from:
+.loop:
+    ld a, (f99_blocks)
+    cp 16
+    ret nc
+    ld hl, (f99_entry)
+    ld de, 16
+    add hl, de
+    ld a, (f99_blocks)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, (hl)
+    or a
+    jr z, .next
+    push hl
+    call clear_alloc_bit
+    pop hl
+    ld (hl), 0
+.next:
+    ld a, (f99_blocks)
+    inc a
+    ld (f99_blocks), a
+    jr .loop
 
 
 ; F120: Get SETDEF order byte
