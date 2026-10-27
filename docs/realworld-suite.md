@@ -53,15 +53,21 @@ separate, explicitly triggered workflow.
 | `dbase2` | dBASE II 2.43 | FCB random I/O, overlays, dot prompt | Pass |
 | `supercalc2` | SuperCalc2 1.00 | Spreadsheet, overlays, VT-100 output | Pass |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Known issue |
-| `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Known issue |
-| `turbo3` | Turbo Pascal 3.0 | Compiler/IDE, overlays, TPA | Known issue |
+| `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
+| `turbo3` | Turbo Pascal 3.0 | Compiler/IDE, overlays, TPA | Pass |
 
 Known issues are recorded in the manifest and printed by the runner:
 
-- **WordStar 3.0** returns to the CCP without displaying its menu; this needs
-  terminal-install/BIOS investigation.
-- **MBASIC 5.21** and **Turbo Pascal 3.0** hang before printing their startup
-  banner on the current BDOS/BIOS path.
+- **WordStar 3.0** now starts and draws its no-file menu, but it is an
+  80-column program: on the 51-column screen each line wraps and overlaps
+  the next, so the display is not usable yet.  The underlying crash was a
+  page-zero bug - `(0006h)` held `bdos_stub` (F737) instead of the TPA top
+  (F600), so WordStar sized its screen buffer from the wrong ceiling and
+  overwrote the BIOS jump table.  `common.zpa` now places `bdos_vector` at
+  F600 and page zero 0006h points at it.  An 80-column screen mode is the
+  remaining piece.
+- **Turbo Pascal 3.0** runs (banner, `TURBO.MSG` load, IDE menu) and its
+  80-column frames wrap on the 51-column screen for the same reason.
 
 SuperCalc2 starts successfully, but its VT-100 escape output is still visible
 in the character buffer (`[?3h[2J[H`), so terminal escape handling remains a

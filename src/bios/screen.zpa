@@ -348,6 +348,14 @@ scr_putchar:
     dw .esc_N
     db 'Y'
     dw .esc_Y_start
+    db '='
+    dw .esc_Y_start     ; ADM-3A / Kaypro: absolute cursor position
+    db '+'
+    dw .esc_H           ; ADM-3A / Kaypro: cursor home
+    db '*'
+    dw .esc_star        ; ADM-3A / Kaypro: clear screen and home
+    db 'T'
+    dw .esc_K           ; ADM-3A / Kaypro: erase to end of line
     db 'X'
     dw .esc_X_start
     db '0'
@@ -452,6 +460,14 @@ scr_putchar:
 
 .esc_H:
     ; Home cursor
+    xor a
+    ld (cursor_col), a
+    ld (cursor_row), a
+    ret
+
+.esc_star:
+    ; ADM-3A / Kaypro: clear the screen and home the cursor
+    call _clear_screen
     xor a
     ld (cursor_col), a
     ld (cursor_row), a

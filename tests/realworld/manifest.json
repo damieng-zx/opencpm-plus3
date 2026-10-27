@@ -66,7 +66,7 @@
       "command": "WS",
       "expect": ["WordStar"],
       "frames": 3000,
-      "known_issue": "Returns to the CCP without displaying the menu on the current BIOS/terminal path; needs terminal-install investigation.",
+      "known_issue": "Starts and draws its no-file menu, but WordStar is an 80-column program: the layout does not fit the 51-column screen, so the display wraps and is unreadable. Needs an 80-column screen mode (3px font).",
       "notes": "Full-screen editor; exercises terminal escape handling and overlays."
     },
     {
@@ -79,7 +79,6 @@
       "command": "MBASIC HELLO",
       "expect": ["REAL OK"],
       "frames": 3000,
-      "known_issue": "Hangs after startup before printing the banner on the current BDOS/BIOS path.",
       "notes": "Single .COM interpreter plus a BASIC fixture; exercises console and file I/O."
     },
     {
@@ -89,10 +88,16 @@
       "archive": "zip",
       "members": ["TURBO.COM", "TURBO.OVR", "TURBO.MSG"],
       "command": "TURBO",
-      "expect": ["Turbo Pascal"],
+      "expect": ["TURBO Pascal system", "Include error messages"],
       "frames": 3000,
-      "known_issue": "Hangs before displaying the IDE menu on the current BDOS/BIOS path.",
-      "notes": "Compiler/IDE with overlays; exercises TPA and console handling."
+      "steps": [
+        {
+          "text": "Y",
+          "frames": 2500,
+          "expect": ["Loading A:TURBO.MSG", "Text:"]
+        }
+      ],
+      "notes": "Compiler/IDE with overlays; exercises TPA and console handling. The 80-column IDE layout is wider than the 51-column screen, so the display wraps."
     }
   ]
 }

@@ -28,7 +28,9 @@ This document covers the BDOS, BIOS, terminal, and program conventions for writi
 0003h  db IOBYTE             ; F8/f8-compatible I/O byte
 0004h  db user_drive         ; high nibble = user, low nibble = drive
 0005h  JP bdos               ; BDOS entry point
-0006h  dw bdos_entry         ; BDOS jump target (NOT the TPA top)
+0006h  dw bdos_vector        ; BDOS jump target AND the TPA memory
+                            ; ceiling (equals F600h / TPA_TOP).  CP/M 3
+                            ; programs read this to size the TPA.
 0038h  JP isr_handler        ; IM 1 vector: common tick/motor ISR
 005Ch  FCB1 (36 bytes)       ; first filename argument
 006Ch  FCB2 (36 bytes)       ; second filename argument (overlaps FCB1 AL)
@@ -44,11 +46,14 @@ F600h  common memory starts  ; SCB/BIOS stubs, not usable by programs
 When a .COM program starts executing at 0100h:
 
 - **SP** = 0xF600 (`TPA_TOP` = first byte of common memory). The stack grows
-  down into the TPA; do not use the word at 0006h (that is the BDOS entry).
+  down into the TPA, so memory at and above 0xF600 is off limits.
 - **C** = current default drive (0=A)
 - **Z80 interrupts**: Enabled, IM 1
 - **Page zero**: WBOOT at 0000h, IOBYTE at 0003h, user/drive at 0004h,
-  BDOS at 0005h
+  BDOS at 0005h. The word at 0006h is the BDOS entry (`bdos_vector`) and
+  also the memory ceiling: it equals 0xF600, like a real CP/M 3 where
+  `(0006h)` is `BDOS_base + 6`. Programs that compute their top of memory
+  from it (WordStar, MBASIC, Turbo Pascal, ...) stay below the common area.
 - **DMA address**: 0080h (default)
 - **FCB1** (005Ch): parsed first filename argument from command line
 - **FCB2** (006Ch): parsed second filename argument
@@ -501,7 +506,7 @@ The current column count minus 1 is stored in the SCB at offset 0x1A
 | 0x0D | CR | Cursor to column 0. |
 | 0x1B | ESC | Start escape sequence. |
 
-### Escape Sequences (VT52-compatible subset)
+### Escape Sequences (VT52-compatible subset, plus ADM-3A/Kaypro codes)
 
 Send these via BDOS F2 (one character at a time).
 
@@ -515,6 +520,8 @@ Send these via BDOS F2 (one character at a time).
 | `ESC D` | CUB | Cursor left (stop at column 0) |
 | `ESC H` | HOME | Cursor to (0, 0) |
 | `ESC Y r c` | CUP | Absolute position. r = row+32, c = col+32. Row 0-23, col 0 to cols-1. |
+| `ESC = r c` | CUP | ADM-3A/Kaypro absolute position; same encoding as `ESC Y`. |
+| `ESC +` | HOME | ADM-3A/Kaypro home (same as `ESC H`) |
 | `ESC j` | SCP | Save cursor position |
 | `ESC k` | RCP | Restore cursor position |
 
@@ -523,8 +530,10 @@ Send these via BDOS F2 (one character at a time).
 | Sequence | Name | Effect |
 |----------|------|--------|
 | `ESC E` | CEL | Clear entire screen (cursor stays) |
+| `ESC *` | — | ADM-3A/Kaypro clear screen and home |
 | `ESC J` | ED0 | Erase from cursor to end of screen |
 | `ESC K` | EL0 | Erase from cursor to end of line |
+| `ESC T` | — | ADM-3A/Kaypro erase to end of line (same as `ESC K`) |
 | `ESC d` | ED1 | Erase from top of screen to cursor |
 | `ESC l` | EL1 | Erase entire current line |
 | `ESC o` | EL0d | Erase from start of line to cursor |

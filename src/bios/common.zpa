@@ -29,8 +29,17 @@
 ; Programs access SCB fields directly via common_base + offset (from F49).
 ; This MUST be at offset 0 from the PHASE base.
 ;
+; The first five SCB bytes are reserved, and CP/M 3 defines them as the
+; area holding the page-zero BDOS vector target.  Page zero 0005h is
+; `jp bdos_vector`, and 0006h is the address of bdos_vector, which lives
+; at the common base = TPA_TOP.  Programs (WordStar, MBASIC, Turbo
+; Pascal, ...) read (0006h) as the memory ceiling, so it *must* equal the
+; top of the TPA rather than point into the system stub above it.
+;
 scb_base:
-    ds 5                           ; 0x00-0x04: reserved
+bdos_vector:
+    jp bdos_stub                   ; 0x00-0x02: BDOS entry / memory ceiling
+    ds 2                           ; 0x03-0x04: reserved
 scb_version:
     db 0x31                        ; 0x05: CP/M version (3.1)
     db 0x01                        ; 0x06: system type (1=CP/M Plus)
@@ -152,13 +161,12 @@ bv_shim:
 
 
 ; ==========================================================================
-; bdos_stub — BDOS entry dispatcher (called from JP at 0005h)
+; bdos_stub — BDOS entry dispatcher (reached via `jp bdos_vector` from 0005h)
 ;
 ; This MUST be the first executable code after the bios_visible wrappers.
-; Page zero 0x0005 has JP bdos_stub, and programs set SP to this address.
-; The TPA stack grows DOWN from here into TPA memory. ALL code and mutable
-; data must be placed AFTER bdos_stub — anything before it will be
-; overwritten by the program's stack.
+; bdos_vector (the common base = TPA_TOP) is what page zero 0005h jumps to
+; and what (0006h) points at, so the memory ceiling programs compute from
+; (0006h) is the true top of the TPA.
 ;
 ; @proc bdos_stub
 ; @param %func:u8   c          ; CP/M function number
@@ -168,12 +176,8 @@ bv_shim:
 ; @clobbers bc
 ; @end
 bdos_stub:
-    ; Assert: nothing mutable between SCB/visible table and bdos_stub.
-    ; The TPA stack grows DOWN from this address. If this assertion fires,
-    ; data was placed before bdos_stub that would be corrupted by the stack.
     ; Guard: writable variables must be AFTER bdos_stub, never before.
-    ; The TPA stack grows down from bdos_stub and would corrupt anything below it.
-    assert saved_sp > bdos_stub, "saved_sp must be after bdos_stub (TPA stack grows down from it!)"
+    assert saved_sp > bdos_stub, "saved_sp must be after bdos_stub"
 
     di
     ld (saved_sp), sp
@@ -1047,7 +1051,7 @@ start_tpa:
 
     ld a, JMP_OPCODE
     ld (0x0005), a
-    ld hl, bdos_stub
+    ld hl, bdos_vector             ; = TPA_TOP, the memory ceiling at (0006)
     ld (0x0006), hl
 
     pop af

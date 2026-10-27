@@ -150,8 +150,13 @@ bank 4 when the user calls BDOS or BIOS.
 
 `TPA_TOP = 0xF600` (`COMMON_BASE`) is the published top-of-TPA and the
 initial SP. The stack grows down from F600 into the TPA, so everything in
-common memory (F600 and above) is safe. `bdos_stub` is the BDOS entry, not
-the TPA top; `scb_tpa` is patched to `TPA_TOP`.
+common memory (F600 and above) is safe.
+
+Page zero 0005h jumps to `bdos_vector` at F600 and the word at 0006h is
+that same address. CP/M 3 programs use `(0006h)` as their memory ceiling
+(WordStar, MBASIC and Turbo Pascal all do), so it must be the TPA top and
+not `bdos_stub` (F737), which would let them overwrite the BIOS jump table
+and trampolines. `scb_tpa` is patched to `TPA_TOP` too.
 
 ### Mode 3 (System — BDOS/BIOS bank)
 
@@ -173,7 +178,8 @@ must not place anything below it. Source: `src/bios/common.zpa`.
 
 ```
 F600  scb_base            ┐
-F600  ds 5                │
+F600  jp bdos_stub        │  bdos_vector (page zero 0006h)
+F603  ds 2                │  (rest of the 5 reserved SCB bytes)
 F605  scb_version (0x31)  │
 F61A  scb_conwidth        │  100-byte SCB
 F634  scb_tempdrv         │  (offsets are publicly documented;
@@ -226,7 +232,7 @@ FFFF  ────────────────────  hard limit (
 |----------|-------------------------------|------------------------------------------------------------------|
 | `0xF996` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa.              |
 | `0xF99C` | `copy_record_from_tpa`        | Same - assert at common.zpa.                                 |
-| `bdos_stub` | itself                     | scb_tpa = this address; user stacks set SP to it.                |
+| `bdos_vector` (F600) | itself            | Page zero 0005h/0006h target; (0006h) is the TPA memory ceiling. |
 | SCB offsets `0x05, 0x1A, 0x3A, 0x3C, 0x3E, 0x44, 0x58-0x5C, 0x62` | DRI documented | Programs index off scb_base.    |
 
 If common memory grows past these offsets, FID modules break with no error

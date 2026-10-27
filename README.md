@@ -141,6 +141,7 @@ docs/       API reference, filesystem documentation
 - [XBIOS/TE Interface](docs/cpm-plus-xbios.md)
 - [CI with zx84](docs/ci.md)
 - [zx84 MCP Smoke Test](docs/mcp-smoke-test.md)
+- [CP/M Software Compatibility](docs/compatibility.md)
 - [Real-world CP/M Suite](docs/realworld-suite.md)
 
 ## License
