@@ -485,7 +485,7 @@ bf_f06:
     cp 0xFE
     jp z, .status
     ld c, e
-    call bdos_con_out
+    call con_out               ; direct I/O bypasses BDOS pagination
     jp bdos_ret
 .input:
     xor a

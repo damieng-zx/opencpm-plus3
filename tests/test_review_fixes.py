@@ -534,5 +534,15 @@ class P2TabExpansion(unittest.TestCase):
         self.assertIn("ld e, 'B'", text)
 
 
+class P2F6Pagination(unittest.TestCase):
+    """F6 direct console output must bypass BDOS paging."""
+
+    def test_f6_output_uses_raw_conout(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f06:"):text.index("; F7:")]
+        self.assertIn("call con_out", body)
+        self.assertNotIn("call bdos_con_out", body)
+
+
 if __name__ == "__main__":
     unittest.main()

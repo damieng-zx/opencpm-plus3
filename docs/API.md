@@ -132,7 +132,7 @@ Programs should close any open files before exiting (BDOS F16).
 - **Out**: varies
 - E=0xFF: Read a character (non-blocking). Returns 0 if none ready.
 - E=0xFE: Status check. Returns 0xFF if char ready, 0x00 if not.
-- E=other: Output character E. No echo processing.
+- E=other: Output character E directly. Bypasses BDOS paging and echo processing.
 
 #### F7 — Get IOBYTE
 - **Out**: A=IOBYTE value
