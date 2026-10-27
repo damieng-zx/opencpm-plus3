@@ -14,9 +14,24 @@ python3 tools/zx84_smoke.py
 python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3.dsk
 ```
 
-It exits 0 on success and 1 on a failed assertion. Set `ZX84_DIR` or pass
-`--zx84` when the emulator checkout is not next to this repository. The
-manual flow below remains useful for interactive debugging.
+The CCP checks cover `DIR`, `TYPE`, `HELP`, `SCREEN 32`/`SCREEN 51`,
+`SUBMIT`'s missing-file path (which loads the PRL `SUBMIT.COM`), `RENAME`
+with wildcard `DIR`, invalid `D:`, and the C: PIP/DATE flow.
+
+`tools/zx84_negative.py` builds corrupted copies of the image and requires
+that they do **not** reach `A>`:
+
+```text
+python3 tools/zx84_negative.py
+```
+
+Cases: missing/deleted `CPM3.SYS`, truncated allocation map, block number
+past the end of the disk, corrupted boot-sector checksum, and no disk in
+drive A:.
+
+Both scripts exit 0 on success and 1 on a failed assertion. Set `ZX84_DIR`
+or pass `--zx84` when the emulator checkout is not next to this repository.
+The manual flow below remains useful for interactive debugging.
 
 Run this after:
 

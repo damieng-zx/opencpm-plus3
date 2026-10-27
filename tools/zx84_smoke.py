@@ -33,15 +33,19 @@ class SmokeError(RuntimeError):
     pass
 
 
-def char_buffer_address() -> int:
+def label_address(name: str) -> int:
     listing = ROOT / "build" / "bios.lst"
     if not listing.exists():
         raise SmokeError("build/bios.lst is missing; run build.cmd first")
     for line in listing.read_text(encoding="utf-8", errors="replace").splitlines():
-        m = re.match(r"^\s*\d+\+\s+([0-9A-F]{4})\s+char_buffer:", line)
+        m = re.match(rf"^\s*\d+\+\s+([0-9A-F]{{4}})\b.*\b{re.escape(name)}:", line)
         if m:
             return int(m.group(1), 16)
-    raise SmokeError("char_buffer label not found in build/bios.lst")
+    raise SmokeError(f"{name} label not found in build/bios.lst")
+
+
+def char_buffer_address() -> int:
+    return label_address("char_buffer")
 
 
 class MCP:
@@ -155,6 +159,7 @@ class Smoke:
         self.dsk = dsk
         self.verbose = verbose
         self.cb = char_buffer_address()
+        self.scr_cols = label_address("scr_cols")
         self.history: list[str] = []
 
     def log(self, msg: str) -> None:
@@ -171,11 +176,14 @@ class Smoke:
         return bytes(out[:length])
 
     def screen(self) -> list[str]:
-        data = self.memory(4, self.cb, COLS * ROWS)
-        if len(data) < COLS * ROWS:
+        cols = self.memory(4, self.scr_cols, 1)[0]
+        if cols not in (32, 51):
+            cols = COLS
+        data = self.memory(4, self.cb, cols * ROWS)
+        if len(data) < cols * ROWS:
             raise SmokeError(f"short char_buffer read: {len(data)} bytes")
         return ["".join(chr(b) if 32 <= b < 127 else "."
-                        for b in data[r * COLS:(r + 1) * COLS]).rstrip()
+                        for b in data[r * cols:(r + 1) * cols]).rstrip()
                 for r in range(ROWS)]
 
     def text(self) -> str:
@@ -296,6 +304,31 @@ class Smoke:
 
         self.command("TYPE RPED.SUB", 400)
         self.expect("TYPE", "basic rped")
+
+        self.command("HELP", 500)
+        self.expect("HELP", "Built-in commands:", "DIR", "TYPE", "SCREEN")
+
+        self.command("SCREEN", 500)
+        self.expect("SCREEN query", "Mode: 51 columns")
+
+        self.command("SCREEN 32", 700)
+        if self.memory(4, self.scr_cols, 1)[0] != 32:
+            raise SmokeError("SCREEN 32 did not set scr_cols=32")
+        self.expect("SCREEN 32 prompt", "A>")
+        self.command("SCREEN 51", 700)
+        if self.memory(4, self.scr_cols, 1)[0] != 51:
+            raise SmokeError("SCREEN 51 did not restore scr_cols=51")
+        self.expect("SCREEN 51 prompt", "A>")
+
+        self.command("SUBMIT NOPE.SUB", 900)
+        self.expect("SUBMIT missing", "No 'SUB' File Found", "A>")
+
+        self.command("RENAME TEST.SUB RPED.SUB", 600)
+        self.command("DIR A:*.SUB", 500)
+        self.expect("RENAME", "TEST     SUB")
+        self.command("RENAME RPED.SUB TEST.SUB", 600)
+        self.command("DIR A:*.SUB", 500)
+        self.expect("RENAME restore", "RPED     SUB")
 
         self.command("DIR D:", 400)
         self.expect("invalid drive", "No files")

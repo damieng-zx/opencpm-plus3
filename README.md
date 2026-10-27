@@ -109,6 +109,7 @@ The automated smoke runner boots the image, runs `SYSTEST`, `DISKTEST`,
 
 ```bash
 python3 tools/zx84_smoke.py
+python3 tools/zx84_negative.py   # corrupted images must not boot
 ```
 
 ### Project Structure
