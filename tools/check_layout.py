@@ -111,7 +111,7 @@ def check(sections: list[Section]) -> list[str]:
         ("dirbuf",         "fcb_buf",          128, "directory buffer"),
         ("fcb_buf",        "fcb_user_addr",     36, "FCB shadow buffer"),
         ("xfer_staging",   "ccp_fcb",           32, "inter-bank transfer staging"),
-        ("ccp_fcb",        "bdos_stack_base",   36, "CCP COM-loader FCB"),
+        ("ccp_fcb",        "start_tpa",         36, "CCP COM-loader FCB"),
         ("xdpb_a",         "xdpb_b",            27, "xdpb_a"),
         ("xdpb_b",         "xdpb_c",            27, "xdpb_b"),
     ]

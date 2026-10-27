@@ -168,6 +168,19 @@ Require `DELIM PASS` (not `DELIM BAD`).  The program sets the F9 delimiter
 to `#`, reads it back, and prints `OK#` through F9; only `OK` should
 appear.
 
+### Page-zero compatibility bytes
+
+Run:
+
+```text
+type "P0TEST`enter`"
+run 600
+```
+
+Require `P0 PASS`.  The program sets IOBYTE through F8, user 3 through F32
+and drive A through F14, then checks page zero `0003h` and `0004h` before
+restoring user 0 / IOBYTE 0.
+
 ### 1. Boot and initial directory
 
 At the CCP prompt, run:

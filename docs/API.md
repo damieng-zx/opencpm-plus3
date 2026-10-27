@@ -25,6 +25,8 @@ This document covers the BDOS, BIOS, terminal, and program conventions for writi
 ```
 0000h  JP warm_boot          ; WBOOT vector
 0001h  dw bios_base          ; BIOS jump table address - 3
+0003h  db IOBYTE             ; F8/f8-compatible I/O byte
+0004h  db user_drive         ; high nibble = user, low nibble = drive
 0005h  JP bdos               ; BDOS entry point
 0006h  dw bdos_entry         ; BDOS jump target (NOT the TPA top)
 0038h  JP isr_handler        ; IM 1 vector: common tick/motor ISR
@@ -45,7 +47,8 @@ When a .COM program starts executing at 0100h:
   down into the TPA; do not use the word at 0006h (that is the BDOS entry).
 - **C** = current default drive (0=A)
 - **Z80 interrupts**: Enabled, IM 1
-- **Page zero**: WBOOT at 0000h, BDOS at 0005h
+- **Page zero**: WBOOT at 0000h, IOBYTE at 0003h, user/drive at 0004h,
+  BDOS at 0005h
 - **DMA address**: 0080h (default)
 - **FCB1** (005Ch): parsed first filename argument from command line
 - **FCB2** (006Ch): parsed second filename argument

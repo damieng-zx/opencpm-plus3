@@ -487,47 +487,6 @@ isr_handler:
 
 
 ; ==========================================================================
-; start_tpa — Switch to TPA mode, set up page zero, jump to CCP
-;
-; @proc start_tpa
-; @clobbers af,bc,de,hl
-; @end
-start_tpa:
-    ; Switch to TPA (mode 0: 0,1,2,3)
-    ld a, (motor_flag)
-    or BANK0_1FFD
-    call write_1ffd
-
-    ; Set up page zero in bank 0
-    ; 0000: JP to BIOS visible WBOOT entry (programs use 0001 to find BIOS base)
-    ld a, JMP_OPCODE
-    ld (0x0000), a
-    ld hl, bios_visible + 3       ; Entry 1 = WBOOT in visible table
-    ld (0x0001), hl
-
-    ld a, JMP_OPCODE
-    ld (0x0005), a
-    ld hl, bdos_stub
-    ld (0x0006), hl
-
-    ; Install the common tick/motor ISR at bank 0's 0x0038.  It lives in
-    ; common memory (visible in TPA mode), so the clock and keyboard repeat
-    ; keep running while a TPA program executes.  Programs that need their
-    ; own RST 38 handler can overwrite these three bytes.
-    ld a, JMP_OPCODE
-    ld (0x0038), a
-    ld hl, isr_handler
-    ld (0x0039), hl
-
-    ; Enable interrupts and start CCP
-    im 1
-    ld a, 1
-    ld (isr_installed), a
-    ei
-    jp CCP_ADDR
-
-
-; ==========================================================================
 ; bank_sel — Select CPU bank (BIOS function 27)
 ;
 ; Must live in common memory because switching banks invalidates
@@ -815,8 +774,8 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF9CA, "RAMDISK.FID expects copy_record_to_tpa at 0xF9CA"
-    assert copy_record_from_tpa == 0xF9D0, "RAMDISK.FID expects copy_record_from_tpa at 0xF9D0"
+    assert copy_record_to_tpa == 0xF996, "RAMDISK.FID expects copy_record_to_tpa at 0xF996"
+    assert copy_record_from_tpa == 0xF99C, "RAMDISK.FID expects copy_record_from_tpa at 0xF99C"
 
 
 ; ------------------------------------------------------------------
@@ -1048,9 +1007,72 @@ xfer_staging: ds 32
 ; so a large program cannot overwrite it while the stub is still reading.
 ccp_fcb: ds 36
     assert $ - ccp_fcb == 36, "ccp_fcb must be exactly 36 bytes (CP/M FCB format)"
-    assert ccp_fcb == 0xFB95, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+    assert ccp_fcb == 0xFB61, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
 
 ; BDOS stack (grows downward from bdos_stack label)
+; ==========================================================================
+; start_tpa — Switch to TPA mode, set up page zero, jump to CCP
+;
+; @proc start_tpa
+; @clobbers af,bc,de,hl
+; @end
+start_tpa:
+    ; Snapshot page-zero compatibility bytes while the system bank is
+    ; still mapped.  0003 = IOBYTE, 0004 = (user << 4) | drive.
+    ld a, (cur_user)
+    add a, a
+    add a, a
+    add a, a
+    add a, a
+    ld b, a
+    ld a, (cur_disk)
+    and 0x0F
+    or b
+    push af                    ; 0004 value
+    ld a, (iobyte)
+    push af                    ; 0003 value
+
+    ; Switch to TPA (mode 0: 0,1,2,3)
+    ld a, (motor_flag)
+    or BANK0_1FFD
+    call write_1ffd
+
+    ; Set up page zero in bank 0
+    ; 0000: JP to BIOS visible WBOOT entry (programs use 0001 to find BIOS base)
+    ld a, JMP_OPCODE
+    ld (0x0000), a
+    ld hl, bios_visible + 3       ; Entry 1 = WBOOT in visible table
+    ld (0x0001), hl
+
+    ld a, JMP_OPCODE
+    ld (0x0005), a
+    ld hl, bdos_stub
+    ld (0x0006), hl
+
+    pop af
+    ld (0x0003), a             ; IOBYTE
+    pop af
+    ld (0x0004), a             ; user/drive compatibility byte
+
+    ; Install the common tick/motor ISR at bank 0's 0x0038.  It lives in
+    ; common memory (visible in TPA mode), so the clock and keyboard repeat
+    ; keep running while a TPA program executes.  Programs that need their
+    ; own RST 38 handler can overwrite these three bytes.
+    ld a, JMP_OPCODE
+    ld (0x0038), a
+    ld hl, isr_handler
+    ld (0x0039), hl
+
+    ; Enable interrupts and start CCP
+    im 1
+    ld a, 1
+    ld (isr_installed), a
+    ei
+    jp CCP_ADDR
+
+
+
+
 bdos_stack_base:
 bdos_stack equ bdos_stack_base + 128
     assert bdos_stack - bdos_stack_base == 128, "BDOS stack must be 128 bytes"

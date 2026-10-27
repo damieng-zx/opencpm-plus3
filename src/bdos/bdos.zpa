@@ -229,6 +229,28 @@ bdos_eok:
     jp bdos_ret
 
 
+; sync_page0_du — Keep page zero 0004 = (user << 4) | drive
+;   In:  nothing
+;   Out: nothing
+;   Clobbers: AF, BC, DE
+; @proc sync_page0_du
+; @clobbers af,bc,de
+; @end
+sync_page0_du:
+    ld a, (cur_user)
+    add a, a
+    add a, a
+    add a, a
+    add a, a
+    ld b, a
+    ld a, (cur_disk)
+    and 0x0F
+    or b
+    ld de, 0x0004
+    call write_user_byte
+    ret
+
+
 ; ==========================================================================
 ; Paging support — honors con_mode bit 0 (PAGE). Only BDOS-routed output
 ; paginates; direct BIOS/XBIOS output bypasses this wrapper.
@@ -456,6 +478,8 @@ bf_f08:
     pop bc
     ld a, e
     ld (iobyte), a
+    ld de, 0x0003
+    call write_user_byte
     jp bdos_ret
 
 ; @proc bf_f09
@@ -649,6 +673,7 @@ bf_f14:
     pop bc
     ld a, e
     ld (cur_disk), a
+    call sync_page0_du
     ld hl, 0                   ; Return 0 = OK. Drive validity is checked
     ld a, l                    ; on the first file op, not here.
     jp bdos_ret
@@ -944,6 +969,9 @@ bf_f32:
     jp z, .get
     and 0x0F
     ld (cur_user), a
+    push af
+    call sync_page0_du
+    pop af
     jp bdos_ret
 .get:
     ld a, (cur_user)

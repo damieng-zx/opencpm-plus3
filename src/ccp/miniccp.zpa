@@ -19,7 +19,7 @@ BDOS    equ 0x0005             ; BDOS entry point
 FCB1    equ 0x005C             ; Default FCB 1
 DMA     equ 0x0080             ; Default DMA / command tail
 TPA_TOP equ 0xF600             ; First byte of common memory — initial stack top
-CCP_FCB_ADDR equ 0xFB95        ; common-memory FCB for the COM loader stub
+CCP_FCB_ADDR equ 0xFB61        ; common-memory FCB for the COM loader stub
 
 ; BDOS function numbers
 F_COUT  equ 2                  ; Console output (E = char)

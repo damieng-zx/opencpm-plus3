@@ -238,7 +238,7 @@ class Issue12TpaClock(unittest.TestCase):
 
     def test_start_tpa_installs_real_isr(self):
         text = source("src/bios/common.zpa")
-        body = text[text.index("start_tpa:"):text.index("bank_sel:")]
+        body = text[text.index("start_tpa:"):text.index("common_end", text.index("start_tpa:"))]
         self.assertIn("ld hl, isr_handler", body)
         self.assertIn("(0x0038)", body)
         self.assertNotIn("0xFB", body)
@@ -261,14 +261,14 @@ class Issue14ComFcb(unittest.TestCase):
 
     def test_ccp_uses_common_fcb(self):
         text = source("src/ccp/miniccp.zpa")
-        self.assertIn("CCP_FCB_ADDR equ 0xFB95", text)
+        self.assertIn("CCP_FCB_ADDR equ 0xFB61", text)
         self.assertIn("ld hl, CCP_FCB_ADDR", text)
         self.assertNotIn("0xF600 - 36", text)
 
     def test_common_reserves_fcb(self):
         text = source("src/bios/common.zpa")
         self.assertIn("ccp_fcb: ds 36", text)
-        self.assertIn("ccp_fcb == 0xFB95", text)
+        self.assertIn("ccp_fcb == 0xFB61", text)
 
 
 class Issue15FdcTimeouts(unittest.TestCase):
@@ -580,6 +580,39 @@ class P2F110Delimiter(unittest.TestCase):
         text = source("src/test/delimtest.asm")
         self.assertIn("ld c, 110", text)
         self.assertIn("DELIM PASS", text)
+
+
+class P2PageZeroBytes(unittest.TestCase):
+    """Page zero 0003/0004 track IOBYTE and user/drive."""
+
+    def test_start_tpa_initializes_page_zero(self):
+        text = source("src/bios/common.zpa")
+        body = text[text.index("start_tpa:"):]
+        self.assertIn("ld (0x0003), a", body)
+        self.assertIn("ld (0x0004), a", body)
+        self.assertIn("ld a, (iobyte)", body)
+
+    def test_bdos_updates_page_zero(self):
+        text = source("src/bdos/bdos.zpa")
+        sync = text[text.index("sync_page0_du:"):text.index("CON_MODE_PAGE")]
+        self.assertIn("ld de, 0x0004", sync)
+        self.assertIn("add a, a", sync)
+
+        f8 = text[text.index("bf_f08:"):text.index("bf_f09:")]
+        self.assertIn("ld de, 0x0003", f8)
+        self.assertIn("call write_user_byte", f8)
+
+        f14 = text[text.index("bf_f14:"):text.index("; F24:")]
+        self.assertIn("call sync_page0_du", f14)
+
+        f32 = text[text.index("bf_f32:"):text.index("; F37:")]
+        self.assertIn("call sync_page0_du", f32)
+
+    def test_p0test_program(self):
+        text = source("src/test/p0test.asm")
+        self.assertIn("P0 PASS", text)
+        self.assertIn("ld a, (0x0003)", text)
+        self.assertIn("ld a, (0x0004)", text)
 
 
 if __name__ == "__main__":
