@@ -1105,9 +1105,14 @@ fdc_write_sector:
 
 .error:
     pop de
+    bit 1, b                   ; ST1.NW: disk is write-protected
+    jr nz, .readonly
     dec e
     jp nz, .retry
     or 1
+    ret
+.readonly:
+    ld a, 2                    ; BIOS WRITE: read-only disk
     ret
 
 

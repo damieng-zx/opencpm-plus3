@@ -239,7 +239,7 @@ Programs should close any open files before exiting (BDOS F16).
 
 #### F21 — Write Sequential
 - **In**: DE=FCB address
-- **Out**: A=0 (OK), 1 (directory full), 2 (disk full), 0xFF (write error)
+- **Out**: A=0 (OK), 1 (directory full), 2 (disk full or write-protected), 0xFF (write error)
 - **Note**: Writes 128 bytes from DMA. Advances CR. Allocates blocks as needed.
 
 #### F22 — Make File
@@ -263,7 +263,7 @@ Programs should close any open files before exiting (BDOS F16).
 
 #### F34 — Write Random
 - **In**: DE=FCB address (R0/R1/R2 = record number)
-- **Out**: A=0 (OK), 1 (directory full), 2 (disk full), 6 (random record overflow)
+- **Out**: A=0 (OK), 1 (directory full), 2 (disk full or write-protected), 6 (random record overflow)
 - **Note**: Writes 128 bytes from DMA to arbitrary record position.
 
 #### F35 — Compute File Size

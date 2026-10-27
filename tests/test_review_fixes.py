@@ -615,5 +615,21 @@ class P2PageZeroBytes(unittest.TestCase):
         self.assertIn("ld a, (0x0004)", text)
 
 
+class P2WriteProtectDetection(unittest.TestCase):
+    """A write-protected disk must report read-only instead of retrying."""
+
+    def test_fdc_maps_nw_to_readonly(self):
+        text = source("src/bios/fdc765.zpa")
+        body = text[text.index("fdc_write_sector:"):text.index("fdc_send_byte:")]
+        self.assertIn("bit 1, b", body)
+        self.assertIn("ld a, 2", body)
+
+    def test_bdos_propagates_readonly(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index(".wseq_error:"):text.index(".wseq_new_extent:")]
+        self.assertIn("cp 2", body)
+        self.assertIn("jp z, .wseq_ro", body)
+
+
 if __name__ == "__main__":
     unittest.main()

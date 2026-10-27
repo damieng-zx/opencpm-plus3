@@ -2556,6 +2556,8 @@ bf_f21_core:
     jp bdos_ret
 
 .wseq_error:
+    cp 2                       ; BIOS WRITE: 2 = read-only disk
+    jp z, .wseq_ro
     jp bdos_efail
 
 .wseq_new_extent:
