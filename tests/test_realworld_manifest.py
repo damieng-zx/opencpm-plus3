@@ -47,7 +47,8 @@ class RealWorldManifestTests(unittest.TestCase):
                 else:
                     self.assertTrue(pkg.get("save_as"))
                 for step in pkg.get("steps", []):
-                    self.assertTrue("key" in step or "text" in step)
+                    self.assertTrue(
+                        "key" in step or "text" in step or step.get("wait"))
                 for name in pkg.get("fixtures", []):
                     self.assertTrue((fixtures / name).exists(), name)
 

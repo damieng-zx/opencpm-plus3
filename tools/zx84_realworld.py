@@ -275,13 +275,18 @@ class RealWorld:
         self.record()
 
     def step(self, step: dict) -> None:
-        if "key" in step:
+        if step.get("wait"):
+            # Run without typing: lets a long tool (e.g. Link-80 writing a
+            # large .COM) finish before the next command is sent.
+            self.mcp.call("run", {"frames": int(step.get("frames", 900))})
+            self.record()
+        elif "key" in step:
             self.mcp.call("key", {"name": step["key"]})
         elif "text" in step:
             self.mcp.call("type", {"text": step["text"]})
             self.mcp.call("key", {"name": "enter"})
         else:
-            raise RunError(f"step has no key/text: {step}")
+            raise RunError(f"step has no key/text/wait: {step}")
         self.mcp.call("run", {"frames": int(step.get("frames", 900))})
         self.record()
         if step.get("expect"):

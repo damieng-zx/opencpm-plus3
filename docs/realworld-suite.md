@@ -57,7 +57,7 @@ separate, explicitly triggered workflow.
 | `turbo3` | Turbo Pascal 3.0 | Compiler/IDE, overlays, TPA | Pass |
 | `m80l80` | Microsoft M80 + L80 | Assembler → REL → `.COM`, then run | Pass |
 | `f80344` | Microsoft FORTRAN-80 3.44 | Compiler → REL → link with FORLIB → run | Pass |
-| `bascom53` | Microsoft BASIC Compiler 5.3 | BASIC-80 compiler startup | Known issue |
+| `bascom53` | Microsoft BASIC Compiler 5.3 | BASIC-80 → OBSLIB → stand-alone `.COM`, then run | Pass |
 | `aztec106` | Aztec C 1.06D | cc → asm → object → link | Known issue |
 | `z80asm` | SLR Z80ASM 1.32 | Direct-to-`.COM` macro assembler | Known issue |
 
@@ -73,10 +73,13 @@ Known issues are recorded in the manifest and printed by the runner:
   remaining piece.
 - **Turbo Pascal 3.0** runs (banner, `TURBO.MSG` load, IDE menu) and its
   80-column frames wrap on the 51-column screen for the same reason.
-- **BASCOM 5.3** exits immediately.  Its startup code checks for a `JP`
-  (`C3h`) at `0100h` and jumps to `0000h` when it is not there; BASCOM's
-  own first instruction is `LD HL,0106 / JP 138E`, so the check always
-  fails.  Why it expects a jump there is not yet known.
+- **BASCOM 5.3** used to exit immediately because the suite pulled
+  `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
+  machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`
+  to survive a write) and warm-boots when the probe fails.  `BASCOM.ZIP`
+  carries the generic build.  The compile line is `BASCOM =CHELLO/O`;
+  `/O` produces a stand-alone program that links against `OBSLIB.REL`
+  instead of needing `BRUN.COM` at run time.
 - **Aztec C 1.06D** compiles and assembles (`CHELLO.ASM`, `CHELLO.O` are
   produced) but Linker 1.06D rejects the assembler output with
   `Not an object file!`, so no `.COM` is produced.
@@ -123,6 +126,11 @@ Edit `tests/realworld/manifest.json`:
 `archive` may be `zip` or `file`. For `file`, use `save_as` to name the CP/M
 file. `fixtures` refers to `tests/realworld/fixtures/`.
 
+Steps run in order. A step with `text` types a command, `key` presses a key,
+and `wait: true` just runs the emulator for `frames` without typing — use it
+when a tool needs time after its last output (for example Link-80 writing a
+large `.COM`) before the next command is sent.
+
 The runner extracts files by basename, so archives with directory trees are
 supported. CP/M names must remain 8.3. Keep each package under the +3 data
 capacity of about 174 KB, or trim optional help/install files.
@@ -152,7 +160,7 @@ need conversion first.
 
 | Software | Download |
 |---|---|
-| Microsoft BASIC compiler 5.3 | [BASCOM53.ZIP](http://www.retroarchive.org/cpm/lang/BASCOM53.ZIP) - automated as `bascom53` |
+| Microsoft BASIC compiler 5.3 | [BASCOM.ZIP](http://www.retroarchive.org/cpm/lang/BASCOM.ZIP) - automated as `bascom53` |
 | Microsoft BASIC 5.29 | [MBASIC.ZIP](http://www.retroarchive.org/cpm/lang/mbasic.zip) |
 | Microsoft FORTRAN-80 3.44 | [F80-344.ZIP](http://www.retroarchive.org/cpm/lang/F80-344.ZIP) - automated as `f80344` |
 | Microsoft COBOL-80 4.01 | [MSCOBOL401.ZIP](http://www.retroarchive.org/cpm/lang/MSCOBOL401.ZIP) |

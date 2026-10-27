@@ -219,27 +219,45 @@
     {
       "id": "bascom53",
       "title": "Microsoft BASIC Compiler 5.3",
-      "url": "http://www.retroarchive.org/cpm/lang/BASCOM53.ZIP",
+      "url": "http://www.retroarchive.org/cpm/lang/BASCOM.ZIP",
       "archive": "zip",
       "members": [
         "BASCOM.COM",
         "L80.COM",
-        "BASLIB.REL"
+        "OBSLIB.REL",
+        "BCLOAD"
       ],
       "fixtures": [
         "CHELLO.BAS"
       ],
-      "command": "BASCOM CHELLO",
-      "expect": [],
-      "frames": 1500,
-      "known_issue": "BASCOM.COM exits immediately under this BDOS. Tracing shows its startup code checks for a JP (C3h) at 0100h and jumps to 0000h when it is not there; BASCOM's first instruction is LD HL,0106 / JP 138E, so the test always fails. Why it expects a JP there is still unknown; it may need to be loaded by a companion loader.",
-      "notes": "BASIC-80 compiler (BASCOM) plus Link-80. Fixture CHELLO.BAS is plain BASIC-80 source.",
+      "command": "BASCOM =CHELLO/O",
+      "expect": [
+        "00000 Fatal Error(s)"
+      ],
+      "frames": 5000,
+      "notes": "BASIC-80 compiler: compile CHELLO.BAS with /O (stand-alone), link with OBSLIB and run the resulting CHELLO.COM. BASCOM53.ZIP is an OEM build whose start-up probes a bank-switched machine (ports 0/1 and 0EF08h) and exits on a standard CP/M memory map; BASCOM.ZIP carries the generic build.",
       "steps": [
         {
-          "text": "DIR CHELLO.REL",
-          "frames": 900,
+          "text": "L80 CHELLO,OBSLIB,CHELLO/N/E",
+          "frames": 5000,
           "expect": [
-            "CHELLO   REL"
+            "Data",
+            "Bytes Free",
+            "]"
+          ]
+        },
+        {
+          "wait": true,
+          "frames": 1000,
+          "expect": [
+            "A>"
+          ]
+        },
+        {
+          "text": "CHELLO",
+          "frames": 1500,
+          "expect": [
+            "HELLO, WORLD"
           ]
         }
       ]
