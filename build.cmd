@@ -13,7 +13,7 @@ python3 -c "import re; f=open('src/bios/bios.zpa','r+'); c=f.read(); m=re.search
 :: Stage 0a: ZPA preprocessing
 echo   ZPA preprocessing...
 if not exist build\zpa mkdir build\zpa
-python3 tools\zpa.py src\bios\bios.zpa src\bios\common.zpa src\bios\fdc765.zpa src\bios\keyboard.zpa src\bios\screen.zpa src\bdos\bdos.zpa src\ccp\miniccp.zpa src\util\date.zpa -o build\zpa
+python3 tools\zpa.py src -o build\zpa
 if errorlevel 1 goto :fail
 
 :: Stage 0b: Lint

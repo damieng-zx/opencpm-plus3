@@ -22,12 +22,9 @@ f.seek(0); f.write(content); f.truncate()
 print(f'  Build #{n}')
 "
 
-# Stage 0a: ZPA preprocessing — expand any .zpa files in src/ to build/zpa/
-ZPA_FILES=$(find src -name '*.zpa' 2>/dev/null | sort)
-if [ -n "$ZPA_FILES" ]; then
-    echo "  ZPA preprocessing..."
-    python3 tools/zpa.py $ZPA_FILES -o build/zpa
-fi
+# Stage 0a: ZPA preprocessing — expand every .zpa under src/ to build/zpa/
+echo "  ZPA preprocessing..."
+python3 tools/zpa.py src -o build/zpa
 
 # Stage 0b: Lint (runs on the ZPA-expanded output, which is authoritative)
 echo "  Linting..."

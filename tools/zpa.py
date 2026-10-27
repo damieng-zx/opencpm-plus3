@@ -605,14 +605,27 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description='ZPA Phase 1 — Z80 Pinned-register Annotator')
     ap.add_argument('files', nargs='+',
-                    help='Source .zpa / .asm files to process')
+                    help='Source .zpa/.asm files or directories to scan recursively')
     ap.add_argument('-o', '--outdir', default='build/zpa',
                     help='Output directory (default: build/zpa)')
     ap.add_argument('--db', action='store_true',
                     help='Print the proc declaration database and exit')
     args = ap.parse_args()
 
-    paths   = [Path(f) for f in args.files]
+    # Expand directories so the build scripts do not need a hard-coded list
+    # of .zpa files (new modules are picked up automatically).
+    expanded = []
+    for name in args.files:
+        p = Path(name)
+        if p.is_dir():
+            expanded.extend(sorted(p.rglob('*.zpa')))
+        else:
+            expanded.append(p)
+    paths = expanded
+    if not paths:
+        print("ERROR: no .zpa/.asm sources found", file=sys.stderr)
+        sys.exit(1)
+
     missing = [p for p in paths if not p.exists()]
     if missing:
         for p in missing:
