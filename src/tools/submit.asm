@@ -10,6 +10,10 @@
 ; each record is <length>, <command text>, 0; records are stored in reverse
 ; order and the CCP reads them from the last record backwards.
 ;
+; Limitations: $1..$9 parameter substitution and nested SUBMIT are not
+; implemented; a nested SUBMIT is rejected rather than overwriting the
+; queue the CCP is draining.
+;
 ; Build: sjasmplus --raw=build/submit.com src/tools/submit.asm
 
     ORG 0x0100
