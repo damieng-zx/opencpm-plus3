@@ -38,7 +38,7 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 
 ### Test suites
 - bdostest.com - BDOS function tests (F1-F35, F104)
-- disktest.com - File, directory, extent and SCB tests (T1-T17)
+- disktest.com - File, directory, extent and SCB tests (T1-T22)
 - termtest.com - Terminal emulation/ESC codes
 - xtetest.com - XBIOS/TE probe
 - systest.com - Stack/MOVE/clock, page-zero, TAB and delimiter checks

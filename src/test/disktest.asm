@@ -52,11 +52,11 @@ start:
     add a, c                   ; + second digit
     ld b, a
 .single_digit:
-    ; B = test number (1-14)
+    ; B = test number (1-22)
     ld a, b
     or a
     jp z, .run_all
-    cp 18
+    cp 23
     jp nc, .run_all            ; Out of range → run all
     ; Jump to the specific test via table
     dec a                      ; 0-based index
@@ -75,6 +75,7 @@ start:
     dw .run_t1, .run_t2, .run_t3, .run_t4, .run_t5, .run_t6
     dw .run_t7, .run_t8, .run_t9, .run_t10, .run_t11, .run_t12, .run_t13
     dw .run_t14, .run_t15, .run_t16, .run_t17
+    dw .run_t18, .run_t19, .run_t20, .run_t21, .run_t22
 
     ; Single-test runners: run the test then exit
 .run_t1:  call test1
@@ -111,6 +112,16 @@ start:
     jp done
 .run_t17: call test17
     jp done
+.run_t18: call test18
+    jp done
+.run_t19: call test19
+    jp done
+.run_t20: call test20
+    jp done
+.run_t21: call test21
+    jp done
+.run_t22: call test22
+    jp done
 
 .run_all:
     call test1
@@ -130,6 +141,11 @@ start:
     call test15
     call test16
     call test17
+    call test18
+    call test19
+    call test20
+    call test21
+    call test22
     jp done
 
 test1:
@@ -1398,6 +1414,604 @@ test17:
     call BDOS
     ret
 
+test18:
+    ; === T18: extended BDOS info functions ===
+    ld de, msg_t18
+    ld c, 9
+    call BDOS
+
+    ; Safe restore values for the failure path
+    ld hl, 0x0003
+    ld (save_mode), hl
+    xor a
+    ld (save_order), a
+    ld hl, default_path
+    ld de, path_save
+    ld bc, 4
+    ldir
+
+    ; F36: R = EX*128 + CR
+    call clear_fcb
+    ld a, 10
+    ld (FCB1 + 32), a
+    ld de, FCB1
+    ld c, 36
+    call BDOS
+    ld a, (FCB1 + 33)
+    cp 10
+    jp nz, .t18_fail
+    ld a, (FCB1 + 34)
+    or a
+    jp nz, .t18_fail
+
+    ; F48 flush buffers -> A=0
+    ld c, 48
+    call BDOS
+    or a
+    jp nz, .t18_fail
+
+    ; F49 get conwidth (offset 0x1A) -> 50
+    ld hl, scb_pb
+    ld (hl), 0x1A
+    inc hl
+    ld (hl), 0
+    ld de, scb_pb
+    ld c, 49
+    call BDOS
+    cp 50
+    jp nz, .t18_fail
+
+    ; F49 invalid offset 0x63 -> A=0xFF
+    ld hl, scb_pb
+    ld (hl), 0x63
+    inc hl
+    ld (hl), 0
+    ld de, scb_pb
+    ld c, 49
+    call BDOS
+    cp 0xFF
+    jp nz, .t18_fail
+
+    ; F109 get/set/restore console mode
+    ld de, 0xFFFF
+    ld c, 109
+    call BDOS
+    ld (save_mode), hl
+    ld de, 1
+    ld c, 109
+    call BDOS
+    ld de, 0xFFFF
+    ld c, 109
+    call BDOS
+    ld a, l
+    cp 1
+    jp nz, .t18_fail
+    ld de, (save_mode)
+    ld c, 109
+    call BDOS
+
+    ; F110 get default '$'
+    ld de, 0xFFFF
+    ld c, 110
+    call BDOS
+    cp '$'
+    jp nz, .t18_fail
+
+    ; F120/F121 SETDEF order
+    ld c, 120
+    call BDOS
+    ld (save_order), a
+    ld e, 1
+    ld c, 121
+    call BDOS
+    ld c, 120
+    call BDOS
+    cp 1
+    jp nz, .t18_fail
+    ld a, (save_order)
+    ld e, a
+    ld c, 121
+    call BDOS
+
+    ; F122/F123 SETDEF search path
+    ld de, path_save
+    ld c, 122
+    call BDOS
+    ld hl, path_set
+    ld de, path_buf
+    ld bc, 4
+    ldir
+    ld de, path_buf
+    ld c, 123
+    call BDOS
+    ld de, path_get
+    ld c, 122
+    call BDOS
+    ld a, (path_get)
+    cp 1
+    jp nz, .t18_fail
+    ld hl, path_save
+    ld de, path_buf
+    ld bc, 4
+    ldir
+    ld de, path_buf
+    ld c, 123
+    call BDOS
+
+    ; F50 direct BIOS call: DEVTBL (fn 20) -> HL != 0
+    ld hl, f50_pb
+    ld b, 8
+    xor a
+.t18_clr:
+    ld (hl), a
+    inc hl
+    djnz .t18_clr
+    ld a, 20
+    ld (f50_pb), a
+    ld de, f50_pb
+    ld c, 50
+    call BDOS
+    ld a, h
+    or l
+    jp z, .t18_fail
+
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t18_fail:
+    ld de, (save_mode)
+    ld c, 109
+    call BDOS
+    ld a, (save_order)
+    ld e, a
+    ld c, 121
+    call BDOS
+    ld hl, path_save
+    ld de, path_buf
+    ld bc, 4
+    ldir
+    ld de, path_buf
+    ld c, 123
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+test19:
+    ; === T19: file functions reject an invalid drive ===
+    ld de, msg_t19
+    ld c, 9
+    call BDOS
+
+    ; D:CPM3.SYS (FCB drive code 4; 1=A, 2=B, 3=C, 4=D)
+    ld hl, fn_cpm3
+    call set_fcb
+    ld a, 4
+    ld (FCB1), a
+
+    ld a, 1
+    ld (t19_step), a
+    ld c, 15                 ; F15 open
+    call BDOS
+    cp 0xFF
+    jp nz, .t19_fail
+
+    ld de, FCB1
+    ld a, 2
+    ld (t19_step), a
+    ld c, 17                 ; F17 search first
+    call BDOS
+    cp 0xFF
+    jp nz, .t19_fail
+
+    ld de, FCB1
+    ld a, 3
+    ld (t19_step), a
+    ld c, 16                 ; F16 close
+    call BDOS
+    cp 0xFF
+    jp nz, .t19_fail
+
+    ld de, FCB1
+    ld a, 4
+    ld (t19_step), a
+    ld c, 19                 ; F19 delete
+    call BDOS
+    cp 0xFF
+    jp nz, .t19_fail
+
+    ld de, FCB1
+    ld a, 5
+    ld (t19_step), a
+    ld c, 21                 ; F21 write
+    call BDOS
+    or a
+    jp z, .t19_fail
+
+    ld de, FCB1
+    ld a, 6
+    ld (t19_step), a
+    ld c, 22                 ; F22 make
+    call BDOS
+    cp 0xFF
+    jp nz, .t19_fail
+
+    ld de, FCB1
+    ld a, 7
+    ld (t19_step), a
+    ld c, 23                 ; F23 rename
+    call BDOS
+    cp 0xFF
+    jp nz, .t19_fail
+
+    ld de, FCB1
+    ld a, 8
+    ld (t19_step), a
+    ld c, 30                 ; F30 set attributes
+    call BDOS
+    cp 0xFF
+    jp nz, .t19_fail
+
+    ld de, FCB1
+    ld a, 9
+    ld (t19_step), a
+    ld c, 33                 ; F33 read random
+    call BDOS
+    or a
+    jp z, .t19_fail
+
+    ld de, FCB1
+    ld a, 10
+    ld (t19_step), a
+    ld c, 34                 ; F34 write random
+    call BDOS
+    or a
+    jp z, .t19_fail
+
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t19_fail:
+    ld de, msg_step
+    ld c, 9
+    call BDOS
+    ld a, (t19_step)
+    call print_hex_a
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+test20:
+    ; === T20: directory full ===
+    ld de, msg_t20
+    ld c, 9
+    call BDOS
+
+    ; Remove leftovers from an interrupted run
+    ld hl, fn_fill_all
+    call delete_name
+
+    xor a
+    ld (fill_i), a
+    ld (fill_count), a
+
+.t20_loop:
+    ld hl, fn_fill
+    call set_fcb
+    ld a, (fill_i)
+    ld b, a
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x0F
+    call nibble_to_ascii
+    ld (FCB1 + 5), a
+    ld a, b
+    and 0x0F
+    call nibble_to_ascii
+    ld (FCB1 + 6), a
+
+    ld de, FCB1
+    ld c, 22                 ; F22 make
+    call BDOS
+    cp 0xFF
+    jp z, .t20_full
+
+    ld a, (fill_count)
+    inc a
+    ld (fill_count), a
+    ld a, (fill_i)
+    inc a
+    ld (fill_i), a
+    cp 64
+    jp c, .t20_loop
+    jp .t20_fail
+
+.t20_full:
+    ld a, (fill_count)
+    or a
+    jp z, .t20_fail
+
+    ; Delete every FILLxx.TMP and confirm the wildcard search is empty
+    ld hl, fn_fill_all
+    call delete_name
+    ld hl, fn_fill_all
+    call set_fcb
+    ld de, FCB1
+    ld c, 17
+    call BDOS
+    cp 0xFF
+    jp nz, .t20_fail
+
+    ; The original directory must still be usable
+    ld hl, fn_cpm3
+    call set_fcb
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    jp z, .t20_fail
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t20_fail:
+    ld hl, fn_fill_all
+    call delete_name
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+test21:
+    ; === T21: C: ramdisk file I/O ===
+    ld de, msg_t21
+    ld c, 9
+    call BDOS
+
+    ld c, 25
+    call BDOS
+    ld (save_drive), a
+
+    ld e, 2
+    ld c, 14                 ; select C:
+    call BDOS
+    ld c, 31                 ; F31: is C: present?
+    call BDOS
+    ld a, h
+    or l
+    jp z, .t21_skip
+
+    ld hl, fn_ram
+    call delete_name
+
+    ld hl, fn_ram
+    call set_fcb
+    ld de, FCB1
+    ld c, 22                 ; make
+    call BDOS
+    cp 0xFF
+    jp z, .t21_fail
+
+    ld hl, DMA
+    ld b, 128
+.t21_fill:
+    ld (hl), 'R'
+    inc hl
+    djnz .t21_fill
+
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 21                 ; write record 0
+    call BDOS
+    or a
+    jp nz, .t21_fail
+    ld de, FCB1
+    ld c, 16                 ; close
+    call BDOS
+
+    ld hl, fn_ram
+    call set_fcb
+    ld de, FCB1
+    ld c, 15                 ; reopen
+    call BDOS
+    cp 0xFF
+    jp z, .t21_fail
+
+    ld hl, DMA
+    ld b, 128
+.t21_clr:
+    ld (hl), 0
+    inc hl
+    djnz .t21_clr
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 20                 ; read record 0
+    call BDOS
+    or a
+    jp nz, .t21_fail
+    ld a, (DMA)
+    cp 'R'
+    jp nz, .t21_fail
+    ld a, (DMA + 127)
+    cp 'R'
+    jp nz, .t21_fail
+
+    ld de, FCB1
+    ld c, 19                 ; delete
+    call BDOS
+
+    ld a, (save_drive)
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t21_skip:
+    ld a, (save_drive)
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld de, msg_skip
+    ld c, 9
+    call BDOS
+    ret
+
+.t21_fail:
+    ; Best-effort cleanup on C:, then restore the saved drive
+    ld e, 2
+    ld c, 14
+    call BDOS
+    ld hl, fn_ram
+    call delete_name
+    ld a, (save_drive)
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+test22:
+    ; === T22: F40 random write ===
+    ld de, msg_t22
+    ld c, 9
+    call BDOS
+
+    ld hl, fn_test3
+    call delete_name
+
+    ld hl, fn_test3
+    call set_fcb
+    ld de, FCB1
+    ld c, 22                 ; make
+    call BDOS
+    cp 0xFF
+    jp z, .t22_fail
+
+    ld hl, DMA
+    ld b, 128
+.t22_fill:
+    ld (hl), 'Q'
+    inc hl
+    djnz .t22_fill
+    ld de, DMA
+    ld c, 26
+    call BDOS
+
+    ld a, 3
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 40                 ; write random with zero fill
+    call BDOS
+    or a
+    jp nz, .t22_fail
+
+    ld de, FCB1
+    ld c, 16                 ; close
+    call BDOS
+
+    ld hl, fn_test3
+    call set_fcb
+    ld de, FCB1
+    ld c, 15                 ; reopen
+    call BDOS
+    cp 0xFF
+    jp z, .t22_fail
+
+    ld hl, DMA
+    ld b, 128
+.t22_clr:
+    ld (hl), 0
+    inc hl
+    djnz .t22_clr
+    ld de, DMA
+    ld c, 26
+    call BDOS
+
+    ld a, 3
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 33                 ; read random
+    call BDOS
+    or a
+    jp nz, .t22_fail
+    ld a, (DMA)
+    cp 'Q'
+    jp nz, .t22_fail
+    ld a, (DMA + 127)
+    cp 'Q'
+    jp nz, .t22_fail
+
+    ld de, FCB1
+    ld c, 19                 ; delete
+    call BDOS
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t22_fail:
+    ld hl, fn_test3
+    call delete_name
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+; --- shared helpers for T18-T22 ---
+; set_fcb: HL = 11-byte name; clear FCB1 and copy the name to FCB1+1.
+set_fcb:
+    push hl
+    call clear_fcb
+    pop hl
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ret
+
+; delete_name: HL = 11-byte name; delete the file on the current drive.
+delete_name:
+    call set_fcb
+    ld de, FCB1
+    ld c, 19
+    call BDOS
+    ret
+
+; nibble_to_ascii: A = 0..15 -> '0'..'9','A'..'F'.
+nibble_to_ascii:
+    add a, '0'
+    cp '9' + 1
+    ret c
+    add a, 7
+    ret
+
 done:
     ld de, msg_end
     ld c, 9
@@ -1441,12 +2055,28 @@ save_drive14: db 0
 dpb_a14: dw 0
 dpb_c14: dw 0
 scb_pb: ds 4
+save_mode: dw 0x0003
+save_order: db 0
+save_drive: db 0
+t19_step: db 0
+fill_i: db 0
+fill_count: db 0
+path_save: ds 4
+path_set: db 1, 0, 0, 0
+path_get: ds 4
+path_buf: ds 4
+f50_pb: ds 8
+default_path: db 0xFF, 0, 0, 0
 
 fn_cpm3:  db "CPM3    SYS"
 fn_prof:  db "PROFILE SUB"
 fn_test:  db "TEST    TMP"
 fn_test2: db "TEST2   TMP"
 fn_ro:    db "TEST    RO "
+fn_test3: db "TEST3   TMP"
+fn_fill:  db "FILL00  TMP"
+fn_fill_all: db "FILL????TMP"
+fn_ram:   db "RAMTEST TMP"
 
 msg_hdr:  db "DISKTEST v6", 13, 10, "$"
 msg_pass: db " PASS", 13, 10, "$"
@@ -1471,3 +2101,10 @@ msg_t14:  db "T14 F31 tracks drive$"
 msg_t15:  db "T15 R/O protect+F45$"
 msg_t16:  db "T16 SCB write isolation$"
 msg_t17:  db "T17 F30 user area$"
+msg_t18:  db "T18 Extended BDOS$"
+msg_t19:  db "T19 Invalid drives$"
+msg_t20:  db "T20 Directory full$"
+msg_t21:  db "T21 C: ramdisk$"
+msg_t22:  db "T22 F40 random write$"
+msg_step: db " step=0x$"
+msg_skip: db " SKIP", 13, 10, "$"

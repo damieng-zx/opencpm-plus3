@@ -234,14 +234,37 @@ class Smoke:
             raise SmokeError("SYSTEST reported a failure:\n" + screen)
 
     def run_disktest(self) -> None:
-        self.command("DISKTEST", 2500)
-        screen = self.text()
-        self.expect("DISKTEST start", "DISKTEST v6", "T1 Search PASS",
-                    screen=screen)
-        self.expect("DISKTEST end", "T17 F30 user area PASS",
-                    "All tests done.", screen=screen)
-        if " FAIL" in screen:
-            raise SmokeError("DISKTEST reported a failure:\n" + screen)
+        self.log("DISKTEST")
+        self.mcp.call("type", {"text": "DISKTEST"})
+        self.mcp.call("key", {"name": "enter"})
+        self.mcp.call("run", {"frames": 200})
+        self.record()
+        for _ in range(8):
+            self.record()
+            screen = self.text()
+            if "Press RETURN" in screen:
+                self.mcp.call("key", {"name": "enter"})
+                self.mcp.call("run", {"frames": 1500})
+                continue
+            if "A>" in screen and any("T22 " in line for line in self.history):
+                break
+            self.mcp.call("run", {"frames": 1200})
+        else:
+            self.record()
+            screen = self.text()
+            if not ("A>" in screen and
+                    any("T22 " in line for line in self.history)):
+                raise SmokeError("DISKTEST did not finish:\n" + screen)
+
+        history = "\n".join(self.history)
+        missing = [n for n in range(1, 23)
+                   if not any(f"T{n} " in line and "PASS" in line
+                              for line in self.history)]
+        if missing:
+            raise SmokeError(f"DISKTEST missing PASS for T{missing}")
+        if any(" FAIL" in line for line in self.history):
+            raise SmokeError("DISKTEST reported a failure:\n" + history)
+        self.expect("DISKTEST prompt", "A>")
 
     def run_bdostest(self) -> None:
         self.log("BDOSTEST")

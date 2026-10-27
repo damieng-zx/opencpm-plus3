@@ -156,7 +156,7 @@ type "DISKTEST`enter`"
 run 3000
 ```
 
-Require every line from `T1 Search PASS` through `T17 F30 user area PASS`
+Require every line from `T1 Search PASS` through `T22 F40 random write PASS`
 and `All tests done.` in `char_buffer`.  T10 checks the documented F46
 stub (`A=0`, `HL=0`, DMA untouched), not real free-space accounting.
 
