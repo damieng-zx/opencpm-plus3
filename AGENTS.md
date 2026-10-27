@@ -112,7 +112,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, VER, HELP, DUMP, .COM loading
 - `tools/mkdsk.py` — DSK image builder
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)
-- `tools/z80lint.py` — Z80 linter: stack balance across all return paths, register clobbering after CALL, dead stores, and Clobbers/Out annotation verification (declared vs actual effects). `--suggest-anno` prints computed effects as paste-ready Clobbers: lines; `--gate-annotations` (used by build.cmd) fails the build on contract mismatches
+- `tools/z80lint.py` — Z80 linter, all build-gated: stack balance across all return paths, register clobbering after CALL, dead stores, Clobbers/Out annotation verification (declared vs actual effects), DI/EI balance, 1FFD write discipline, duplicate labels. `--suggest-anno` prints computed effects as paste-ready Clobbers: lines
 
 ## Conventions
 
