@@ -37,6 +37,7 @@ disk_spec:
 
 ; --- Entry ---
 boot_entry:
+    ; lint-exempt: 1ffd  ; no shadow exists yet - this code boots the machine
     di
     ld sp, 0xFE00
 

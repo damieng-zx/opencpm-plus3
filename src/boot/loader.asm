@@ -53,6 +53,7 @@ SYS_NAME:   db "CPM3    SYS"
     ; reads a padded final sector at FE00h, which would overwrite the boot
     ; sector's FE00h stack before the jump to BIOS.
     ld sp, BIOS_ADDR
+    ; lint-exempt: 1ffd  ; no shadow exists yet - CPM3.SYS is not loaded
 
     ; Ensure motor on
     ld bc, PORT_1FFD

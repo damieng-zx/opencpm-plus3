@@ -428,6 +428,9 @@ warm_boot_stub:
 ; @clobbers af,hl
 ; @end
 isr_handler:
+    ; lint-exempt: 1ffd  ; motor-off writes the port directly because it
+    ;                     ; runs in TPA mode where write_1ffd may not be
+    ;                     ; mapped; keeps last_1ffd in sync itself
     push af
     push hl
 

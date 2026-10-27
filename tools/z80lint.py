@@ -29,6 +29,10 @@ Checks:
      its entry state along every control-flow path (net ei - di == 0).
      Critical-section primitives that deliberately return with
      interrupts changed carry `; lint-exempt: ie`.
+  6. 1FFD write discipline: port 1FFD may only be written through
+     write_1ffd, which maintains the last_1ffd shadow the ISR motor
+     timer depends on.  Pre-shadow / ISR contexts carry
+     `; lint-exempt: 1ffd`.
 
 Routine header format:
     ; routine_name - Description
@@ -1805,6 +1809,46 @@ def check_ie_balance(routine):
 
 
 # -------------------------------------------------------------------------
+# Check 6: 1FFD write discipline (port shadow invariant)
+# -------------------------------------------------------------------------
+
+PORT_1FFD_RE = re.compile(r'1FFD', re.I)
+OUT_C_RE = re.compile(r'^\s*out\s+\(c\)\s*,', re.I)
+IE1_EXEMPT_RE = re.compile(r';\s*lint-exempt\s*:\s*1ffd\b', re.I)
+
+
+def check_1ffd_discipline(routine):
+    """
+    Only write_1ffd may write port 1FFD: every other write bypasses the
+    last_1ffd shadow and the motor_flag invariant the ISR relies on.
+    Routines that legitimately poke the port directly (the ISR motor-off
+    path, boot/loader code before the shadow exists) carry
+    `; lint-exempt: 1ffd`.
+
+      In:       routine (parsed)
+      Out:      list of (lineno, code) offending writes, [] if clean
+      Clobbers: none
+    """
+    if routine.name == 'write_1ffd':
+        return []
+    for lineno, raw in routine.lines:
+        if IE1_EXEMPT_RE.search(raw):
+            return []
+
+    touches = any(PORT_1FFD_RE.search(raw) for _, raw in routine.lines)
+    if not touches:
+        return []
+    issues = []
+    for lineno, raw in routine.lines:
+        stripped = raw.strip()
+        if stripped.startswith(';'):
+            continue
+        if OUT_C_RE.match(raw) and 'lint: ignore' not in raw.lower():
+            issues.append((lineno, strip_comment(stripped)))
+    return issues
+
+
+# -------------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------------
 
@@ -2031,6 +2075,21 @@ def main():
     if ie_count == 0:
         print("  OK -- interrupt state balanced on all RET paths.")
     total += ie_count
+
+    print()
+
+    # ---- Check 6: 1FFD write discipline ----
+    print("=== 1FFD Write Discipline ===")
+    pff_count = 0
+    for fp in files:
+        for routine in file_routines.get(fp, []):
+            for lineno, code in check_1ffd_discipline(routine):
+                print(f"  1FFD   {fp}:{lineno}: {routine.name}: direct port "
+                      f"write bypasses write_1ffd/last_1ffd: {code}")
+                pff_count += 1
+    if pff_count == 0:
+        print("  OK -- port 1FFD only written via write_1ffd.")
+    total += pff_count
 
     print()
     if total:
