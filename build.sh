@@ -92,6 +92,7 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     build/disktest.com build/termtest.com build/systest.com \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
     build/submit.com build/RAMDISK.FID src/test/smoke.txt src/test/smoke.sub \
+    src/test/param.sub \
     "${REF_FILES[@]}" \
     $EXTRAFILES
 

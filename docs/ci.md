@@ -37,9 +37,9 @@ needs the checkout, `npm ci`, and a writable ROM cache.
 
 `references/binaries/` is untracked, so CI builds a source-only disk. The
 smoke runner always exercises `SMOKE.TXT` (from `src/test/smoke.txt`),
-`SMOKE.SUB` (from `src/test/smoke.sub`), the source-built `SUBMIT.COM`, and
-`DATE.COM`; only the `RENAME` and `PIP` checks depend on the reference
-programs.
+`SMOKE.SUB` (from `src/test/smoke.sub`), `PARAM.SUB` (from
+`src/test/param.sub`), the source-built `SUBMIT.COM`, and `DATE.COM`; only the
+`RENAME` and `PIP` checks depend on the reference programs.
 
 The zx84 checkout uses the current repository name,
 `damieng-zx/zx84`. If it is private in a future org, add

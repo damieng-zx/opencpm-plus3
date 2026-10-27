@@ -16,9 +16,10 @@ python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3.dsk
 
 The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, `SCREEN 32`/`SCREEN 51`,
 `DATE`, invalid `D:`, and the C: prompt. It also runs `SUBMIT SMOKE.SUB`, the
-implicit `SMOKE` -> `SUBMIT SMOKE.SUB` chain, and the missing-file path. When
-the untracked reference binaries are on the image, it checks `RENAME` with
-wildcard `DIR` and the C: PIP/DATE flow.
+implicit `SMOKE` -> `SUBMIT SMOKE.SUB` chain, the missing-file path,
+`$1`/`$2` substitution via `SUBMIT PARAM SMOKE.TXT *.TXT`, and the
+missing-parameter error. When the untracked reference binaries are on the
+image, it checks `RENAME` with wildcard `DIR` and the C: PIP/DATE flow.
 
 `tools/zx84_negative.py` builds corrupted copies of the image and requires
 that they do **not** reach `A>`:

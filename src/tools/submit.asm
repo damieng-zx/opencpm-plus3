@@ -10,9 +10,9 @@
 ; each record is <length>, <command text>, 0; records are stored in reverse
 ; order and the CCP reads them from the last record backwards.
 ;
-; Limitations: $1..$9 parameter substitution and nested SUBMIT are not
-; implemented; a nested SUBMIT is rejected rather than overwriting the
-; queue the CCP is draining.
+; SUB files may use $1..$9 parameter substitution.  Nested SUBMIT is not
+; implemented; it is rejected rather than overwriting the queue the CCP is
+; draining.  $0 is left literal.
 ;
 ; Build: sjasmplus --raw=build/submit.com src/tools/submit.asm
 
@@ -56,12 +56,15 @@ STACK_TOP   equ 0x1E00
     ld hl, 0x0065
     ld a, (hl)
     cp ' '
-    jr nz, .check_active
+    jr nz, .parse_args
     ld (hl), 'S'
     inc hl
     ld (hl), 'U'
     inc hl
     ld (hl), 'B'
+
+.parse_args:
+    call parse_args
 
 .check_active:
     ; A nested SUBMIT would overwrite the queue the CCP is draining.
@@ -158,6 +161,99 @@ read_input:
 .overflow:
     scf
     ret
+
+; ---------------------------------------------------------------------------
+; parse_args - Collect up to 9 command-tail arguments after the filename.
+;   In:       command tail at 0080h (length byte + text)
+;   Out:      arg_tab entries {pointer, length}; pointer 0 = unused
+;   Clobbers: AF, BC, DE, HL
+; ---------------------------------------------------------------------------
+parse_args:
+    ; Clear all nine 3-byte entries.
+    ld hl, arg_tab
+    ld (hl), 0
+    ld d, h
+    ld e, l
+    inc de
+    ld bc, 26
+    ldir
+
+    ld hl, 0x0081
+    ld a, (0x0080)
+    ld b, a
+.skip_leading:
+    ld a, b
+    or a
+    ret z
+    ld a, (hl)
+    cp ' '
+    jr nz, .skip_name
+    inc hl
+    dec b
+    jr .skip_leading
+
+.skip_name:
+    ld a, b
+    or a
+    ret z
+    ld a, (hl)
+    cp ' '
+    jr z, .next_arg
+    inc hl
+    dec b
+    jr .skip_name
+
+.next_arg:
+    ld de, arg_tab
+    ld c, 9
+.find_slot:
+    ld a, (de)
+    or a
+    jr z, .slot
+    inc de
+    inc de
+    inc de
+    dec c
+    ret z
+    jr .find_slot
+
+.slot:
+.skip_spaces:
+    ld a, b
+    or a
+    ret z
+    ld a, (hl)
+    cp ' '
+    jr nz, .start
+    inc hl
+    dec b
+    jr .skip_spaces
+
+.start:
+    ld a, l
+    ld (de), a
+    inc de
+    ld a, h
+    ld (de), a
+    inc de
+    push de
+    ld c, 0
+.scan:
+    ld a, b
+    or a
+    jr z, .done
+    ld a, (hl)
+    cp ' '
+    jr z, .done
+    inc hl
+    dec b
+    inc c
+    jr .scan
+.done:
+    ld a, c
+    ld (de), a
+    pop de
+    jr .next_arg
 
 ; ---------------------------------------------------------------------------
 ; count_lines - Count non-empty command lines in IN_BUF.
@@ -277,16 +373,44 @@ write_lines:
     ret
 
 ; ---------------------------------------------------------------------------
+; append_char - Append A to out_rec, enforcing the 126-character limit.
+;   In:       A = character
+;   Out:      out_len/rec_ptr advanced
+;   Clobbers: AF, HL (BC and DE preserved)
+; ---------------------------------------------------------------------------
+append_char:
+    ld (append_tmp), a
+    push de
+    ld hl, (rec_ptr)
+    ld de, out_rec + 127
+    ld a, h
+    cp d
+    jr c, .room
+    jr nz, .full
+    ld a, l
+    cp e
+    jr nc, .full
+.room:
+    ld a, (append_tmp)
+    ld (hl), a
+    inc hl
+    ld (rec_ptr), hl
+    ld a, (out_len)
+    inc a
+    ld (out_len), a
+    pop de
+    ret
+.full:
+    pop de
+    jp line_too_long
+
+; ---------------------------------------------------------------------------
 ; emit_line - Write one command record at the reverse index.
 ;   In:       line_start/line_len describe the line, line_no is its index
 ;   Out:      $$$.SUB record written, line_no incremented
 ;   Clobbers: AF, BC, DE, HL
 ; ---------------------------------------------------------------------------
 emit_line:
-    ld a, (line_len)
-    cp 127
-    jp nc, line_too_long
-
     ; Zero the 128-byte record buffer.
     ld hl, out_rec
     ld (hl), 0
@@ -296,14 +420,82 @@ emit_line:
     ld bc, 127
     ldir
 
-    ; Record format: length byte, command text, NUL.
-    ld a, (line_len)
-    ld (out_rec), a
-    ld c, a
-    ld b, 0
+    ; Substitute $1..$9 while building the record.
     ld hl, (line_start)
-    ld de, out_rec + 1
-    ldir
+    ld (scan_ptr), hl
+    ld a, (line_len)
+    ld (scan_len), a
+    ld hl, out_rec + 1
+    ld (rec_ptr), hl
+    xor a
+    ld (out_len), a
+
+.loop:
+    ld a, (scan_len)
+    or a
+    jr z, .built
+    dec a
+    ld (scan_len), a
+    ld hl, (scan_ptr)
+    ld a, (hl)
+    inc hl
+    ld (scan_ptr), hl
+    cp '$'
+    jr nz, .append
+
+    ld a, (scan_len)
+    or a
+    jr z, .dollar
+    ld hl, (scan_ptr)
+    ld a, (hl)
+    sub '1'
+    jr c, .dollar
+    cp 9
+    jr nc, .dollar
+
+    ; A = argument index 0..8; each entry is pointer (2 bytes) + length.
+    ld hl, arg_tab
+    ld e, a
+    ld d, 0
+    add hl, de
+    add hl, de
+    add hl, de
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    inc hl
+    ld a, (hl)
+    or a
+    jp z, missing_param
+    ld b, a                    ; B = argument length
+
+    ; Consume the digit after '$'.
+    ld hl, (scan_ptr)
+    inc hl
+    ld (scan_ptr), hl
+    ld a, (scan_len)
+    dec a
+    ld (scan_len), a
+
+.copy_arg:
+    ld a, (de)
+    inc de
+    call append_char
+    dec b
+    jr nz, .copy_arg
+    jr .loop
+
+.dollar:
+    ld a, '$'
+.append:
+    call append_char
+    jr .loop
+
+.built:
+    ld a, (out_len)
+    ld (out_rec), a
+    ld hl, (rec_ptr)
+    ld (hl), 0
 
     ld de, out_rec
     ld c, F_SETDMA
@@ -350,12 +542,30 @@ directory_full:
     jp fail
 line_too_long:
     ld de, msg_toolong
-    jp fail
+    jr abort_output
+missing_param:
+    ld de, msg_param
+    jr abort_output
 write_error:
+    ld de, msg_write
+    jr abort_output
+
+; abort_output - Close and delete the partially written $$$.SUB, then print
+;   the message in DE and warm-boot.
+;   In:       DE = message
+;   Out:      does not return
+;   Clobbers: AF, BC, DE, HL
+abort_output:
+    push de
+    ld de, out_fcb
+    ld c, F_CLOSE
+    call BDOS
     ld de, out_fcb
     ld c, F_DELETE
     call BDOS
-    ld de, msg_write
+    pop de
+    jr fail
+
 fail:
     ld c, F_PRINT
     call BDOS
@@ -370,6 +580,13 @@ line_start: dw 0
 line_len:   db 0
 in_end:     dw 0
 
+arg_tab:    ds 27
+scan_ptr:   dw 0
+scan_len:   db 0
+rec_ptr:    dw 0
+out_len:    db 0
+append_tmp: db 0
+
 out_fcb:
     db 0
     db "$$$     SUB"
@@ -383,4 +600,5 @@ msg_active:  db "SUBMIT already active", CR, LF, "$"
 msg_toobig:  db "SUBMIT file too large", CR, LF, "$"
 msg_dirfull: db "Directory Full", CR, LF, "$"
 msg_toolong: db "SUBMIT line too long", CR, LF, "$"
+msg_param:   db "SUBMIT parameter missing", CR, LF, "$"
 msg_write:   db "SUBMIT write error", CR, LF, "$"

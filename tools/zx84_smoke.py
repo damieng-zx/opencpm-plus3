@@ -362,6 +362,12 @@ class Smoke:
             self.expect("SUBMIT chain", "Built-in commands:", "CPM3     SYS", "A>")
             self.command("SUBMIT NOPE.SUB", 900)
             self.expect("SUBMIT missing", "No 'SUB' File Found", "A>")
+            if "PARAM    SUB" in listing:
+                self.command("SUBMIT PARAM SMOKE.TXT *.TXT", 2500)
+                self.expect("SUBMIT parameters", "SMOKE OK", "SMOKE    TXT", "A>")
+                self.command("SUBMIT PARAM", 1200)
+                self.expect("SUBMIT missing parameter",
+                            "SUBMIT parameter missing", "A>")
         else:
             self.log("SUBMIT.COM/SMOKE.SUB not on the disk; skipping SUBMIT checks")
 
