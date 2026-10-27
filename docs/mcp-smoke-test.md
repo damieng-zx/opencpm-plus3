@@ -142,6 +142,19 @@ stub (`A=0`, `HL=0`, DMA untouched), not real free-space accounting.
 cache key/sector was corrupted; a `FAIL` on T11 means an extent's RC/alloc
 was not flushed.
 
+### Console TAB expansion
+
+Run:
+
+```text
+type "TABTEST`enter`"
+run 600
+```
+
+Require a screen line reading `A       B` — `A` in column 0 and `B` in
+column 8.  If the line is `AB`, TAB is being discarded instead of padded
+to the next 8-column stop.
+
 ### 1. Boot and initial directory
 
 At the CCP prompt, run:

@@ -59,6 +59,8 @@ if errorlevel 1 goto :fail
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\stktest.com src\test\stacktest.asm
 if errorlevel 1 goto :fail
+%SJASMPLUS% --raw=build\tabtest.com src\test\tabtest.asm
+if errorlevel 1 goto :fail
 
 echo   Assembling utilities...
 %SJASMPLUS% --raw=build\date.com build\zpa\date.asm
@@ -90,7 +92,7 @@ shift
 goto collect_extra_files
 :extra_files_done
 
-python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS src\bios\font51.bin src\bios\font32.bin build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\stktest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\RAMDISK.FID !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS src\bios\font51.bin src\bios\font32.bin build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\stktest.com build\tabtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\RAMDISK.FID !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 for %%A in (build\loader.bin) do echo   Loader: %%~zA bytes

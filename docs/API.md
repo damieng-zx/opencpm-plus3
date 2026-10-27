@@ -491,6 +491,7 @@ The current column count minus 1 is stored in the SCB at offset 0x1A
 |------|------|--------|
 | 0x07 | BEL | Ignored (no beep) |
 | 0x08 | BS | Move cursor left, erase character. Wraps to previous line. |
+| 0x09 | TAB | Advance to the next 8-column tab stop, padding with spaces. |
 | 0x0A | LF | Cursor down one row. Scrolls if at bottom. |
 | 0x0D | CR | Cursor to column 0. |
 | 0x1B | ESC | Start escape sequence. |

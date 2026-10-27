@@ -46,6 +46,7 @@ echo "  Assembling test programs..."
 "$SJASMPLUS" --raw=build/disktest.com src/test/disktest.asm
 "$SJASMPLUS" --raw=build/termtest.com src/test/termtest.asm
 "$SJASMPLUS" --raw=build/stktest.com src/test/stacktest.asm
+"$SJASMPLUS" --raw=build/tabtest.com src/test/tabtest.asm
 
 echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/date.com build/zpa/date.asm
@@ -77,6 +78,7 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     --add build/CPM3.SYS src/bios/font51.bin src/bios/font32.bin \
     build/bdostest.com build/xtetest.com \
     build/disktest.com build/termtest.com build/stktest.com \
+    build/tabtest.com \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
     build/RAMDISK.FID \
     references/binaries/*.COM references/binaries/*.SUB \

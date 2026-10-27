@@ -516,5 +516,23 @@ class P2FdcSt1Mask(unittest.TestCase):
         self.assertNotIn("and 0x37", text)
 
 
+class P2TabExpansion(unittest.TestCase):
+    """Console TAB must pad to the next 8-column stop."""
+
+    def test_screen_driver_expands_tab(self):
+        text = source("src/bios/screen.zpa")
+        self.assertIn("cp 0x09", text)
+        self.assertIn("jp z, _do_tab", text)
+        body = text[text.index("_do_tab:"):text.index("_do_lf:")]
+        self.assertIn("call scr_putchar", body)
+        self.assertIn("and 0x07", body)
+        self.assertIn("jr nz, _do_tab", body)
+
+    def test_tabtest_program(self):
+        text = source("src/test/tabtest.asm")
+        self.assertIn("ld e, 9", text)
+        self.assertIn("ld e, 'B'", text)
+
+
 if __name__ == "__main__":
     unittest.main()

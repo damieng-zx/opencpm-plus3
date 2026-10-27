@@ -200,6 +200,8 @@ scr_putchar:
     jp z, _do_lf
     cp 0x08
     jp z, _do_bs
+    cp 0x09
+    jp z, _do_tab
     cp 0x07
     ret z                      ; BEL — ignore
     cp 0x20
@@ -654,6 +656,24 @@ scr_putchar:
 _do_cr:
     xor a
     ld (cursor_col), a
+    ret
+
+
+; ==========================================================================
+; _do_tab - Advance to the next 8-column tab stop, padding with spaces
+;   In:      nothing
+;   Out:     nothing
+;   Clobbers: AF, BC, DE, HL, IX
+; ==========================================================================
+; @proc _do_tab
+; @clobbers af,bc,de,hl,ix
+; @end
+_do_tab:
+    ld a, ' '
+    call scr_putchar
+    ld a, (cursor_col)
+    and 0x07
+    jr nz, _do_tab
     ret
 
 
