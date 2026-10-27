@@ -34,6 +34,30 @@ Tests were run on 2026-10-27 through the zx84 MCP server.
 | **Turbo Pascal display** | Runs correctly; the 80-column IDE frames wrap on screen. | Same root cause as WordStar's display: no 80-column mode. |
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
 
+## WordStar 3.0 display width
+
+WordStar 3.0 stores its screen size in two bytes at `0248h` (rows) and
+`0249h` (columns) of the installed `WS.COM`; `INSTALL` patches them per
+terminal. Reading the patch table out of `INSTALL.COM` (and confirming at
+runtime by breaking on WordStar's memory check at `3CA8h`):
+
+| Terminal | Rows x Cols | Output path |
+|---|---|---|
+| default (ADM-3A, Hazeltine, Televideo, Visual 200, ...) | 24 x 80 | escape sequences |
+| SWTPC CT-82 | 20 x 82 | escape sequences |
+| Compucolor 8001G | 48 x 80 | escape sequences |
+| Processor Tech SOL / VDM | 16 x **64** | memory-mapped VDM at `CC00h`, port `FEh` |
+| Flashwriter I/II ("mindless") | 24 x **64** | memory-mapped video RAM at `F000h` |
+| (one further entry) | 50 x 96 | - |
+
+Both 64-column configurations are memory-mapped terminal drivers, not
+escape-sequence terminals, so they cannot drive our console. Every
+escape-based WordStar 3.0 terminal is 80 columns wide (or 82/96), which is
+why WordStar needs an 80-column screen mode here: 80 characters at a 3-pixel
+pitch is 240 of the 256 available pixels, so it fits without a horizontal
+scrolling/tab-flip trick. A 64-column mode (4-pixel pitch) would suit Turbo
+Pascal via TINST and leave WordStar unchanged.
+
 ## Not yet tested
 
 ### Word processing and text
