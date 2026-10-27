@@ -401,7 +401,7 @@ append_char:
     pop de
     ret
 .full:
-    pop de
+    pop de                     ; lint: ignore  (error path never returns)
     jp line_too_long
 
 ; ---------------------------------------------------------------------------

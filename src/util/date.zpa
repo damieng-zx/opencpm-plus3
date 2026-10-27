@@ -787,7 +787,7 @@ p2d:
 ; @proc bcd2
 ; @param %val:u8  a                ; decimal value
 ; @out   a                         ; BCD encoded (e.g. 23 → 0x23)
-; @clobbers af,bc
+; @clobbers af,bc,de
 ; @end
 bcd2:
     ld b, %val

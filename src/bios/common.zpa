@@ -832,7 +832,7 @@ copy_block_to_tpa:
 ; @param %count:u16 bc          ; byte count
 ; @out   hl                     ; advanced past written bytes
 ; @out   de                     ; advanced past read bytes
-; @clobbers af
+; @clobbers af,bc
 ; @end
 interbank_move:
     ; Clear inter-bank flag (in system bank, still active on entry)

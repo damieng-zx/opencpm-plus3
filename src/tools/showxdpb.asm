@@ -229,7 +229,8 @@ show_drive:
 ; XDPB accessors — read field at offset A from the saved XDPB pointer.
 ; ===========================================================================
 
-; xdpb_byte: In A=offset; Out A=byte, preserves HL/DE/BC.
+; xdpb_byte: In A=offset; Out A=byte, preserves HL/BC.
+;   Clobbers: AF, DE (DE is scratch in the offset math)
 xdpb_byte:
     push hl
     ld hl, (xdpb)
@@ -240,7 +241,8 @@ xdpb_byte:
     pop hl
     ret
 
-; xdpb_word: In A=offset; Out HL=word, preserves DE/BC.
+; xdpb_word: In A=offset; Out HL=word, preserves BC.
+;   Clobbers: AF, DE (DE is scratch in the offset math)
 xdpb_word:
     push de
     ld hl, (xdpb)

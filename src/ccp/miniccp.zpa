@@ -1219,7 +1219,7 @@ parse_cmd:
 ; @param %input:u16  hl
 ; @param %pattern:u16 de
 ; @out   zero
-; @clobbers af
+; @clobbers af,bc,de,hl
 ; @end
 str_match:
     push hl

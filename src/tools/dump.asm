@@ -210,7 +210,7 @@ cout:
 ; crlf — output CR+LF
 ;   In:  nothing
 ;   Out: nothing
-;   Clobbers: AF
+;   Clobbers: AF, E
 crlf:
     ld e, 0Dh
     call cout
@@ -220,7 +220,7 @@ crlf:
 ; phex4 — print 16-bit value as 4 hex digits
 ;   In:  DE = value
 ;   Out: nothing
-;   Clobbers: AF, DE
+;   Clobbers: AF, DE, HL
 phex4:
     push de
     ld a, d

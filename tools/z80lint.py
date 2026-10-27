@@ -1300,6 +1300,8 @@ def compute_direct_writes(lines):
         stripped = raw.strip()
         if not stripped or stripped.startswith(';'):
             continue
+        if 'lint: ignore' in raw.lower():
+            continue                     # line-level suppression
         mnemonic, ops, raw_ops = parse_instruction(raw)
         if mnemonic is None:
             continue
@@ -1477,7 +1479,7 @@ def check_clobber_annotations(routine_list, routine_map):
                 tgt = routine_map.get(raw_ops[0].strip())
                 if tgt is not None and tgt.lines and tgt is not r:
                     succ = id(tgt)
-            elif mn in ('ret', 'reti', 'retn', 'djnz'):
+            elif mn in ('ret', 'reti', 'retn', 'djnz', 'rst', 'halt'):
                 succ = None
             elif mn in ('jp', 'jr') and ops and ops[0].kind == 'indirect_pair':
                 succ = None
@@ -1493,6 +1495,48 @@ def check_clobber_annotations(routine_list, routine_map):
             if nxt is not None and nxt.lines:
                 succ = id(nxt)
         succs[rid] = succ
+
+    # Routines whose chain never returns: no RET anywhere and the chain
+    # ends in RST 0 / JP 0 / HALT / an indirect jump (error exits).
+    # Computed before chain folding so folding can stop at them: the
+    # effects of an error exit belong to no caller.
+    no_return = set()
+    for r in routine_list:
+        if not r.lines:
+            continue
+        rid = id(r)
+        chain = list(r.lines)
+        seen = {rid}
+        cur = succs.get(rid)
+        while cur is not None and cur not in seen:
+            seen.add(cur)
+            s = obj_by_id[cur]
+            chain.extend(s.lines)
+            cur = succs.get(cur)
+        has_ret = False
+        last = None
+        for _, raw in chain:
+            stripped = raw.strip()
+            if not stripped or stripped.startswith(';'):
+                continue
+            mn, ops, raw_ops = parse_instruction(raw)
+            if mn is None:
+                continue
+            if mn in ('ret', 'reti', 'retn'):
+                has_ret = True
+                break
+            last = (mn, ops, raw_ops)
+        if has_ret or last is None:
+            continue
+        mn, ops, raw_ops = last
+        if mn in ('rst', 'halt'):
+            no_return.add(rid)
+        elif (mn in ('jp', 'jr') and ops
+                and ops[0].kind not in ('cond', 'indirect_pair')
+                and raw_ops
+                and raw_ops[0].strip().lower()
+                in ('0', '0000h', '0x0000', '$')):
+            no_return.add(rid)
 
     # Pass 2: per-routine facts.
     for r in routine_list:
@@ -1510,6 +1554,8 @@ def check_clobber_annotations(routine_list, routine_map):
         seen = {rid}
         cur = succs.get(rid)
         while cur is not None and cur not in seen:
+            if cur in no_return:
+                break            # error-exit code: no caller lives past it
             seen.add(cur)
             s_routine = obj_by_id[cur]
             chain_lines.extend(s_routine.lines)
@@ -1574,13 +1620,15 @@ def check_clobber_annotations(routine_list, routine_map):
 
     # Fixpoint: propagate actual callee and jump-target effects.
     # (Successor effects need no separate edge: the call-site walk above
-    # already covers the successor chain.)
+    # already covers the successor chain.)  Routines that never return
+    # (error exits ending in RST 0 / JP 0 / HALT) cannot hand effects to
+    # their callers, so they propagate nothing.
     changed = True
     while changed:
         changed = False
         for rid, tgts in calls.items():
             for tid, prot in tgts:
-                if tid == rid:
+                if tid == rid or tid in no_return:
                     continue
                 incoming = eff[tid] - prot
                 if not incoming <= eff[rid]:
@@ -1590,6 +1638,8 @@ def check_clobber_annotations(routine_list, routine_map):
                     indirect_exit.add(rid)
                     changed = True
         for src, dst in jumps:
+            if dst in no_return:
+                continue
             if not eff[dst] <= eff[src]:
                 eff[src] |= eff[dst]
                 changed = True

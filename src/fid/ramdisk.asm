@@ -142,6 +142,7 @@ rd_login:
 ; --- rd_read: copy 128 bytes from RAM disk to DMA -------------------------
 ;   In:  HL = sector (0..127), DE = DMA address
 ;   Out: A = 0 ok, 1 error
+;   Clobbers: AF, BC, DE, HL
 rd_read:
     ld a, h
     or a
@@ -176,6 +177,7 @@ rd_read:
 ; --- rd_write: copy 128 bytes from DMA into RAM disk ---------------------
 ;   In:  HL = sector (0..127), DE = DMA address
 ;   Out: A = 0 ok, 1 error
+;   Clobbers: AF, BC, DE, HL
 rd_write:
     ld a, h
     or a

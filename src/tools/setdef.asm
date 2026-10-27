@@ -159,6 +159,7 @@ match_exact:
 ; match_prefix — Check if DE-string is a prefix of bracket_buf.
 ;   Out: Z set if yes, HL points just past the matched prefix.
 ;        NZ otherwise.
+;   Clobbers: AF, BC, DE
 match_prefix:
     ld hl, bracket_buf
 .loop:
@@ -299,6 +300,7 @@ set_order:
 
 ; read_order_token — Consume "COM" or "SUB" at HL.
 ;   Out: A = 'C' or 'S'. HL advanced past token.
+;   Clobbers: AF, HL (BC and DE preserved)
 read_order_token:
     ld a, (hl)
     cp 'C'

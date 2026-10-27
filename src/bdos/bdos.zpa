@@ -884,6 +884,7 @@ bf_f26:
     pop bc
     ld (bdos_dma), de
     ld (scb_dma), de
+    xor a                       ; defined result (SETDMA has no return value)
     jp bdos_ret
 
 ; F27: Get allocation vector
@@ -1976,13 +1977,13 @@ search_next_entry:
 ; @param %entry:u16 hl
 ; @param %fcb:u16   de
 ; @out   zero
-; @clobbers af,bc
+; @clobbers af,bc,de,hl
 ; @end
 ; match_fcb — Compare directory entry at HL with FCB at DE
 ;   Compares user number and filename (bytes 0-12).
 ;   '?' in the FCB matches any character.
 ;   Out: Z = match, NZ = no match
-;   Clobbers: AF, BC
+;   Clobbers: AF, BC, DE, HL
 match_fcb:
     ; Byte 0 of directory entry = user number.  Valid values 0-15 are
     ; real user areas; 0x10-0x1F are reserved for disc labels / timestamps
@@ -4947,7 +4948,7 @@ bf_f99:
 ; @proc f99_match_de
 ; @param %entry:u16 de
 ; @out   zero
-; @clobbers af,bc,hl
+; @clobbers af,bc,de,hl
 ; @end
 ; f99_match_de — Z set when the directory entry at DE belongs to IX's file.
 f99_match_de:

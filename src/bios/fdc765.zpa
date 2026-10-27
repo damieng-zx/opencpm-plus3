@@ -414,7 +414,7 @@ fdc_login_body:
 ; ==========================================================================
 ; xdpb_table_offset — Compute byte offset into xdpb_std_table for disc type A.
 ;   In:  A = disc type (0-3)
-;   Out: HL = A × 27
+;   Out: HL = disc_type * 27 (byte offset into xdpb_std_table)
 ;   Clobbers: AF, BC, DE
 ; ==========================================================================
 ; @proc xdpb_table_offset
@@ -853,11 +853,11 @@ fdc_recalibrate:
 ; fdc_wait_seek — Wait for seek/recalibrate to complete
 ;   Polls SENSE INTERRUPT STATUS until Seek End bit is set.
 ;   Out: Z = success, NZ = error
-;   Clobbers: AF, BC
+;   Clobbers: AF, BC, DE
 ; ------------------------------------------------------------------
 ; @proc fdc_wait_seek
 ; @out   zero
-; @clobbers af,bc,hl
+; @clobbers af,bc,de,hl
 ; @end
 fdc_wait_seek:
     ld hl, 0x2000
