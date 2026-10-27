@@ -491,6 +491,8 @@ def get_effects(mnemonic, ops):
         return reads, writes
 
     # ---- Exchange ----
+    # Swaps both consume and produce their operands; check 2 treats them
+    # as writes-only via its swap special case.
     if mnemonic == 'ex':
         if len(ops) == 2:
             a, b = ops
@@ -1116,9 +1118,14 @@ def check_clobbers_in_file(filepath, all_lines, routine_map):
             if mnemonic == 'push':
                 continue
 
+            # Swaps (EX/EXX) discard the incoming values: the routine
+            # cannot be relying on them, so their "reads" are not uses.
+            inst_reads = get_effects(mnemonic, ops)[0]
+            if mnemonic in ('ex', 'exx'):
+                inst_reads -= inst_writes
+
             # Check for reads of still-clobbered registers BEFORE updating
             # restored set (the write on THIS line restores for FUTURE lines)
-            inst_reads, _ = get_effects(mnemonic, ops)
             for reg in (clobbered - restored) & inst_reads:
                 # Skip if line has lint: ignore suppression
                 if 'lint: ignore' in fwd_raw.lower():
@@ -1495,8 +1502,10 @@ def check_clobber_annotations(routine_list, routine_map):
 
         # Chain-folded body: instructions of this routine plus its
         # structural successor chain, so push/pop pairing across a tail
-        # jump or fall-through is honoured.  (Only for effect tracking;
-        # call sites below stay per-routine.)
+        # jump or fall-through is honoured.  Call sites are collected
+        # from the same chain: successor code runs with this routine's
+        # stack-save state, and its callees' effects belong to this
+        # routine's contract.
         chain_lines = list(r.lines)
         seen = {rid}
         cur = succs.get(rid)
@@ -1508,10 +1517,14 @@ def check_clobber_annotations(routine_list, routine_map):
         direct[rid], preserved[rid] = compute_direct_writes(chain_lines)
         eff[rid] = set(direct[rid])
 
-        # Walk the body: call sites (with push-protected regs) + targets.
+        # Walk the chain: call sites (with push-protected regs) + targets.
+        # Code after a RET inside the same routine object is a local
+        # fragment entered via `call .label`; at the RET the walk resumes
+        # with the register-save depth that was live at that call.
         depth = {}
+        call_ctx = {}
         tgts = []
-        for _, raw in r.lines:
+        for _, raw in chain_lines:
             stripped = raw.strip()
             if not stripped or stripped.startswith(';'):
                 continue
@@ -1535,6 +1548,10 @@ def check_clobber_annotations(routine_list, routine_map):
                                 prot |= _pair_regs(pair)
                         tgts.append((id(tgt), prot))
                         referenced.add(tgt.name)
+                elif raw_ops and raw_ops[0].strip().startswith('.'):
+                    call_ctx = dict(depth)
+            elif mnemonic in ('ret', 'reti', 'retn'):
+                depth = dict(call_ctx)
             elif mnemonic in ('jp', 'jr') and ops and raw_ops:
                 tgt_name = raw_ops[0].strip()
                 if ops[0].kind == 'cond':
@@ -1547,12 +1564,17 @@ def check_clobber_annotations(routine_list, routine_map):
                 if tgt_name:
                     referenced.add(tgt_name)
                     tgt = routine_map.get(tgt_name)
-                    if tgt is not None and tgt.lines and tgt is not r:
+                    # An unconditional tail jump to the structural
+                    # successor is already chain-folded; adding its
+                    # fragment-level effects would double-count.
+                    if (tgt is not None and tgt.lines and tgt is not r
+                            and id(tgt) != succs.get(rid)):
                         jumps.add((rid, id(tgt)))
         calls[rid] = tgts
 
-    # Fixpoint: propagate actual callee/successor/jump-target effects,
-    # and propagate opaqueness past indirect jumps.
+    # Fixpoint: propagate actual callee and jump-target effects.
+    # (Successor effects need no separate edge: the call-site walk above
+    # already covers the successor chain.)
     changed = True
     while changed:
         changed = False
@@ -1567,12 +1589,6 @@ def check_clobber_annotations(routine_list, routine_map):
                 if tid in indirect_exit and rid not in indirect_exit:
                     indirect_exit.add(rid)
                     changed = True
-        for rid, succ in succs.items():
-            if succ is None or succ == rid:
-                continue
-            if not eff[succ] <= eff[rid]:
-                eff[rid] |= eff[succ]
-                changed = True
         for src, dst in jumps:
             if not eff[dst] <= eff[src]:
                 eff[src] |= eff[dst]

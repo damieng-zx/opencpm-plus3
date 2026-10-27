@@ -1826,12 +1826,13 @@ _delete_char:
 ; _redraw_all_screenpaged — Redraw entire screen (screen must be paged in)
 ;   In:      screen paged in
 ;   Out:     nothing
-;   Clobbers: AF, BC, DE, HL, IX, IY
+;   Clobbers: AF, BC, DE, HL, IX
 ; ==========================================================================
 ; @proc _redraw_all_screenpaged
-; @clobbers af,bc,de,hl,ix,iy
+; @clobbers af,bc,de,hl,ix
 ; @end
 _redraw_all_screenpaged:
+    push iy                     ; preserve caller IY (we use it as a cursor)
     ; Clear bitmap
     ld hl, SCR_BASE
     ld de, SCR_BASE + 1
@@ -1861,6 +1862,7 @@ _redraw_all_screenpaged:
     ld a, d
     cp SCR_ROWS
     jr c, ._ras_row
+    pop iy
     ret
 
 

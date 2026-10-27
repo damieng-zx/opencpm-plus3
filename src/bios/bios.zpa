@@ -60,7 +60,7 @@ BIOS4_BASE  equ 0x0040
 ; ######################################################################
 
 ; @proc init
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 init:
     di
@@ -175,7 +175,7 @@ disk_dma:     dw 0                 ; Current DMA address
 ; COLD BOOT — System startup
 ;
 ; @proc cold_boot
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 cold_boot:
     di
@@ -467,6 +467,7 @@ disk_read:
     ld a, (disk_drive)
     cp 2
     jp c, fdc_read                 ; A: or B: → floppy
+    push iy                        ; preserve caller IY (RAM-disk dispatch)
     ld iy, (xdph_c_read_slot)
     jr _disk_io_c
 
@@ -478,16 +479,21 @@ disk_write:
     ld a, (disk_drive)
     cp 2
     jp c, fdc_write                ; A: or B: → floppy
+    push iy                        ; preserve caller IY (RAM-disk dispatch)
     ld iy, (xdph_c_write_slot)
     ; fall through to _disk_io_c
 _disk_io_c:
+    ; lint-exempt: stack  ; the third pop pairs with the caller-IY push
+    ; in disk_read/disk_write (this fragment is only reached by
+    ; fall-through from them)
     push ix
     push iy
     ld hl, (disk_sector)
     ld de, (disk_dma)
     call _call_iy
-    pop iy
+    pop iy                         ; slot pointer (dead)
     pop ix
+    pop iy                         ; caller IY restored
     ret
 
 ; Helper used by the FID dispatcher (Z80 has no "call (iy)" — emulate
@@ -731,7 +737,7 @@ signon_msg:
 ;   Clobbers: AF, BC, DE, HL
 ; ==========================================================================
 ; @proc load_fonts
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 load_fonts:
     xor a
@@ -887,7 +893,7 @@ _lf_cmp11:
 ;        DE = destination address (in bank 7)
 ;   Clobbers: AF, BC, DE, HL
 ; @proc _lf_load_file
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 _lf_load_file:
     ld b, 2                         ; 2 × 1K blocks per font file
@@ -911,7 +917,7 @@ _lf_load_file:
 ;   Out: DE advanced by 1024
 ;   Clobbers: AF, BC, HL
 ; @proc _lf_load_block
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 _lf_load_block:
     ld l, a
@@ -1007,7 +1013,7 @@ _fid_magic:   db "OCFID", 0         ; 6-byte signature inside RAMDISK.FID
 ;   Clobbers: AF, BC, DE, HL, IY
 ; ==========================================================================
 ; @proc load_fid
-; @clobbers af,bc,de,hl,iy
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 load_fid:
     ld a, (_fid_block)

@@ -8,7 +8,9 @@
 ;   F12: B+ D+ X+ Y+      '+' = preserved, '-' = CLOBBERED,
 ;                         '.' = not checked (register is a call input)
 ;
-; Functions exercised: F12 (core), F2 (console/screen path), F25
+; C and E always carry call inputs (function number, char), so only the
+; high bytes B and D are checked for BC/DE.  IX and IY are checked in
+; full.  Functions exercised: F12 (core), F2 (console/screen path), F25
 ; (disk status), F13 (disk reset), F15 OPEN (file path, FCB shadow).
 ;
 ; Build: sjasmplus --raw=build/regtest.com src/test/regtest.asm
@@ -78,21 +80,17 @@ set_magic:
     ld iy, 0xCAFE
     ret
 
-; Comparators: A = '+' if the pair still holds its magic, '-' if not.
+; Comparators: A = '+' if the register still holds its magic, '-' if not.
+; Only the non-input bytes are checked: B for BC (C = function number)
+; and D for DE (E carries call inputs on some functions).
 ck_bc:
     ld a, b
     cp 0x12
-    jr nz, ck_no
-    ld a, c
-    cp 0x34
     jr nz, ck_no
     jr ck_yes
 ck_de:
     ld a, d
     cp 0x56
-    jr nz, ck_no
-    ld a, e
-    cp 0x78
     jr nz, ck_no
     jr ck_yes
 ck_ix:

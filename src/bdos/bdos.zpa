@@ -490,7 +490,7 @@ bf_f00:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f01:
     pop de
@@ -509,7 +509,7 @@ bf_f01:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f02:
     pop de
@@ -571,7 +571,7 @@ bf_f05:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f06:
     pop de
@@ -636,7 +636,7 @@ bf_f08:
 ; @param %str:u16   de
 ; @param %func:u8   c
 ; @out   a
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f09:
     pop de
@@ -658,7 +658,7 @@ bf_f09:
 ; @param %buf:u16   de
 ; @param %func:u8   c
 ; @out   a
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f10:
     pop de
@@ -782,7 +782,7 @@ bf_f12:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f13:
     pop de
@@ -892,7 +892,7 @@ bf_f26:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f27:
     pop de
@@ -969,7 +969,7 @@ bf_f29:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f30:
     pop de
@@ -1100,7 +1100,7 @@ bf_f30:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f31:
     pop de
@@ -1175,7 +1175,7 @@ bf_f37:
 ; @proc select_drive
 ; @param %drive:u8  a
 ; @out   carry
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,iy
 ; @end
 ; Internal: select_drive — Log in a drive, cache its DPB parameters for
 ; subsequent file operations.
@@ -1349,7 +1349,7 @@ select_drive:
 ; ==========================================================================
 ; @proc select_fcb_drive
 ; @out   carry
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,iy
 ; @end
 ; select_fcb_drive — Select the drive named by IX+0 (0 = current drive).
 ;   In:  IX = FCB (fcb_buf)
@@ -1456,7 +1456,7 @@ msg_ro:
 
 ; ==========================================================================
 ; @proc build_alv
-; @clobbers af,bc,de,hl,ix
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 ; Internal: build_alv — Build allocation vector from directory
 ;   Scans all directory entries, marks used blocks in ALV.
@@ -1726,7 +1726,7 @@ find_free_block:
 ; @proc read_dir_entry
 ; @param %entry:u16 de
 ; @out   hl
-; @clobbers af,bc
+; @clobbers af,bc,de,hl,iy
 ; @end
 ; read_dir_entry — Read directory sector containing entry N, return pointer
 ;   In:  DE = directory entry number (0-based)
@@ -1822,7 +1822,7 @@ read_dir_entry:
 
 
 ; @proc write_dir_entry
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,iy
 ; @end
 ; write_dir_entry — Write back the current directory sector
 ;   Re-seeks to the directory sector saved by read_dir_entry.
@@ -1878,7 +1878,7 @@ dir_sector_to_bios:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f17:
     pop de
@@ -1908,7 +1908,7 @@ bf_f17:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,iy
 ; @end
 bf_f18:
     pop de
@@ -1918,7 +1918,7 @@ bf_f18:
 ; @proc search_next_entry
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,iy
 ; @end
 search_next_entry:
     ld de, (search_pos)
@@ -2043,7 +2043,7 @@ match_fcb:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f15:
     pop de
@@ -2129,7 +2129,7 @@ bf_f15:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f16:
     pop de
@@ -2164,7 +2164,7 @@ bf_f16:
 
 ; ------------------------------------------------------------------
 ; @proc close_dir_update
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,iy
 ; @end
 ; close_dir_update — Find directory entry matching FCB and update it
 ;   In:  IX = fcb_buf (with correct EX, RC, alloc map)
@@ -2262,7 +2262,7 @@ close_dir_update:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f19:
     pop de
@@ -2350,7 +2350,7 @@ bf_f19:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f20:
     pop de
@@ -2362,7 +2362,7 @@ bf_f20:
 ; @param %fcb:u16   de
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 f20_body:
     ; In: DE = FCB (the multi-sector wrapper supplies it)
@@ -2594,7 +2594,7 @@ f20_body:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f21:
     pop de
@@ -2606,7 +2606,7 @@ bf_f21:
 ; @param %fcb:u16   de
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 f21_body:
     ; In: DE = FCB (the multi-sector wrapper supplies it)
@@ -2829,7 +2829,7 @@ bf_f21_core:
 
 ; ------------------------------------------------------------------
 ; @proc wseq_close_cur
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,iy
 ; @end
 ; wseq_close_cur — Close current extent by calling bf_f16 logic
 ;   Saves FCB to TPA, re-loads into fcb_buf, runs the close scan.
@@ -2859,7 +2859,7 @@ wseq_close_cur:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f22:
     pop de
@@ -2953,7 +2953,7 @@ bf_f22:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f23:
     pop de
@@ -3115,7 +3115,7 @@ rand_to_seq:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f33:
     pop de
@@ -3308,7 +3308,7 @@ bf_f33:
 ; ==========================================================================
 ; @proc find_fcb_extent
 ; @out   zero
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,iy
 ; @end
 ; find_fcb_extent — Find the directory extent for IX's EX.
 ;   In:  IX = FCB (fcb_buf) with EX set
@@ -3394,7 +3394,7 @@ find_fcb_extent:
 ; ==========================================================================
 ; @proc create_fcb_extent
 ; @out   carry
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,iy
 ; @end
 ; create_fcb_extent — Create an empty directory extent for IX's current EX.
 ;   In:  IX = FCB (fcb_buf) with user/name and EX set
@@ -3472,7 +3472,7 @@ create_fcb_extent:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f34:
     pop de
@@ -3530,7 +3530,7 @@ bf_f34:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f35:
     pop de
@@ -3658,7 +3658,7 @@ bf_f35:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f36:
     pop de
@@ -3698,7 +3698,7 @@ bf_f36:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f40:
     pop de
@@ -3838,7 +3838,7 @@ bf_f45:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl,ix
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f46:
     pop de
@@ -3955,7 +3955,7 @@ bf_f47:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f48:
     pop de
@@ -4666,7 +4666,7 @@ bf_f108:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f111:
     pop de
@@ -4733,7 +4733,7 @@ bf_f112:
 ; @param %func:u8   c
 ; @out   a
 ; @out   hl
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f99:
     pop de

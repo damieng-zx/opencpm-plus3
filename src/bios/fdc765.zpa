@@ -476,7 +476,7 @@ fdc_read:
     pop ix
     ret
 ; @proc fdc_read_body
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 fdc_read_body:
     call ensure_sector         ; Ensure correct physical sector in buffer
@@ -523,7 +523,7 @@ fdc_write:
     ret
 ; @proc fdc_write_body
 ; @param %wtype:u8 c
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 fdc_write_body:
     push bc                    ; Save write type

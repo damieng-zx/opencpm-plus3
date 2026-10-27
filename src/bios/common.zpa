@@ -1,4 +1,4 @@
-; ==========================================================================
+﻿; ==========================================================================
 ; CP/M 3.1 Common Memory Stub (F600-FFFF)
 ; ==========================================================================
 ;
@@ -88,7 +88,7 @@ scb_tpa:
 
 
 ; ==========================================================================
-; BIOS Visible Jump Table (33 entries × 3 bytes = 99 bytes)
+; BIOS Visible Jump Table (33 entries Ã— 3 bytes = 99 bytes)
 ; ==========================================================================
 ;
 ; Programs compute BIOS base from the warm boot vector at 0001-0002.
@@ -102,7 +102,7 @@ scb_tpa:
 ; Fn 27 (BNKSEL) lives in common already and fn 30 (USERF) is handled inline,
 ; so their slots are dead entries — cheaper than splitting the block.
 bios_visible:
-    jp warm_boot_stub              ;  0: BOOT (cold → warm from TPA)
+    jp warm_boot_stub              ;  0: BOOT (cold â†’ warm from TPA)
     jp warm_boot_stub              ;  1: WBOOT
     jp bv_tramp + 3*(2 - 2)        ;  2: CONST
     jp bv_tramp + 3*(3 - 2)        ;  3: CONIN
@@ -146,7 +146,7 @@ bios_visible:
 ; shim converts that back into the bank-4 target (BIOS4_BASE + 3*fn).
 bv_tramp:
     dup 31
-        call bv_shim               ; 31 × 3 bytes = 93 bytes total
+        call bv_shim               ; 31 Ã— 3 bytes = 93 bytes total
     edup
     assert $ - bv_tramp == 31 * 3, "bv_tramp must be exactly 93 bytes"
 
@@ -179,13 +179,26 @@ bv_shim:
 ; @param %param:u16 de         ; CP/M parameter
 ; @out   a                     ; result low byte
 ; @out   hl                    ; result word
-; @clobbers bc
+; @clobbers
 ; @end
 bdos_stub:
     ; Guard: writable variables must be AFTER bdos_stub, never before.
     assert saved_sp > bdos_stub, "saved_sp must be after bdos_stub"
+    ; lint-exempt: stack  ; SP hops between stacks: user stack -> bdos_stack
+    ; -> user saved block.  The four user-register pushes pair with the
+    ; four pops after ld sp, (saved_sp); bdos_ret rebases SP in between.
 
     di
+    ; Save the caller's registers on the user stack.  CP/M 3 returns
+    ; BDOS results only in A, HL and the flags; BC, DE, IX and IY must
+    ; reach the caller unchanged.  The handlers pop BC/DE off the BDOS
+    ; stack as parameters, and the screen and RAM-disk paths use IX/IY
+    ; internally.  saved_sp points at the saved block; the four pops on
+    ; the way out leave SP at the caller's return address.
+    push bc
+    push de
+    push ix
+    push iy
     ld (saved_sp), sp
     ld sp, bdos_stack
 
@@ -207,24 +220,25 @@ bdos_stub:
     ; Call real BDOS (in bank 4) — interrupts enabled
     call bdos_entry
 
-    ; Save ALL return values across bank switch (A, B, HL)
+    ; Carry the results (A, HL) across the bank switch
     di
     push hl
     push af
-    push bc
 
     ; Switch back to TPA (mode 0: 0,1,2,3)
     ld a, (motor_flag)
     or BANK0_1FFD
     call write_1ffd
 
-    ; Restore return values
-    pop bc
+    ; Restore return values and user registers; SP ends on the
+    ; caller's return address
     pop af
     pop hl
-
-    ; Restore user stack and return
     ld sp, (saved_sp)
+    pop iy
+    pop ix
+    pop de
+    pop bc
     ei
     ret
 
@@ -265,10 +279,10 @@ isr_installed:  db 0               ; 1 = ISR trampoline at 0038h is set up
 ; @proc bios_call_bank4
 ; @out   af                     ; BIOS return values (function-dependent)
 ; @out   hl
-; @clobbers bc,iy
+; @clobbers bc
 ; @end
 bios_call_bank4:
-    ; lint-exempt: stack  ; uses jp (iy) via .jp_iy for the banked CALL (IY)
+    ; lint-exempt: stack  ; uses jp (ix) via .jp_ix for the banked CALL (IX)
     di
     ; Save the caller's SP and registers.  HL and IY are inputs/outputs for
     ; BIOS calls (MOVE uses HL), so both are saved; the target address lives
@@ -294,23 +308,23 @@ bios_call_bank4:
     ; Switch to system stack for the actual BIOS call (the trampoline
     ; stack is too small for screen/keyboard drivers)
     ld sp, bdos_stack - 16         ; Use lower part of BDOS stack area
-    ld iy, (_bc4_target)
+    push iy                        ; caller IY survives the IX dispatch
+    ld ix, (_bc4_target)
     ei
-    call .jp_iy
+    call .jp_ix
     ; BIOS function returned — save return values on safe stack
     di
+    pop iy                         ; caller IY restored
     ld sp, _bc4_stack              ; Back to trampoline stack for bank switch
     ld (_bc4_hl), hl
     push af
     push bc
     push de
-    push iy
     ; Switch back to TPA
     ld a, (motor_flag)
     or BANK0_1FFD
     call write_1ffd
     ; Restore return values
-    pop iy
     pop de
     pop bc
     pop af
@@ -320,8 +334,8 @@ bios_call_bank4:
     ei
     ret
 
-.jp_iy:
-    jp (iy)                        ; Effectively CALL (IY)
+.jp_ix:
+    jp (ix)                        ; Effectively CALL (IX)
 
 _bc4_hl: dw 0
 _bc4_sp: dw 0
@@ -352,9 +366,10 @@ _bc4_stack:
 ; @out   af                     ; function-dependent
 ; @out   bc
 ; @out   hl
+; @clobbers ix                  ; IX is the banked-dispatch vehicle
 ; @end
 userf_stub:
-    ex (sp), hl                    ; HL = return addr → inline DW, caller HL on stack
+    ex (sp), hl                    ; HL = return addr â†’ inline DW, caller HL on stack
     ld a, (hl)                     ; A = func_id low byte (high byte assumed 0)
     inc hl
     inc hl                         ; HL = corrected return (past the DW)
@@ -475,7 +490,7 @@ isr_handler:
     ld a, l
     cp 0xA0
     jr nz, .store_min_low
-    ; 1440 reached → reset minutes, increment day counter
+    ; 1440 reached â†’ reset minutes, increment day counter
     ld hl, 0
     ld (scb_minute), hl
     ld hl, (scb_date)
@@ -784,15 +799,15 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF996, "RAMDISK.FID expects copy_record_to_tpa at 0xF996"
-    assert copy_record_from_tpa == 0xF99C, "RAMDISK.FID expects copy_record_from_tpa at 0xF99C"
+    assert copy_record_to_tpa == 0xF9A0, "RAMDISK.FID expects copy_record_to_tpa at 0xF9A0"
+    assert copy_record_from_tpa == 0xF9A6, "RAMDISK.FID expects copy_record_from_tpa at 0xF9A6"
 
 
 ; ------------------------------------------------------------------
 ; copy_block_to_tpa — Copy arbitrary-length block from system to TPA
 ;
 ; Used for CCP loading (warm/cold boot). Identical semantics to
-; copy_to_user (system→staging→TPA in 32-byte chunks); tail-call into it.
+; copy_to_user (systemâ†’stagingâ†’TPA in 32-byte chunks); tail-call into it.
 ;
 ; @proc copy_block_to_tpa
 ; @param %src:u16   hl          ; source in bank 4 (system)
@@ -1018,7 +1033,8 @@ xfer_staging: ds 32
 ; so a large program cannot overwrite it while the stub is still reading.
 ccp_fcb: ds 36
     assert $ - ccp_fcb == 36, "ccp_fcb must be exactly 36 bytes (CP/M FCB format)"
-    assert ccp_fcb == 0xFB61, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+    assert ccp_fcb == 0xFB6B, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+
 
 ; BDOS stack (grows downward from bdos_stack label)
 ; ==========================================================================
