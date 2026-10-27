@@ -443,5 +443,38 @@ class VerificationF46Stub(unittest.TestCase):
         self.assertIn("T10 F46 stub", text)
 
 
+class P2WriteReturnCodes(unittest.TestCase):
+    """F21/F34/F40 distinguish directory-full from disk-full."""
+
+    def test_f21_disk_full_returns_2(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index(".wseq_alloc:"):text.index(".wseq_new_extent:")]
+        self.assertIn("jp c, .wseq_diskfull", body)
+        disk = body[body.index(".wseq_diskfull:"):body.index(".wseq_ret:")]
+        self.assertIn("ld a, 2", disk)
+
+    def test_f21_directory_full_returns_1(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index(".wseq_full:"):text.index(".wseq_diskfull:")]
+        self.assertIn("ld a, 1", body)
+
+    def test_f34_directory_full_returns_1(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f34:"):text.index("; F35:")]
+        full = body[body.index(".wrrand_full:"):body.index(".wrrand_range:")]
+        self.assertIn("ld a, 1", full)
+
+    def test_f40_directory_full_returns_5(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f40:"):text.index("; @proc div_hl_bc")]
+        full = body[body.index(".wrrand0_full:"):body.index(".wrrand0_range:")]
+        self.assertIn("ld a, 5", full)
+
+    def test_write_error_uses_shared_fail_stub(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index(".wseq_error:"):text.index(".wseq_new_extent:")]
+        self.assertIn("jp bdos_efail", body)
+
+
 if __name__ == "__main__":
     unittest.main()

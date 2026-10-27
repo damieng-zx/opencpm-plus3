@@ -2577,7 +2577,7 @@ bf_f21_core:
     push hl                    ; Save alloc slot pointer
     call find_free_block       ; A = free block number, carry = disk full
     pop hl
-    jp c, .wseq_full
+    jp c, .wseq_diskfull
     push hl
     push af
     call set_alloc_bit         ; Mark block as used in ALV
@@ -2587,7 +2587,13 @@ bf_f21_core:
     jp .wseq_have_block
 
 .wseq_full:
-    ld a, 1                    ; No disk space
+    ld a, 1                    ; Directory full
+    jr .wseq_ret
+
+.wseq_diskfull:
+    ld a, 2                    ; Disk full
+
+.wseq_ret:
     ld l, a
     ld h, 0
     jp bdos_ret
@@ -2598,10 +2604,7 @@ bf_f21_core:
     jp bdos_ret
 
 .wseq_error:
-    ld a, 0xFF
-    ld l, a
-    ld h, 0
-    jp bdos_ret
+    jp bdos_efail
 
 .wseq_new_extent:
     ; CR == 128: current extent is full.
@@ -3357,7 +3360,7 @@ bf_f34:
     jp bdos_ret
 
 .wrrand_full:
-    ld a, 5                    ; directory full
+    ld a, 1                    ; directory full
     ld l, a
     ld h, 0
     jp bdos_ret
