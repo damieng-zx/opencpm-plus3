@@ -170,7 +170,8 @@ fdc_seek_1:
 ; fdc_send — Send byte in A to FDC
 ;   In:  A = byte
 ;   Out: nothing
-;   Clobbers: AF, BC (preserves HL, DE)
+;   Clobbers: AF, BC
+;   Preserves: HL, DE
 ; ==========================================================================
 fdc_send:
     push af

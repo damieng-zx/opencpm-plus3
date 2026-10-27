@@ -34,7 +34,7 @@ Suppression:
 
 Usage:
   python3 tools/z80lint.py [file.asm ...]
-  (default: scans src/bios/*.asm src/bdos/*.asm src/ccp/*.asm)
+  (default: scans build/zpa/*.asm plus src/boot, src/fid and src/tools)
 
 Exit code: 0 = clean, 1 = issues found.
 """
@@ -1235,6 +1235,13 @@ def main():
                 p = Path(d)
                 if p.exists():
                     files.extend(sorted(str(f) for f in p.glob('*.asm')))
+
+        # Hand-written sources outside the ZPA pipeline: boot chain, FID and
+        # the CP/M utilities.  These used to escape the linter entirely.
+        for d in ['src/boot', 'src/fid', 'src/tools']:
+            p = Path(d)
+            if p.exists():
+                files.extend(sorted(str(f) for f in p.glob('*.asm')))
     else:
         files = args
 
