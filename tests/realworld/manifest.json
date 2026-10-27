@@ -271,7 +271,6 @@
         "CC.COM",
         "AS.COM",
         "LN.COM",
-        "LIBC.REL",
         "C.LIB"
       ],
       "fixtures": [
@@ -281,32 +280,39 @@
       "expect": [
         "C Vers. 1.06D"
       ],
-      "frames": 1500,
+      "frames": 2000,
       "steps": [
         {
           "text": "AS CHELLO",
-          "frames": 1500,
+          "frames": 2000,
           "expect": [
             "8080 Assembler"
           ]
         },
         {
-          "text": "LN CHELLO.O",
-          "frames": 1500,
+          "text": "LN CHELLO.O C.LIB",
+          "frames": 3000,
           "expect": [
-            "Linker"
+            "Base:",
+            "Code:"
           ]
         },
         {
-          "text": "DIR CHELLO.COM",
-          "frames": 900,
+          "wait": true,
+          "frames": 2000,
           "expect": [
-            "CHELLO   COM"
+            "A>"
+          ]
+        },
+        {
+          "text": "CHELLO",
+          "frames": 1500,
+          "expect": [
+            "HELLO, WORLD"
           ]
         }
       ],
-      "known_issue": "The compiler and assembler both run (CHELLO.ASM and CHELLO.O are produced) but Linker 1.06D rejects the assembler output with 'Not an object file!', so no CHELLO.COM is produced. The object format the 1.06D linker expects (or an assembler switch) still needs to be found.",
-      "notes": "Manx Aztec C compiler toolchain: cc -> asm -> object -> link."
+      "notes": "Manx Aztec C 1.06D: cc -> asm -> object -> link -> run. C.LIB must be named on the LN command line, and LIBC.REL is left out of the image: with it the disk has no room left for the .O file, so AS creates an empty CHELLO.O and LN reports 'Not an object file'."
     },
     {
       "id": "z80asm",

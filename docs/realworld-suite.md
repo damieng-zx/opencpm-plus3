@@ -58,7 +58,7 @@ separate, explicitly triggered workflow.
 | `m80l80` | Microsoft M80 + L80 | Assembler → REL → `.COM`, then run | Pass |
 | `f80344` | Microsoft FORTRAN-80 3.44 | Compiler → REL → link with FORLIB → run | Pass |
 | `bascom53` | Microsoft BASIC Compiler 5.3 | BASIC-80 → OBSLIB → stand-alone `.COM`, then run | Pass |
-| `aztec106` | Aztec C 1.06D | cc → asm → object → link | Known issue |
+| `aztec106` | Aztec C 1.06D | cc → asm → object → link with C.LIB → run | Pass |
 | `z80asm` | SLR Z80ASM 1.32 | Direct-to-`.COM` macro assembler | Known issue |
 
 Known issues are recorded in the manifest and printed by the runner:
@@ -80,9 +80,10 @@ Known issues are recorded in the manifest and printed by the runner:
   carries the generic build.  The compile line is `BASCOM =CHELLO/O`;
   `/O` produces a stand-alone program that links against `OBSLIB.REL`
   instead of needing `BRUN.COM` at run time.
-- **Aztec C 1.06D** compiles and assembles (`CHELLO.ASM`, `CHELLO.O` are
-  produced) but Linker 1.06D rejects the assembler output with
-  `Not an object file!`, so no `.COM` is produced.
+- **Aztec C 1.06D** used to stop at the linker with `Not an object file!`.
+  The image was one file too full: including `LIBC.REL` left no free
+  block, so `AS` created a zero-length `CHELLO.O`.  With `LIBC.REL`
+  omitted, `LN CHELLO.O C.LIB` links and the program runs.
 - **Z80ASM 1.32** sets a multi-sector count with F44 and then reads its
   source once, assuming the whole block was transferred.  This BDOS
   deliberately transfers one record per call and reports it in `H` (a
@@ -133,7 +134,10 @@ large `.COM`) before the next command is sent.
 
 The runner extracts files by basename, so archives with directory trees are
 supported. CP/M names must remain 8.3. Keep each package under the +3 data
-capacity of about 174 KB, or trim optional help/install files.
+capacity of about 174 KB, or trim optional help/install files — and leave
+room for what the tools write while they run (`.ASM`, `.O`, `.COM`); a full
+disk can make an assembler create an empty output file and look like a
+format error.
 
 ## Curated candidate catalog
 
