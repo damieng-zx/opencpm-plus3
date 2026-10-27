@@ -43,7 +43,7 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 - xtetest.com - XBIOS/TE probe
 - stktest.com - TPA stack, MOVE and clock
 - tabtest.com - Console TAB expansion
-- delimtest.com - F110 output delimiter
+- delimtes.com - F110 output delimiter
 - p0test.com - Page-zero IOBYTE/user-drive bytes
   
 ### Wishlist/TODO

@@ -230,6 +230,12 @@ warm_boot:
     di
     ld sp, bdos_stack
 
+    ; CP/M 3 resets the F9 output delimiter to '$' when a transient
+    ; program begins.  A program that changes it via F110 must not leak
+    ; that setting into the CCP's own $-terminated messages.
+    ld a, '$'
+    ld (out_delim), a
+
     ; Copy embedded CCP from bank 4 to TPA at 0100h via inter-bank copy
     ld hl, ccp_stored              ; Source: bank 4
     ld de, CCP_ADDR                ; Dest: 0100h in bank 0

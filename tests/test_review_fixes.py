@@ -580,6 +580,14 @@ class P2F110Delimiter(unittest.TestCase):
         text = source("src/test/delimtest.asm")
         self.assertIn("ld c, 110", text)
         self.assertIn("DELIM PASS", text)
+        # Both the success and failure paths must restore '$'.
+        self.assertEqual(text.count("ld e, '$'"), 2)
+
+    def test_warm_boot_resets_delimiter(self):
+        text = source("src/bios/bios.zpa")
+        body = text[text.index("warm_boot:"):text.index("; Console I/O")]
+        self.assertIn("ld a, '$'", body)
+        self.assertIn("ld (out_delim), a", body)
 
 
 class P2PageZeroBytes(unittest.TestCase):

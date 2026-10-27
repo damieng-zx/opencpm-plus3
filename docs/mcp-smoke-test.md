@@ -160,13 +160,15 @@ to the next 8-column stop.
 Run:
 
 ```text
-type "DELIMTEST`enter`"
+type "DELIMTES`enter`"
 run 600
 ```
 
 Require `DELIM PASS` (not `DELIM BAD`).  The program sets the F9 delimiter
 to `#`, reads it back, and prints `OK#` through F9; only `OK` should
-appear.
+appear.  Then run `DIR`: the listing must be normal.  A garbled/run-on
+listing means the delimiter leaked into the CCP's `$`-terminated messages
+instead of being reset at warm boot.
 
 ### Page-zero compatibility bytes
 

@@ -31,6 +31,11 @@ start:
     ld de, msg_pass
     ld c, 9
     call BDOS
+
+    ; Restore the default delimiter before returning to the CCP
+    ld e, '$'
+    ld c, 110
+    call BDOS
     jp 0
 
 .bad:
