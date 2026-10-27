@@ -3,6 +3,21 @@
 Manual pre-commit smoke test for the default `build/cpm3.dsk` image using the
 zx84 MCP emulator.
 
+## Automated runner
+
+`tools/zx84_smoke.py` boots the built image through the zx84 MCP server,
+runs `SYSTEST`, `DISKTEST`, `BDOSTEST`, and the main CCP flows, and asserts
+the 51x24 character buffer plus an empty FDC retry log:
+
+```text
+python3 tools/zx84_smoke.py
+python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3.dsk
+```
+
+It exits 0 on success and 1 on a failed assertion. Set `ZX84_DIR` or pass
+`--zx84` when the emulator checkout is not next to this repository. The
+manual flow below remains useful for interactive debugging.
+
 Run this after:
 
 - `python3 tools/z80lint.py`

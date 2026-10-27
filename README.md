@@ -104,6 +104,13 @@ zx84 snapshots can also be saved and loaded through MCP. After reaching a clean
 prompt, use `save build/prompt.szx`; later use `load build/prompt.szx` to resume
 testing from that prompt without rebooting the disk image.
 
+The automated smoke runner boots the image, runs `SYSTEST`, `DISKTEST`,
+`BDOSTEST` and the main CCP flows, and asserts the screen buffer:
+
+```bash
+python3 tools/zx84_smoke.py
+```
+
 ### Project Structure
 
 ```
