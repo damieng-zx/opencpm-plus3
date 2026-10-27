@@ -10,17 +10,9 @@ SJASMPLUS="${SJASMPLUS:-sjasmplus}"
 
 echo "=== Building CP/M 3.1 ==="
 
-# Auto-bump build number
-python3 -c "
-import re
-f = open('src/bios/bios.zpa', 'r+')
-content = f.read()
-m = re.search(r'BUILD_NUM equ (\d+)', content)
-n = int(m.group(1)) + 1
-content = content.replace(f'BUILD_NUM equ {m.group(1)}', f'BUILD_NUM equ {n}')
-f.seek(0); f.write(content); f.truncate()
-print(f'  Build #{n}')
-"
+# Build number (counter lives in build/buildnum; not tracked)
+BUILD_NUM=$(python3 tools/buildnum.py)
+echo "  Build #$BUILD_NUM"
 
 # Stage 0a: ZPA preprocessing — expand every .zpa under src/ to build/zpa/
 echo "  ZPA preprocessing..."
@@ -35,7 +27,7 @@ echo "  Assembling CCP..."
 "$SJASMPLUS" --raw=build/miniccp.bin build/zpa/miniccp.asm
 
 echo "  Assembling BIOS..."
-"$SJASMPLUS" --raw=build/bios.bin --lst=build/bios.lst -i build/zpa -i src/bios/ -i src/bdos/ -i build/ build/zpa/bios.asm
+"$SJASMPLUS" --raw=build/bios.bin --lst=build/bios.lst -i build/zpa -i src/bios/ -i src/bdos/ -i build/ -DBUILD_NUM="$BUILD_NUM" build/zpa/bios.asm
 
 echo "  Checking layout..."
 python3 tools/build_memory_map.py

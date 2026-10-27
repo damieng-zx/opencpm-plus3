@@ -665,7 +665,9 @@ print_str:
     inc %str
     jr print_str
 
-BUILD_NUM equ 189
+    IFNDEF BUILD_NUM
+BUILD_NUM equ 0
+    ENDIF
 
 TPA_KB equ (TPA_TOP - 0x0100) / 1024
 

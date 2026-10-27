@@ -7,8 +7,10 @@ set SJASMPLUS=C:\Apps\sjasmplus.exe
 
 echo === Building CP/M 3.1 ===
 
-:: Auto-bump build number
-python3 -c "import re; f=open('src/bios/bios.zpa','r+'); c=f.read(); m=re.search(r'BUILD_NUM equ (\d+)',c); n=int(m.group(1))+1; c=c.replace(f'BUILD_NUM equ {m.group(1)}',f'BUILD_NUM equ {n}'); f.seek(0); f.write(c); f.truncate(); print(f'  Build #{n}')"
+:: Build number (counter lives in build/buildnum; not tracked)
+for /f %%N in ('python3 tools\buildnum.py') do set BUILD_NUM=%%N
+if not defined BUILD_NUM goto :fail
+echo   Build #%BUILD_NUM%
 
 :: Stage 0a: ZPA preprocessing
 echo   ZPA preprocessing...
@@ -27,7 +29,7 @@ echo   Assembling CCP...
 if errorlevel 1 goto :fail
 
 echo   Assembling BIOS...
-%SJASMPLUS% --raw=build\bios.bin --lst=build\bios.lst -i build\zpa -i src\bios\ -i src\bdos\ -i build\ build\zpa\bios.asm
+%SJASMPLUS% --raw=build\bios.bin --lst=build\bios.lst -i build\zpa -i src\bios\ -i src\bdos\ -i build\ -DBUILD_NUM=%BUILD_NUM% build\zpa\bios.asm
 if errorlevel 1 goto :fail
 
 echo   Checking layout...

@@ -156,4 +156,6 @@ One reserved track. 9 sectors/track, 512 bytes/sector, 1K blocks.
 - Do not go down long rabbit holes without a solid reason. Use breakpoints, watchpoints, traps, and other emulator tools to gather evidence before theorizing. Let the data lead.
 
 ## Build Number
-Auto-incremented by `build.cmd` on every build (displays on the signon line for verification).
+Stored in `build/buildnum` (ignored by git) and incremented by the build
+scripts. It is passed to the assembler as `BUILD_NUM` and displays on the
+signon line for verification. Delete `build/buildnum` to restart at 1.
