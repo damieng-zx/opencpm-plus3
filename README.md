@@ -35,6 +35,7 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 - Date.com with Y2K compliance
 - Dump.com with screen-width adaption
 - Showxdpb.com - Show the eXtended Disk Parameter Blocks
+- Submit.com - Create the `$$$.SUB` command file drained by the CCP
 
 ### Test suites
 - bdostest.com - BDOS function tests (F1-F35, F104)

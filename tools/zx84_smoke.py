@@ -339,15 +339,21 @@ class Smoke:
         if not re.search(r"\d\d/\d\d/\d\d\d\d", self.text()):
             raise SmokeError("DATE did not print a date:\n" + self.text())
 
-        # SUBMIT.COM, RENAME.COM and PIP.COM come from the untracked
-        # references/binaries directory.  Check them when present and skip
-        # them on a fresh clone / CI, where the image is built from source.
-        if "SUBMIT   COM" in listing:
+        # SUBMIT.COM and SMOKE.SUB are built from source, so they are on
+        # every image.  Check both the explicit command and the implicit
+        # "SMOKE" -> SUBMIT SMOKE.SUB chain.
+        if "SUBMIT   COM" in listing and "SMOKE    SUB" in listing:
+            self.command("SUBMIT SMOKE.SUB", 2000)
+            self.expect("SUBMIT file", "Built-in commands:", "CPM3     SYS", "A>")
+            self.command("SMOKE", 2000)
+            self.expect("SUBMIT chain", "Built-in commands:", "CPM3     SYS", "A>")
             self.command("SUBMIT NOPE.SUB", 900)
             self.expect("SUBMIT missing", "No 'SUB' File Found", "A>")
         else:
-            self.log("SUBMIT.COM not on the disk; skipping SUBMIT checks")
+            self.log("SUBMIT.COM/SMOKE.SUB not on the disk; skipping SUBMIT checks")
 
+        # RENAME.COM and PIP.COM come from the untracked references/binaries
+        # directory; skip them on a source-only image.
         if "RENAME   COM" in listing:
             # CP/M RENAME takes NEW then OLD.
             self.command("RENAME TEST.TXT SMOKE.TXT", 600)

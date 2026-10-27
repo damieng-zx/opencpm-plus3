@@ -36,9 +36,10 @@ needs the checkout, `npm ci`, and a writable ROM cache.
 `SJASMPLUS` without a Windows-specific path.
 
 `references/binaries/` is untracked, so CI builds a source-only disk. The
-smoke runner always exercises `SMOKE.TXT` (from `src/test/smoke.txt`) and
-`DATE.COM`, and skips the `SUBMIT`, `RENAME` and `PIP` checks when those
-reference programs are not on the image.
+smoke runner always exercises `SMOKE.TXT` (from `src/test/smoke.txt`),
+`SMOKE.SUB` (from `src/test/smoke.sub`), the source-built `SUBMIT.COM`, and
+`DATE.COM`; only the `RENAME` and `PIP` checks depend on the reference
+programs.
 
 The zx84 checkout uses the current repository name,
 `damieng-zx/zx84`. If it is private in a future org, add

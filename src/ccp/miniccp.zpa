@@ -1351,6 +1351,8 @@ try_sub:
     ld de, cmd_buf + 2
     ldir
     pop hl
+    xor a
+    ld (de), a                 ; NUL-terminate for parse_cmd
 .copied:
     ; Mark this record consumed (byte 0 = 0xFF), write back to same record.
     ld a, 0xFF
