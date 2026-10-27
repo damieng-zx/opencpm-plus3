@@ -127,6 +127,9 @@ kbd_status:
 ; @clobbers af,bc,de,hl
 ; @end
 kbd_getchar:
+    ; lint-exempt: ie  ; blocking wait enables interrupts (ei/halt); the
+    ;                   ; system runs EI-normal, so the exit state is by
+    ;                   ; design, not tracked
     ; Drain inject buffer before touching real keyboard
     ld a, (kbd_inject_len)
     or a

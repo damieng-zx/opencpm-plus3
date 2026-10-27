@@ -25,6 +25,10 @@ Checks:
      contract) and F is not tracked (flags are assumed dead across CALL).
      Routines marked `; lint-exempt: stack` are skipped. Add
      `; lint: ignore` to the Clobbers: line to skip a routine.
+  5. DI/EI balance: every RET must leave the interrupt-enable flag in
+     its entry state along every control-flow path (net ei - di == 0).
+     Critical-section primitives that deliberately return with
+     interrupts changed carry `; lint-exempt: ie`.
 
 Routine header format:
     ; routine_name - Description
@@ -807,7 +811,7 @@ def parse_instruction(raw):
 
 class _Block:
     __slots__ = ('idx', 'entries', 'net_delta', 'successors',
-                 'last_insn', 'unanalyzable', 'sp_rebased')
+                 'last_insn', 'unanalyzable', 'sp_rebased', 'ie_net')
 
     def __init__(self, idx, entries):
         self.idx = idx
@@ -1709,6 +1713,98 @@ def check_clobber_annotations(routine_list, routine_map):
 
 
 # -------------------------------------------------------------------------
+# Check 5: DI/EI balance (interrupt state across RET paths)
+# -------------------------------------------------------------------------
+
+IE_EXEMPT_RE = re.compile(r';\s*lint-exempt\s*:\s*ie\b', re.I)
+
+
+def check_ie_balance(routine):
+    """
+    Every RET path must leave the interrupt-enable flag in the state it
+    had on entry: net (ei - di) == 0 along every path.  Critical-section
+    primitives that deliberately return with interrupts disabled (or
+    enabled) must carry `; lint-exempt: ie`.
+
+      In:       routine (parsed)
+      Out:      list of issue dicts (kind: ret/ambiguous)
+      Clobbers: none
+    """
+    for lineno, raw in routine.lines:
+        if IE_EXEMPT_RE.search(raw):
+            return []
+
+    entries = _cfg_entries(routine)
+    blocks = _cfg_build_blocks(entries)
+    if not blocks:
+        return []
+
+    label_to_block = {}
+    for bi, b in enumerate(blocks):
+        if b.entries and b.entries[0][2]:
+            label_to_block[b.entries[0][2]] = bi
+    label_to_block.setdefault(routine.name, 0)
+
+    for b in blocks:
+        net = 0
+        last = None
+        for entry in b.entries:
+            lineno, _, _, _, mn, ops, _ = entry
+            if mn is None:
+                continue
+            if mn == 'ei':
+                net += 1
+            elif mn == 'di':
+                net -= 1
+            last = entry
+        b.ie_net = net
+        b.last_insn = last
+
+    _cfg_compute_successors(blocks, label_to_block)
+
+    issues = []
+    entry_ie = {0: 0}
+    worklist = [0]
+    while worklist:
+        bi = worklist.pop()
+        b = blocks[bi]
+        exit_ie = b.ie_net + entry_ie[bi]
+        for succ in b.successors:
+            if succ not in entry_ie:
+                entry_ie[succ] = exit_ie
+                worklist.append(succ)
+            elif entry_ie[succ] != exit_ie:
+                lbl = _cfg_block_label(blocks[succ])
+                issues.append({
+                    'kind': 'ambiguous',
+                    'lineno': b.entries[-1][0] if b.entries else 0,
+                    'label': lbl,
+                    'existing': entry_ie[succ],
+                    'arriving': exit_ie,
+                })
+
+    for bi, b in enumerate(blocks):
+        if bi not in entry_ie or b.last_insn is None:
+            continue
+        lineno, raw, _, _, mn, _, _ = b.last_insn
+        if mn not in ('ret',):
+            # reti/retn are interrupt returns: IM1 handlers re-enable
+            # before reti by convention, so their IE state is managed.
+            continue
+        if 'lint: ignore' in raw.lower():
+            continue
+        net = b.ie_net + entry_ie[bi]
+        if net != 0:
+            issues.append({
+                'kind': 'ret',
+                'lineno': lineno,
+                'net': net,
+                'code': strip_comment(raw.strip()),
+            })
+    return issues
+
+
+# -------------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------------
 
@@ -1911,6 +2007,30 @@ def main():
     else:
         print(f"  note: {anno_count} finding(s) not gating the build; "
               f"pass --gate-annotations to enforce")
+
+    print()
+
+    # ---- Check 5: DI/EI balance ----
+    print("=== DI/EI Balance ===")
+    ie_count = 0
+    for fp in files:
+        for routine in file_routines.get(fp, []):
+            for iss in check_ie_balance(routine):
+                if iss['kind'] == 'ret':
+                    net = iss['net']
+                    state = 'disabled' if net < 0 else 'enabled'
+                    print(f"  IE     {fp}:{iss['lineno']}: "
+                          f"{routine.name}: ret with interrupts {state} "
+                          f"(net {net:+d})  [{iss['code']}]")
+                elif iss['kind'] == 'ambiguous':
+                    print(f"  IE     {fp}:{iss['lineno']}: "
+                          f"{routine.name}: label {iss['label']} reached "
+                          f"with conflicting interrupt state "
+                          f"({iss['existing']:+d} vs {iss['arriving']:+d})")
+                ie_count += 1
+    if ie_count == 0:
+        print("  OK -- interrupt state balanced on all RET paths.")
+    total += ie_count
 
     print()
     if total:

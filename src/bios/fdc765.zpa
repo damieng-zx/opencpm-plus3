@@ -221,6 +221,7 @@ fdc_init:
 ; @clobbers af
 ; @end
 fdc_enter_critical:
+    ; lint-exempt: ie  ; critical-section enter: returns with DI by design
     di
     ld a, 1
     ld (fdc_busy), a
@@ -235,6 +236,7 @@ fdc_enter_critical:
 ; @clobbers af
 ; @end
 fdc_leave_critical:
+    ; lint-exempt: ie  ; critical-section leave: returns with EI by design
     xor a
     ld (fdc_busy), a
     ei
