@@ -20,7 +20,7 @@ if errorlevel 1 goto :fail
 
 :: Stage 0b: Lint
 echo   Linting...
-python3 tools\z80lint.py
+python3 tools\z80lint.py --gate-annotations
 if errorlevel 1 goto :fail
 
 :: Stage 1: Assemble components
