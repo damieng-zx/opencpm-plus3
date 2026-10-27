@@ -645,5 +645,19 @@ class P2DiskChangeInvalidation(unittest.TestCase):
         self.assertIn("ld (deblock_dirty), a", body)
 
 
+class P2XbiosDocs(unittest.TestCase):
+    """The XBIOS/TE interface must be documented and linked."""
+
+    def test_xbios_doc_exists_and_is_linked(self):
+        from pathlib import Path
+        doc = Path(__file__).resolve().parent.parent / "docs" / "cpm-plus-xbios.md"
+        self.assertTrue(doc.exists())
+        text = doc.read_text(encoding="utf-8")
+        for ident in ("0x98", "0xC5", "0xC8", "0xE3", "0xE6"):
+            self.assertIn(ident, text)
+        self.assertIn("cpm-plus-xbios.md", source("README.md"))
+        self.assertIn("cpm-plus-xbios.md", source("docs/API.md"))
+
+
 if __name__ == "__main__":
     unittest.main()

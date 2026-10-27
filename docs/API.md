@@ -468,7 +468,7 @@ jump table directly:
 | 27 | BNKSEL | A=bank | — | Select bank (0=TPA, else system). |
 | 28 | SETBNK | A=bank | — | Set DMA bank for next I/O. |
 | 29 | XMOVE | B=dst,C=src | — | Set up cross-bank move. |
-| 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions). |
+| 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions).  See [XBIOS/TE Interface](cpm-plus-xbios.md). |
 | 31 | — | — | — | Reserved (JP 0). |
 | 32 | SCRMODE | A=32 or 51 | — | Set screen column count (clears screen). |
 

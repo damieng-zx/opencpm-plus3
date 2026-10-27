@@ -10,14 +10,14 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 
 ### Features
 
-- **51×24 and 32x24 screen modes**
-- **Full BDOS** with console I/O and file operations
-- **uPD765A FDC driver** with 512→128 byte sector deblocking
-- **Banked memory** — TPA mode (~62K user space) and system mode with bank switching
-- **MiniCCP** with built-in DIR, TYPE, VER, HELP, DUMP commands and `.COM` loading
+- **51x24 and 32x24 screen modes**
+- **BDOS** with console I/O, file operations and extended functions (F46 free-space accounting is a stub)
+- **uPD765A FDC driver** with 512->128 byte sector deblocking
+- **Banked memory** - TPA mode (~61K user space) and system mode with bank switching
+- **MiniCCP** with built-in DIR, TYPE, HELP, SCREEN commands and `.COM` loading
 - **Z80 linter** (`z80lint.py`) that validates stack balance and register clobbering across all return paths
 - **ZPA preprocessor** for source-level abstractions on top of Z80 assembly
-- **RTC clock** although stalls during disk-IO like Locomotive version
+- **RTC clock** (runs during TPA execution; interrupts are briefly disabled during FDC access)
 
 ### Compatibility
 
@@ -37,17 +37,22 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 - Showxdpb.com - Show the eXtended Disk Parameter Blocks
 
 ### Test suites
-- bdostest.com - Testing the CP/M BDOS functions 1-35
-- termtest.com - Testing the terminal emulation/ESC codes
-- disktest.com - Testing file and disk operations
+- bdostest.com - BDOS function tests (F1-F35, F104)
+- disktest.com - File, directory, extent and SCB tests (T1-T17)
+- termtest.com - Terminal emulation/ESC codes
+- xtetest.com - XBIOS/TE probe
+- stktest.com - TPA stack, MOVE and clock
+- tabtest.com - Console TAB expansion
+- delimtest.com - F110 output delimiter
+- p0test.com - Page-zero IOBYTE/user-drive bytes
   
 ### Wishlist/TODO
 
-- .SUB execution
 - Format command
-- RAMdisk support
 - 64-column mode
-- User area/file spec on command lines
+- Richer command-line file specs
+- F46 real free-space accounting
+- 16-bit block formats (PCW 720K file I/O)
 
 ### Out of scope
 
@@ -62,8 +67,8 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 | Range | TPA Mode | System Mode |
 |-------|----------|-------------|
 | 0000–00FF | Page zero (vectors) | Bank 4 — BIOS, BDOS, drivers |
-| 0100–F9FF | ~63K user TPA | |
-| FA00–FFFF | Common stub (bank 3) | Common stub (bank 3) |
+| 0100–F5FF | ~61K user TPA | |
+| F600–FFFF | Common stub (bank 3) | Common stub (bank 3) |
 
 Banking is controlled via port `0x1FFD`. See [AGENTS.md](AGENTS.md) for full architectural details.
 
@@ -77,6 +82,9 @@ python3 tools/z80lint.py
 
 # Build the disk image
 build.cmd
+
+# or, on a Unix-like shell
+./build.sh
 
 # Build with additional files
 build.cmd --add FILE ...
@@ -107,6 +115,7 @@ src/
   bios/     BIOS, screen/keyboard/FDC drivers, common memory stub
   bdos/     BDOS (console + file I/O)
   ccp/      MiniCCP command processor
+  fid/      RAM disk FID module
   util/     CP/M utilities (.COM programs)
   test/     Test programs
 tools/      Build tools (mkdsk, zpa preprocessor, linter, patchsum)
@@ -117,6 +126,7 @@ docs/       API reference, filesystem documentation
 
 - [CP/M 3.1 BDOS API Reference](docs/API.md)
 - [Filesystem Layout](docs/filesystem.md)
+- [XBIOS/TE Interface](docs/cpm-plus-xbios.md)
 - [zx84 MCP Smoke Test](docs/mcp-smoke-test.md)
 
 ## License
