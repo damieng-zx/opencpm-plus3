@@ -93,6 +93,29 @@ con_mode:   dw 0x0003          ; F109: console mode word (default: PAGE + DISPLA
 bdos_page_row: db 0            ; LFs output since last pause/input
 out_delim:  db '$'             ; F110: F9 output delimiter
 
+; --- Multi-sector I/O (F44) state ---
+; The record count itself lives in the SCB (scb_multi) so F49 sees it.
+; These track a transfer in progress.
+ms_active:  db 0               ; 1 = inner record handlers return to caller
+ms_left:    db 0               ; records left to transfer
+ms_done:    db 0               ; records transferred so far
+ms_result:  db 0               ; non-zero result from the inner handler
+ms_fcb:     dw 0               ; user FCB pointer across iterations
+
+; --- F46 free-space scratch ---
+f46_left:   dw 0               ; blocks still to scan
+f46_ptr:    dw 0               ; current ALV byte pointer
+f46_mask:   db 0               ; bit mask within the current byte
+f46_byte:   db 0               ; current ALV byte
+
+; --- F59 / F111 scratch ---
+f59_fcb:    dw 0               ; FCB passed to F59
+f59_dest:   dw 0               ; load address from FCB+21h
+f59_dma:    dw 0               ; saved DMA address
+f111_addr:  dw 0               ; F111 text address
+f111_len:   dw 0               ; F111 text length
+f111_cb:    dw 0               ; F111 control block pointer
+
 ; Private SETDEF state (F120..F123). Not in the SCB — only reachable via
 ; our own BDOS functions. Default: no search path (current drive only),
 ; COM searched before SUB.
@@ -138,7 +161,7 @@ bdos_entry:
     cp 51
     jr c, .low
     cp 99
-    jp c, bdos_eok              ; 51..98: unsupported -> success/no-op
+    jr c, .mid
     cp 124
     jp nc, bdos_eok             ; 124+: unsupported
     sub 99
@@ -152,6 +175,15 @@ bdos_entry:
     ld h, (hl)
     ld l, a
     jp (hl)
+.mid:
+    ; 51..98: only a few are meaningful on this banked system.
+    cp 59
+    jp z, bf_f59                ; load overlay
+    cp 60
+    jp z, bdos_efail            ; call RSX - no RSXs resident
+    cp 98
+    jp z, bf_f98                ; clean up disc (CCP helper)
+    jp bdos_eok                 ; 51..58, 61..97: unused/no-op
 .low:
     add a, a
     ld e, a
@@ -176,9 +208,10 @@ dispatch_low:
     dw bf_f32, bf_f33, bf_f34, bf_f35, bf_f36, bf_f37
     dw bdos_eok, bdos_eok                 ; 38, 39
     dw bf_f40
-    dw bdos_eok, bdos_eok, bdos_eok, bdos_eok  ; 41-44
+    dw bdos_eok, bdos_eok, bdos_eok  ; 41-43
+    dw bf_f44
     dw bf_f45, bf_f46
-    dw bdos_efail                         ; 47
+    dw bf_f47
     dw bf_f48, bf_f49, bf_f50
 
 dispatch_ext:                             ; function 99..123
@@ -186,9 +219,9 @@ dispatch_ext:                             ; function 99..123
     dw bdos_eok                           ; 101
     dw bdos_efail, bdos_efail             ; 102, 103
     dw bf_f104, bf_f105
-    dw bdos_eok, bdos_eok, bdos_eok       ; 106-108
+    dw bdos_eok, bf_f107, bf_f108   ; 106, 107, 108
     dw bf_f109
-    dw bf_f110, bdos_eok, bdos_eok        ; 110-112
+    dw bf_f110, bf_f111, bf_f112    ; 110, 111, 112
     dw bdos_eok, bdos_eok, bdos_eok, bdos_eok, bdos_eok, bdos_eok, bdos_eok  ; 113-119
     dw bf_f120, bf_f121, bf_f122, bf_f123
 
@@ -226,6 +259,110 @@ bdos_eok:
     xor a
     ld l, a
     ld h, a
+    jp bdos_ret
+
+
+; ==========================================================================
+; Return helpers for the multi-sector wrappers
+; ==========================================================================
+
+; bdos_exit — return to the caller of a record core, or to the user
+;   In:  A, HL = BDOS result already set
+;   Out: nothing (returns to the wrapper, or to bdos_stub)
+; @proc bdos_exit
+; @out   a
+; @out   hl
+; @clobbers af
+; @end
+bdos_exit:
+    ; lint-exempt: stack  ; two exit paths by design
+    push af
+    ld a, (ms_active)
+    or a
+    jr z, .full
+    pop af
+    ret                        ; back to multi_read/multi_write/F59
+.full:
+    pop af
+    jp bdos_ret
+
+; @proc bdos_eok_x
+; @out   a
+; @out   hl
+; @clobbers af
+; @end
+bdos_eok_x:
+    xor a
+    ld l, a
+    ld h, a
+    jp bdos_exit
+
+; @proc bdos_efail_x
+; @out   a
+; @out   hl
+; @clobbers af
+; @end
+bdos_efail_x:
+    ld a, 0xFF
+    ld l, a
+    ld h, 0
+    jp bdos_exit
+
+
+; ==========================================================================
+; F44 single-record pass-through
+; ==========================================================================
+;
+; The multi-sector count is accepted and kept in the SCB, but this BDOS
+; transfers one record per call and reports it in H.  CP/M 3 allows a
+; partial transfer, so programs that honour H (PIP does) just call again
+; for the rest, and programs that ignore H see exactly the single-record
+; behaviour they expect.
+
+; @proc multi_read
+; @param %fcb:u16 de
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+multi_read:
+    ; lint-exempt: stack  ; returns through bdos_ret
+    ld (ms_fcb), de
+    ld a, 1
+    ld (ms_active), a
+    ld de, (ms_fcb)
+    call f20_body
+    push af
+    xor a
+    ld (ms_active), a
+    pop af
+    or a
+    jr nz, .mr_out
+    ld h, 1
+.mr_out:
+    jp bdos_ret
+
+; @proc multi_write
+; @param %fcb:u16 de
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+multi_write:
+    ; lint-exempt: stack  ; returns through bdos_ret
+    ld (ms_fcb), de
+    ld a, 1
+    ld (ms_active), a
+    ld de, (ms_fcb)
+    call f21_body
+    push af
+    xor a
+    ld (ms_active), a
+    pop af
+    or a
+    jr nz, .mw_out
+    ld h, 1
+.mw_out:
     jp bdos_ret
 
 
@@ -277,7 +414,13 @@ bdos_con_out:
     ld hl, scb_conpage
     cp (hl)                    ; A < conpage (page not full)?
     jr c, .tick
+    ; Page is full.  Emit this LF first so the prompt lands on a fresh row:
+    ; printing it before the LF would overwrite the line that was just
+    ; written when the prompt is erased.
+    ld c, 0x0A
+    call con_out
     call bdos_page_pause       ; page full → pause (resets counter)
+    ret
 .tick:
     ld a, (bdos_page_row)
     inc a
@@ -644,6 +787,7 @@ bf_f13:
     ld (ro_vec), hl
     ld hl, 0x0080
     ld (bdos_dma), hl
+    ld (scb_dma), hl
     ; Invalidate the drive cache so the select_drive below actually does
     ; the sel_disk + DPB refetch + ALV rebuild (disc may have changed).
     ld a, 0xFF
@@ -732,6 +876,7 @@ bf_f26:
     pop de
     pop bc
     ld (bdos_dma), de
+    ld (scb_dma), de
     jp bdos_ret
 
 ; F27: Get allocation vector
@@ -2189,6 +2334,10 @@ bf_f19:
 
 
 ; F20: Read Sequential
+;   In:  DE = FCB
+;   Out: A = 0 (OK), 1 (EOF), 0xFF (error); H = records transferred
+;   Transfers scb_multi records from the DMA address, advancing it by 128
+;   bytes per record (CP/M 3 multi-sector count set by F44).
 ; @proc bf_f20
 ; @param %fcb:u16   de
 ; @param %func:u8   c
@@ -2199,6 +2348,17 @@ bf_f19:
 bf_f20:
     pop de
     pop bc
+    jp multi_read
+
+; f20_body - read one sequential record (single-record core)
+; @proc f20_body
+; @param %fcb:u16   de
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+f20_body:
+    ; In: DE = FCB (the multi-sector wrapper supplies it)
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
 
     ; Cache DPB/ALV for the FCB's drive so cached_* is consistent with
@@ -2307,7 +2467,7 @@ bf_f20:
     ld a, 0                    ; Success
     ld l, a
     ld h, 0
-    jp bdos_ret
+    jp bdos_exit
 
 ; ------------------------------------------------------------------
 ; Open next extent when current extent is exhausted
@@ -2402,20 +2562,20 @@ bf_f20:
     ld a, 1                    ; EOF / error
     ld l, a
     ld h, 0
-    jp bdos_ret
+    jp bdos_exit
 
 .read_drv_err:
     ld a, 0xFF
     ld l, a
     ld h, 0
-    jp bdos_ret
+    jp bdos_exit
 
 .read_err:
     pop ix
     ld a, 0xFF
     ld l, a
     ld h, 0xFF
-    jp bdos_ret
+    jp bdos_exit
 
 
 ; F21: Write Sequential
@@ -2432,6 +2592,17 @@ bf_f20:
 bf_f21:
     pop de
     pop bc
+    jp multi_write
+
+; f21_body - write one sequential record (single-record core)
+; @proc f21_body
+; @param %fcb:u16   de
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+f21_body:
+    ; In: DE = FCB (the multi-sector wrapper supplies it)
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
 
 bf_f21_core:
@@ -2534,7 +2705,7 @@ bf_f21_core:
     inc (ix + 32)              ; CR++
     call writeback_fcb()
     call close_dir_update      ; Persist RC/alloc for this extent
-    jp bdos_eok
+    jp bdos_eok_x
 
 .wseq_alloc:
     ; HL = &FCB[16 + block_index] — need to allocate a block here
@@ -2560,17 +2731,17 @@ bf_f21_core:
 .wseq_ret:
     ld l, a
     ld h, 0
-    jp bdos_ret
+    jp bdos_exit
 
 .wseq_ro:
     ld l, a
     ld h, 0
-    jp bdos_ret
+    jp bdos_exit
 
 .wseq_error:
     cp 2                       ; BIOS WRITE: 2 = read-only disk
     jp z, .wseq_ro
-    jp bdos_efail
+    jp bdos_efail_x
 
 .wseq_new_extent:
     ; CR == 128: current extent is full.
@@ -3603,6 +3774,33 @@ div_hl_bc:
 ; ==========================================================================
 
 
+; F44: Set Multi-Sector Count
+;   In:  E = record count (1..127)
+;   Out: A = 0 (accepted) or 0xFF (invalid)
+;   The count lives in the SCB (scb_multi, offset 0x4A) so that F49
+;   reads and writes the same byte.  F20/F21 honour it; the random
+;   functions always transfer a single record.
+; @proc bf_f44
+; @param %param:u16 de
+; @param %func:u8   c
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+bf_f44:
+    pop de
+    pop bc
+    ld a, e
+    or a
+    jr z, .f44_bad
+    cp 128
+    jr nc, .f44_bad
+    ld (scb_multi), a
+    jp bdos_eok
+.f44_bad:
+    jp bdos_efail
+
+
 ; F45: Set BDOS Error Mode
 ;   In: E = mode
 ;   Out: A = 0
@@ -3619,13 +3817,15 @@ bf_f45:
     pop bc
     ld a, e
     ld (error_mode), a
+    ld (scb_errmode), a
     jp bdos_eok
 
 
 ; F46: Get Free Space
-;   In: E = drive (0=A:)
-;   Out: A=0, HL=0 (stub — free-space counting is deferred; DMA unchanged)
-;   Clobbers: AF, BC, DE, HL
+;   In:  E = drive (0=A:, 1=B:, ...)
+;   Out: A=0 on success; three bytes at the DMA address hold the free
+;        128-byte record count (low, high, 0).  A=0xFF if the drive is
+;        invalid.  The DMA address itself is unchanged.
 ; @proc bf_f46
 ; @param %param:u16 de
 ; @param %func:u8   c
@@ -3636,8 +3836,108 @@ bf_f45:
 bf_f46:
     pop de
     pop bc
-    ; Free-space counting is deferred; return 0 (P2 follow-up).
+    ld a, e
+    cp 16
+    jp nc, .f46_err
+    call select_drive
+    jp c, .f46_err
+
+    ; Scan ALV bits 0..DSM.  Bit 7 of the first byte is block 0.
+    ld hl, (cached_dsm)
+    inc hl
+    ld (f46_left), hl
+    ld hl, (cached_alv)
+    ld (f46_ptr), hl
+    ld a, (hl)
+    ld (f46_byte), a
+    ld a, 0x80
+    ld (f46_mask), a
+    ld bc, 0                    ; BC = free block count
+
+.f46_loop:
+    ld a, (f46_byte)
+    ld e, a
+    ld a, (f46_mask)
+    and e
+    jr nz, .f46_used
+    inc bc                      ; bit clear = block free
+.f46_used:
+    ; Step the mask; fetch the next ALV byte when it runs out.
+    ld a, (f46_mask)
+    srl a
+    jr nc, .f46_store_mask
+    ld a, 0x80
+    ld (f46_mask), a
+    push bc
+    ld hl, (f46_ptr)
+    inc hl
+    ld (f46_ptr), hl
+    ld a, (hl)
+    ld (f46_byte), a
+    pop bc
+    jr .f46_next
+.f46_store_mask:
+    ld (f46_mask), a
+.f46_next:
+    ld hl, (f46_left)
+    dec hl
+    ld (f46_left), hl
+    ld a, h
+    or l
+    jr nz, .f46_loop
+
+    ; records = free blocks << BSH (records per block = 2^BSH)
+    ld a, (cached_bsh)
+    or a
+    jr z, .f46_scaled
+.f46_shift:
+    sla c
+    rl b
+    dec a
+    jr nz, .f46_shift
+.f46_scaled:
+    ; Deliver three bytes at the DMA address: low, high, 0.
+    ld de, (bdos_dma)
+    ld a, c
+    push bc
+    call write_user_byte
+    pop bc
+    push bc
+    ld de, (bdos_dma)
+    inc de
+    ld a, b
+    call write_user_byte
+    pop bc
+    ld de, (bdos_dma)
+    inc de
+    inc de
+    xor a
+    call write_user_byte
     jp bdos_eok
+
+.f46_err:
+    jp bdos_efail
+
+
+; F47: Chain to Program
+;   In:  E = 0xFF to adopt the current drive/user as the CCP's
+;   The command line is already in the TPA at 0080h.  Mark a chain as
+;   pending in the SCB and warm boot; the CCP sees the flag, consumes the
+;   tail and does not clear the program return code.
+;   Does not return on success.
+; @proc bf_f47
+; @param %param:u16 de
+; @param %func:u8   c
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+bf_f47:
+    pop de
+    pop bc
+    ld a, 1
+    ld (scb_chain), a
+    jp fn_wboot
 
 
 ; F48: Flush Buffers
@@ -3654,6 +3954,92 @@ bf_f48:
     pop de
     pop bc
     call flush_deblock
+    jp bdos_eok
+
+
+; F59: Load Overlay
+;   In:  DE = FCB of an already-open file; FCB+21h holds the load address
+;        DE = 0: no load (nothing resident to clean up)
+;   Out: A = 0 (OK), 0xFE (load error)
+;   Loads 128-byte records sequentially at the address in the FCB until
+;   end of file, then restores the DMA address.
+; @proc bf_f59
+; @param %fcb:u16   de
+; @param %func:u8   c
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+bf_f59:
+    ; lint-exempt: stack  ; pushes BC/DE for the inner core each pass
+    pop de
+    pop bc
+    ld a, d
+    or e
+    jp z, bdos_eok              ; DE=0: nothing to load
+    ld (f59_fcb), de
+    ld hl, (bdos_dma)
+    ld (f59_dma), hl
+
+    ; Load address = word at FCB+21h
+    ld hl, 33
+    add hl, de
+    ex de, hl
+    call read_user_byte
+    ld (f59_dest), a
+    ld de, (f59_fcb)
+    ld hl, 34
+    add hl, de
+    ex de, hl
+    call read_user_byte
+    ld (f59_dest + 1), a
+
+    ld a, 1
+    ld (ms_active), a
+.f59_loop:
+    ld hl, (f59_dest)
+    ld (bdos_dma), hl
+    ld (scb_dma), hl
+    ld de, (f59_fcb)
+    call f20_body
+    or a
+    jr z, .f59_next
+    cp 1
+    jr z, .f59_ok
+    jr .f59_err
+.f59_next:
+    ld hl, (f59_dest)
+    ld de, 128
+    add hl, de
+    ld (f59_dest), hl
+    jr .f59_loop
+.f59_ok:
+    xor a
+    jr .f59_ret
+.f59_err:
+    ld a, 0xFE
+.f59_ret:
+    ld (ms_result), a
+    xor a
+    ld (ms_active), a
+    ld hl, (f59_dma)
+    ld (bdos_dma), hl
+    ld (scb_dma), hl
+    ld a, (ms_result)
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+
+
+; F98: Clean Up Disc (called by the CCP when a program terminates)
+;   Our buffers are per-call, so there is nothing to purge.
+; @proc bf_f98
+; @param %func:u8 c
+; @out   a
+; @out   hl
+; @clobbers af,hl
+; @end
+bf_f98:
     jp bdos_eok
 
 
@@ -3771,6 +4157,8 @@ scb_read_field:
     ld (scb_curdsk), a
     ld a, (cur_user)
     ld (scb_user), a
+    ld a, (error_mode)
+    ld (scb_errmode), a
     ; Read word from scb_base + C
     ld l, c
     ld h, 0
@@ -3803,6 +4191,8 @@ scb_write_field:
     ld (scb_curdsk), a
     ld a, (cur_user)
     ld (scb_user), a
+    ld a, (error_mode)
+    ld (scb_errmode), a
 
     ; Write byte to scb_base + C
     ld l, c
@@ -3823,6 +4213,8 @@ scb_write_field:
     jr z, .curdisk
     cp scb_user - scb_base
     jr z, .curuser
+    cp scb_errmode - scb_base
+    jr z, .errmode
     ret
 
 .dma_low:
@@ -3844,6 +4236,10 @@ scb_write_field:
 .curuser:
     ld a, e
     ld (cur_user), a
+    ret
+.errmode:
+    ld a, e
+    ld (error_mode), a
     ret
 
 
@@ -4199,6 +4595,122 @@ bf_f110:
     ld l, a
     ld h, 0
     jp bdos_ret
+
+
+; F107: Get Serial Number
+;   In:  DE = buffer in the TPA
+;   Out: A = 0; six ASCII bytes written at DE
+; @proc bf_f107
+; @param %buf:u16   de
+; @param %func:u8   c
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+bf_f107:
+    pop de
+    pop bc
+    ld hl, f107_serial
+    ld b, 6
+.f107_loop:
+    ld a, (hl)
+    push hl
+    push bc
+    call write_user_byte
+    pop bc
+    pop hl
+    inc hl
+    inc de
+    djnz .f107_loop
+    jp bdos_eok
+
+f107_serial: db 'OPNCP3'
+
+
+; F108: Get/Set Program Return Code
+;   In:  DE = 0xFFFF to read, otherwise the new 16-bit code
+;   Out: HL = current code
+; @proc bf_f108
+; @param %code:u16  de
+; @param %func:u8   c
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+bf_f108:
+    pop de
+    pop bc
+    ld a, d
+    and e
+    cp 0xFF
+    jr z, .f108_get
+    ld (scb_rc), de
+.f108_get:
+    ld hl, (scb_rc)
+    ld a, l
+    jp bdos_ret
+
+
+; F111: Send Block of Text to Console
+;   In:  DE = character control block in the TPA: [addr lo, addr hi, len lo, len hi]
+;   Out: A = 0
+; @proc bf_f111
+; @param %cb:u16    de
+; @param %func:u8   c
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+bf_f111:
+    pop de
+    pop bc
+    ld (f111_cb), de
+    call read_user_byte         ; CB[0] = text address low
+    ld (f111_addr), a
+    ld de, (f111_cb)
+    inc de
+    call read_user_byte
+    ld (f111_addr + 1), a
+    ld de, (f111_cb)
+    inc de
+    inc de
+    call read_user_byte         ; CB[2] = length low
+    ld (f111_len), a
+    ld de, (f111_cb)
+    inc de
+    inc de
+    inc de
+    call read_user_byte
+    ld (f111_len + 1), a
+.f111_loop:
+    ld hl, (f111_len)
+    ld a, h
+    or l
+    jr z, .f111_done
+    dec hl
+    ld (f111_len), hl
+    ld de, (f111_addr)
+    call read_user_byte
+    ld c, a
+    call bdos_con_out
+    ld hl, (f111_addr)
+    inc hl
+    ld (f111_addr), hl
+    jr .f111_loop
+.f111_done:
+    jp bdos_eok
+
+; F112: Send Block of Text to the Printer
+;   No printer is fitted; the block is discarded.
+; @proc bf_f112
+; @param %cb:u16    de
+; @param %func:u8   c
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+bf_f112:
+    jp bdos_eok
 
 
 ; F120: Get SETDEF order byte

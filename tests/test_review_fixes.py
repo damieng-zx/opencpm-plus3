@@ -431,16 +431,24 @@ class VerificationStackTestMath(unittest.TestCase):
         self.assertIn("B = dest bank 0 (TPA), C = src bank 0", text)
 
 
-class VerificationF46Stub(unittest.TestCase):
-    """F46 is a documented stub; the runtime test must assert that contract."""
+class VerificationF46FreeSpace(unittest.TestCase):
+    """F46 is implemented: free records at the DMA address, and the count
+    must move by one block when a file is written and deleted."""
 
-    def test_disktest_checks_stub_contract(self):
+    def test_disktest_checks_free_space(self):
         text = source("src/test/disktest.asm")
         body = text[text.index("test10:"):text.index("test11:")]
-        self.assertIn("0xAA", body)          # DMA sentinel
-        self.assertIn("or a", body)          # A = 0
-        self.assertIn("or l", body)          # HL = 0
-        self.assertIn("T10 F46 stub", text)
+        self.assertIn("ld c, 46", body)      # F46
+        self.assertIn("t10_before", body)    # baseline saved
+        self.assertIn("sbc hl, de", body)    # compare before/after
+        self.assertIn("T10 F46 free space", text)
+
+    def test_bdos_writes_three_bytes_at_dma(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f46:"):text.index("; F47: Chain to Program")]
+        self.assertIn("cached_alv", body)
+        self.assertIn("write_user_byte", body)
+        self.assertIn("f46_err", body)
 
 
 class P2WriteReturnCodes(unittest.TestCase):

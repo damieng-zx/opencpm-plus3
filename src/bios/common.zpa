@@ -43,7 +43,11 @@ bdos_vector:
 scb_version:
     db 0x31                        ; 0x05: CP/M version (3.1)
     db 0x01                        ; 0x06: system type (1=CP/M Plus)
-    ds 19                          ; 0x07-0x19: reserved
+scb_chain:
+    db 0                           ; 0x07: F47 chain pending (read by the CCP)
+scb_rc:
+    dw 0                           ; 0x08-0x09: F108 program return code
+    ds 16                          ; 0x0A-0x19: reserved
 scb_conwidth:
     db 50                          ; 0x1A: console width - 1
     db 0                           ; 0x1B: reserved
@@ -79,6 +83,8 @@ scb_tpa:
     dw 0                           ; 0x62-0x63: top of TPA (patched at init)
 
     assert $ - scb_base == 100, "SCB must be exactly 100 bytes!"
+    assert scb_chain == 0xF607, "miniccp.zpa CCP_CHAIN_ADDR must match scb_chain"
+    assert scb_rc == 0xF608, "miniccp.zpa CCP_RC_ADDR must match scb_rc"
 
 
 ; ==========================================================================

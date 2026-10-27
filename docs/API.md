@@ -290,16 +290,32 @@ Programs should close any open files before exiting (BDOS F16).
 ### CP/M 3 Extended Functions
 
 #### F44 — Set Multi-Sector Count
-- **In**: E=count (1-128)
-- **Out**: A=0 (OK) or 0xFF (invalid)
+- **In**: E=count (1..127)
+- **Out**: A=0 (accepted) or 0xFF (invalid)
+- **Note**: The count is stored in the SCB (`scb_multi`, offset 0x4A) and
+  is reset to 1 by warm boot, but this BDOS transfers **one record per
+  call** and reports it in `H`. CP/M 3 permits a partial transfer, so
+  programs that honour `H` (PIP does) call again for the rest, while
+  programs that ignore `H` keep the single-record behaviour.
 
 #### F45 — Set BDOS Error Mode
 - **In**: E=mode
+- **Note**: Stored in the SCB (`scb_errmode`, offset 0x4B) as well.
 
 #### F46 — Get Free Disk Space
-- **In**: E=drive (0=default, 1=A, ...)
-- **Out**: A=0, HL=0; DMA is unchanged
-- **Note**: Currently a stub — free-space counting is deferred (P2).
+- **In**: E=drive (0=A:, 1=B:, ...)
+- **Out**: A=0 on success, three bytes at the DMA address hold the number
+  of free 128-byte records (low, high, 0). A=0xFF if the drive is
+  invalid. The DMA address itself is not changed.
+- **Note**: Computed from the drive's allocation vector, so it reflects
+  blocks that are allocated in the directory.
+
+#### F47 — Chain to Program
+- **In**: E=0xFF to adopt the current drive/user as the CCP's
+- **Note**: Sets a chain flag in the SCB (`scb_chain`, offset 0x07) and
+  warm boots. The CCP sees the flag and executes the command tail
+  already at [0080h] instead of prompting, without clearing the program
+  return code (F108). Does not return on success.
 
 #### F49 — Get/Set System Control Block
 - **In**: DE=PB (parameter block address)
@@ -320,8 +336,16 @@ Programs should close any open files before exiting (BDOS F16).
 - **Note**: Calls BIOS function number `func` with specified registers.
 - **Note**: F50 follows the public BIOS numbering. Function 30 (`USERF`) is not supported through F50 because `USERF` requires an inline `DW` after `CALL`, which the 8-byte F50 parameter block cannot express.
 
-#### F98 — Rebuild Allocation Vector (non-standard)
+#### F59 — Load Overlay
+- **In**: DE=FCB of an already-open file; FCB+21h holds the load address.
+  DE=0 means "nothing to load" and returns 0.
+- **Out**: A=0 (loaded to end of file) or 0xFE (load error)
+- **Note**: Reads 128-byte records sequentially to the address in the
+  FCB and restores the DMA address afterwards.
+
+#### F98 — Clean Up Disc (CCP helper)
 - **Out**: A=0
+- **Note**: Our buffers are per-call, so there is nothing to purge.
 
 #### F104 — Set Date/Time
 - **In**: DE=address of 4-byte date/time: `[days_lo, days_hi, hour_BCD, min_BCD]`
@@ -331,10 +355,14 @@ Programs should close any open files before exiting (BDOS F16).
 - **Out**: A=seconds, HL=day counter
 
 #### F107 — Get Serial Number
-- **Out**: A=0, HL=0 (stub — serial string is not written; deferred)
+- **In**: DE=buffer in the TPA
+- **Out**: A=0; six ASCII bytes written at DE (`OPNCP3`)
 
 #### F108 — Get/Set Program Return Code
-- **Out**: A=0, HL=0 (stub — return code is not stored; deferred)
+- **In**: DE=0xFFFF to read, otherwise the new 16-bit code
+- **Out**: HL=current code
+- **Note**: Stored in the SCB (`scb_rc`, offset 0x08). The CCP clears it
+  when it reads a new command from the console, and keeps it across F47.
 
 #### F109 — Get/Set Console Mode
 - **In**: DE=0xFFFF → get; DE=value → set
@@ -345,7 +373,14 @@ Programs should close any open files before exiting (BDOS F16).
 - **Note**: F9 terminates on this delimiter. The default is `$`.
 
 #### F111 — Print Block to Console
-- **Note**: Stub — returns 0; the block is not printed.
+- **In**: DE=character control block in the TPA: `[addr_lo, addr_hi, len_lo, len_hi]`
+- **Out**: A=0
+- **Note**: Output goes through the console path (paging/^S respected).
+
+#### F112 — Print Block to Printer
+- **In**: DE=character control block (same layout as F111)
+- **Out**: A=0
+- **Note**: No printer is fitted, so the block is discarded.
 
 ---
 

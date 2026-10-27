@@ -52,11 +52,11 @@ start:
     add a, c                   ; + second digit
     ld b, a
 .single_digit:
-    ; B = test number (1-22)
+    ; B = test number (1-26)
     ld a, b
     or a
     jp z, .run_all
-    cp 23
+    cp 29
     jp nc, .run_all            ; Out of range → run all
     ; Jump to the specific test via table
     dec a                      ; 0-based index
@@ -76,6 +76,7 @@ start:
     dw .run_t7, .run_t8, .run_t9, .run_t10, .run_t11, .run_t12, .run_t13
     dw .run_t14, .run_t15, .run_t16, .run_t17
     dw .run_t18, .run_t19, .run_t20, .run_t21, .run_t22
+    dw .run_t23, .run_t24, .run_t25, .run_t26, .run_t27, .run_t28
 
     ; Single-test runners: run the test then exit
 .run_t1:  call test1
@@ -122,6 +123,18 @@ start:
     jp done
 .run_t22: call test22
     jp done
+.run_t23: call test23
+    jp done
+.run_t24: call test24
+    jp done
+.run_t25: call test25
+    jp done
+.run_t26: call test26
+    jp done
+.run_t27: call test27
+    jp done
+.run_t28: call test28
+    jp done
 
 .run_all:
     call test1
@@ -146,6 +159,12 @@ start:
     call test20
     call test21
     call test22
+    call test23
+    call test24
+    call test25
+    call test26
+    call test27
+    call test28
     jp done
 
 test1:
@@ -592,10 +611,10 @@ test9:
     ret
 
 test10:
-    ; === T10: F46 Get Free Space (documented stub) ===
-    ; F46 is deliberately deferred (P2 follow-up): it returns A=0 and HL=0
-    ; and leaves the DMA buffer untouched.  Assert that contract so a
-    ; future implementation has to update this test deliberately.
+    ; === T10: F46 Get Free Space ===
+    ; The count must be non-zero, drop by one block (8 records) after
+    ; writing eight records, and return to the original value after the
+    ; file is deleted.
     ld de, msg_t10
     ld c, 9
     call BDOS
@@ -604,33 +623,88 @@ test10:
     ld c, 26
     call BDOS
 
-    ; Put a sentinel in DMA[0..2] so a clobber would be visible
-    ld hl, DMA
-    ld (hl), 0xAA
-    inc hl
-    ld (hl), 0xAA
-    inc hl
-    ld (hl), 0xAA
+    ld hl, fn_test
+    call delete_name
 
-    ld de, 0                ; Drive A
-    ld c, 46                ; F46: Get Disk Free Space (stub)
+    ld e, 0                    ; A:
+    ld c, 46
     call BDOS
-
     or a
-    jr nz, .t10_fail        ; Stub must report success
+    jp nz, .t10_fail
+    ld hl, (DMA)
+    ld (t10_before), hl
     ld a, h
     or l
-    jr nz, .t10_fail        ; HL must be 0
+    jp z, .t10_fail            ; free space must be non-zero
 
-    ld a, (DMA)
-    cp 0xAA
-    jr nz, .t10_fail
-    ld a, (DMA + 1)
-    cp 0xAA
-    jr nz, .t10_fail
-    ld a, (DMA + 2)
-    cp 0xAA
-    jr nz, .t10_fail
+    ; Create TEST.TMP and write eight records (one 1K block).
+    ld hl, fn_test
+    call set_fcb
+    ld de, FCB1
+    ld c, 22                   ; make
+    call BDOS
+    cp 0xFF
+    jp z, .t10_fail
+
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld b, 8
+.t10_wr:
+    push bc
+    ld hl, DMA
+    ld (hl), 0x5A
+    ld de, FCB1
+    ld c, 21                   ; write sequential
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t10_fail
+    djnz .t10_wr
+
+    ld de, FCB1
+    ld c, 16                   ; close
+    call BDOS
+
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld e, 0
+    ld c, 46
+    call BDOS
+    or a
+    jp nz, .t10_fail
+    ld hl, (t10_before)
+    ld de, 8
+    or a
+    sbc hl, de
+    ld de, (DMA)
+    ld a, h
+    cp d
+    jp nz, .t10_fail
+    ld a, l
+    cp e
+    jp nz, .t10_fail
+
+    ; Delete it and expect the original count back.
+    ld hl, fn_test
+    call delete_name
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld e, 0
+    ld c, 46
+    call BDOS
+    or a
+    jp nz, .t10_fail
+    ld hl, (t10_before)
+    ld de, (DMA)
+    ld a, h
+    cp d
+    jp nz, .t10_fail
+    ld a, l
+    cp e
+    jp nz, .t10_fail
 
     ld de, msg_pass
     ld c, 9
@@ -638,6 +712,8 @@ test10:
     ret
 
 .t10_fail:
+    ld hl, fn_test
+    call delete_name
     ld de, msg_fail
     ld c, 9
     call BDOS
@@ -1985,6 +2061,469 @@ test22:
     call BDOS
     ret
 
+; --- T23-T26: CP/M 3 extended BDOS functions ---
+
+test23:
+    ; === T23: F44 multi-sector count / multi-record read ===
+    ld de, msg_t23
+    ld c, 9
+    call BDOS
+
+    ; Reject 0 and 128.
+    ld e, 0
+    ld c, 44
+    call BDOS
+    cp 0xFF
+    jp nz, .t23_fail
+    ld e, 128
+    ld c, 44
+    call BDOS
+    cp 0xFF
+    jp nz, .t23_fail
+
+    ; Set four records.
+    ld e, 4
+    ld c, 44
+    call BDOS
+    or a
+    jp nz, .t23_fail
+
+    ; Read four records of CPM3.SYS in one F20.
+    ld hl, fn_cpm3
+    call set_fcb
+    ld de, FCB1
+    ld c, 15                   ; open
+    call BDOS
+    cp 0xFF
+    jp z, .t23_fail
+    ld de, t23_buf             ; 512-byte buffer: keep clear of 0100h
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 20                   ; read sequential (multi)
+    call BDOS
+    or a
+    jp nz, .t23_fail
+    ld a, h
+    cp 1                       ; one record per call; H reports the count
+    jp nz, .t23_fail
+
+    ; Back to one record and close.
+    ld e, 1
+    ld c, 44
+    call BDOS
+    or a
+    jp nz, .t23_fail
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+    ld de, DMA
+    ld c, 26
+    call BDOS
+
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t23_fail:
+    ld e, 1
+    ld c, 44
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+test24:
+    ; === T24: F108 program return code ===
+    ld de, msg_t24
+    ld c, 9
+    call BDOS
+
+    ld de, 0x1234
+    ld c, 108
+    call BDOS
+    ld a, h
+    cp 0x12
+    jp nz, .t24_fail
+    ld a, l
+    cp 0x34
+    jp nz, .t24_fail
+
+    ld de, 0xFFFF              ; read back
+    ld c, 108
+    call BDOS
+    ld a, h
+    cp 0x12
+    jp nz, .t24_fail
+    ld a, l
+    cp 0x34
+    jp nz, .t24_fail
+
+    ld de, 0                   ; leave it clear
+    ld c, 108
+    call BDOS
+
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t24_fail:
+    ld de, 0
+    ld c, 108
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+test25:
+    ; === T25: F111 send block to console ===
+    ld de, msg_t25
+    ld c, 9
+    call BDOS
+
+    ld de, t25_cb
+    ld c, 111
+    call BDOS
+    or a
+    jp nz, .t25_fail
+
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t25_fail:
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+test26:
+    ; === T26: F59 load overlay ===
+    ld de, msg_t26
+    ld c, 9
+    call BDOS
+
+    ld hl, fn_smoke
+    call set_fcb
+    ld de, FCB1
+    ld c, 15                   ; open
+    call BDOS
+    cp 0xFF
+    jp z, .t26_fail
+
+    ld hl, t26_buf
+    ld (FCB1 + 33), hl         ; load address at FCB+21h
+    ld de, FCB1
+    ld c, 59
+    call BDOS
+    or a
+    jp nz, .t26_fail
+
+    ld hl, t26_buf
+    ld a, (hl)
+    cp 'S'
+    jp nz, .t26_fail
+    inc hl
+    ld a, (hl)
+    cp 'M'
+    jp nz, .t26_fail
+    inc hl
+    ld a, (hl)
+    cp 'O'
+    jp nz, .t26_fail
+
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+    ld de, DMA
+    ld c, 26
+    call BDOS
+
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t26_fail:
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+test27:
+    ; === T27: multi-sector write round trip ===
+    ; Write four records with the F44 count set to four, then read them back
+    ; one at a time and check that each record holds its own marker byte.
+    ld de, msg_t27
+    ld c, 9
+    call BDOS
+
+    ld hl, fn_test4
+    call delete_name
+
+    ld hl, fn_test4
+    call set_fcb
+    ld de, FCB1
+    ld c, 22                   ; make
+    call BDOS
+    cp 0xFF
+    jp z, .t27_fail
+
+    ; Fill t27_buf with 4 x 128 bytes: record N filled with 'A'+N
+    ld hl, t27_buf
+    ld b, 4
+    ld c, 'A'
+.t27_fill:
+    push bc
+    ld b, 128
+.t27_fill_in:
+    ld (hl), c
+    inc hl
+    djnz .t27_fill_in
+    pop bc
+    inc c
+    djnz .t27_fill
+
+    ld e, 4
+    ld c, 44
+    call BDOS
+    or a
+    jp nz, .t27_fail
+
+    ld hl, t27_buf
+    ld (t27_ptr), hl
+    ld b, 4
+.t27_wr:
+    push bc
+    ld hl, (t27_ptr)
+    ld d, h
+    ld e, l
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 21                   ; write sequential
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t27_fail
+    ld a, h
+    cp 1                       ; one record per call; H reports the count
+    jp nz, .t27_fail
+    ld hl, (t27_ptr)
+    ld de, 128
+    add hl, de
+    ld (t27_ptr), hl
+    djnz .t27_wr
+
+    ld e, 1
+    ld c, 44
+    call BDOS
+    ld de, FCB1
+    ld c, 16                   ; close
+    call BDOS
+
+    ; Reopen and read each record individually.
+    ld hl, fn_test4
+    call set_fcb
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    jp z, .t27_fail
+
+    ld b, 4
+    ld c, 'A'
+.t27_check:
+    push bc
+    ld de, t27_chk
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 20
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t27_fail
+    ld a, (t27_chk)
+    cp c
+    jp nz, .t27_fail
+    ld a, (t27_chk + 127)
+    cp c
+    jp nz, .t27_fail
+    inc c
+    djnz .t27_check
+
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+    ld hl, fn_test4
+    call delete_name
+    ld de, DMA
+    ld c, 26
+    call BDOS
+
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t27_fail:
+    ld e, 1
+    ld c, 44
+    call BDOS
+    ld hl, fn_test4
+    call delete_name
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+test28:
+    ; === T28: multi-sector write round trip on C: (ramdisk) ====
+    ; Write four records with the F44 count set to four, then read them back
+    ; one at a time and check that each record holds its own marker byte.
+    ld de, msg_t28
+    ld c, 9
+    call BDOS
+
+    ld hl, fn_test5
+    call delete_name
+
+    ld hl, fn_test5
+    call set_fcb
+    ld a, 3
+    ld (FCB1), a
+    ld de, FCB1
+    ld c, 22                   ; make
+    call BDOS
+    cp 0xFF
+    jp z, .t28_fail
+
+    ; Fill t28_buf with 4 x 128 bytes: record N filled with 'A'+N
+    ld hl, t28_buf
+    ld b, 4
+    ld c, 'A'
+.t27_fill:
+    push bc
+    ld b, 128
+.t27_fill_in:
+    ld (hl), c
+    inc hl
+    djnz .t27_fill_in
+    pop bc
+    inc c
+    djnz .t27_fill
+
+    ld e, 4
+    ld c, 44
+    call BDOS
+    or a
+    jp nz, .t28_fail
+
+    ld hl, t28_buf
+    ld (t28_ptr), hl
+    ld b, 4
+.t28_wr:
+    push bc
+    ld hl, (t28_ptr)
+    ld d, h
+    ld e, l
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 21                   ; write sequential
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t28_fail
+    ld a, h
+    cp 1                       ; one record per call; H reports the count
+    jp nz, .t28_fail
+    ld hl, (t28_ptr)
+    ld de, 128
+    add hl, de
+    ld (t28_ptr), hl
+    djnz .t28_wr
+
+    ld e, 1
+    ld c, 44
+    call BDOS
+    ld de, FCB1
+    ld c, 16                   ; close
+    call BDOS
+
+    ; Reopen and read each record individually.
+    ld hl, fn_test5
+    call set_fcb
+    ld a, 3
+    ld (FCB1), a
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    jp z, .t28_fail
+
+    ld b, 4
+    ld c, 'A'
+.t27_check:
+    push bc
+    ld de, t28_chk
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 20
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t28_fail
+    ld a, (t28_chk)
+    cp c
+    jp nz, .t28_fail
+    ld a, (t28_chk + 127)
+    cp c
+    jp nz, .t28_fail
+    inc c
+    djnz .t27_check
+
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+    ld hl, fn_test5
+    call delete_name
+    ld de, DMA
+    ld c, 26
+    call BDOS
+
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t28_fail:
+    ld e, 1
+    ld c, 44
+    call BDOS
+    ld hl, fn_test5
+    call delete_name
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
 ; --- shared helpers for T18-T22 ---
 ; set_fcb: HL = 11-byte name; clear FCB1 and copy the name to FCB1+1.
 set_fcb:
@@ -2077,8 +2616,23 @@ fn_test3: db "TEST3   TMP"
 fn_fill:  db "FILL00  TMP"
 fn_fill_all: db "FILL????TMP"
 fn_ram:   db "RAMTEST TMP"
+fn_test4: db "TEST4   TMP"
+fn_test5: db "TEST5   TMP"
+t10_before: dw 0
+t25_cb:   dw t25_text
+          dw t25_end - t25_text
+t25_text: db ' [BLOCKIO OK]'
+t25_end:
+t26_buf:  ds 128
+t23_buf:  ds 512
+t27_buf:  ds 512
+t27_chk:  ds 128
+t28_buf:  ds 512
+t28_chk:  ds 128
+t27_ptr:  dw 0
+t28_ptr:  dw 0
 
-msg_hdr:  db "DISKTEST v6", 13, 10, "$"
+msg_hdr:  db "DISKTEST v7", 13, 10, "$"
 msg_pass: db " PASS", 13, 10, "$"
 msg_fail: db " FAIL", 13, 10, "$"
 msg_end:  db "All tests done.", 13, 10, "$"
@@ -2091,7 +2645,7 @@ msg_t6:   db "T6 Originals intact$"
 msg_t7:   db "T7 FileSize (3 recs)$"
 msg_t8:   db "T8 Rename$"
 msg_t9:   db "T9 Cleanup$"
-msg_t10:  db "T10 F46 stub$"
+msg_t10:  db "T10 F46 free space$"
 msg_free: db " free=0x$"
 msg_t11:  db "T11 RandomR/W$"
 msg_t12:  db "T12 MultiExtent 17K$"
@@ -2106,5 +2660,11 @@ msg_t19:  db "T19 Invalid drives$"
 msg_t20:  db "T20 Directory full$"
 msg_t21:  db "T21 C: ramdisk$"
 msg_t22:  db "T22 F40 random write$"
+msg_t23:  db "T23 F44 multi-sector$"
+msg_t24:  db "T24 F108 return code$"
+msg_t25:  db "T25 F111 write block$"
+msg_t26:  db "T26 F59 load overlay$"
+msg_t27:  db "T27 F44 multi write$"
+msg_t28:  db "T28 F44 multi write C:$"
 msg_step: db " step=0x$"
 msg_skip: db " SKIP", 13, 10, "$"

@@ -236,6 +236,11 @@ warm_boot:
     ld a, '$'
     ld (out_delim), a
 
+    ; Likewise the multi-sector count: a program that calls F44 must not
+    ; leave the CCP's .COM loader reading several records per call.
+    ld a, 1
+    ld (scb_multi), a
+
     ; Copy embedded CCP from bank 4 to TPA at 0100h via inter-bank copy
     ld hl, ccp_stored              ; Source: bank 4
     ld de, CCP_ADDR                ; Dest: 0100h in bank 0

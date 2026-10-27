@@ -20,6 +20,8 @@ FCB1    equ 0x005C             ; Default FCB 1
 DMA     equ 0x0080             ; Default DMA / command tail
 TPA_TOP equ 0xF600             ; First byte of common memory — initial stack top
 CCP_FCB_ADDR equ 0xFB61        ; common-memory FCB for the COM loader stub
+CCP_CHAIN_ADDR equ 0xF607      ; SCB[0x07]: BDOS F47 chain pending
+CCP_RC_ADDR    equ 0xF608      ; SCB[0x08]: program return code (F108)
 
 ; BDOS function numbers
 F_COUT  equ 2                  ; Console output (E = char)
@@ -63,6 +65,40 @@ ccp_start:
     ld e, a
     ld c, 14                   ; F14: Select Disk — restore user's drive
     call BDOS
+
+    ; BDOS F47 (chain to program) leaves a flag and the command tail at
+    ; 0080h, then warm boots.  Consume it here instead of prompting.
+    ld a, (CCP_CHAIN_ADDR)
+    or a
+    jr z, .no_chain
+    xor a
+    ld (CCP_CHAIN_ADDR), a
+    ld a, (DMA)                ; tail length
+    cp 126
+    jr c, .chain_len_ok
+    ld a, 126
+.chain_len_ok:
+    ld (cmd_buf + 1), a
+    or a
+    jr z, .no_chain            ; empty tail: nothing to chain to
+    ld c, a
+    ld b, 0
+    ld hl, DMA + 1
+    ld de, cmd_buf + 2
+    ldir
+    ld hl, cmd_buf + 2
+    ld a, (cmd_buf + 1)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld (hl), 0
+    jp .got_line
+
+.no_chain:
+    ; A new command from the console: clear the program return code.
+    xor a
+    ld (CCP_RC_ADDR), a
+    ld (CCP_RC_ADDR + 1), a
 
 .prompt:
     call try_sub
