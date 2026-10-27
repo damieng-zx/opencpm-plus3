@@ -109,21 +109,28 @@ Require `No files` and no directory listing from the previous drive.  An
 invalid drive must return "not found" instead of searching the last cached
 drive.
 
-### Stack / visible-BIOS regression
+### System / console regression suite
 
 Run:
 
 ```text
-type "STKTEST`enter`"
-run 2000
+type "SYSTEST`enter`"
+run 2500
 ```
 
-Require `STACK OK`, `MOVE OK`, and `CLOCK OK` in `char_buffer`.  This
-checks that the initial SP is `0xF600` (`TPA_TOP`), that a direct BIOS call
-through `bios_visible` works after BDOS calls, that BIOS MOVE passes HL/DE
-correctly (after `XMOVE` selects the TPA banks), that a 1K-deep TPA stack
-does not touch the common stub, and that the clock ticks in TPA mode without
-BDOS calls.
+Require all of:
+
+- `STACK OK`, `MOVE OK`, `CLOCK OK`
+- `P0 PASS`
+- `TAB:` followed by `A       B` (`A` in column 0, `B` in column 8)
+- `DELIM PASS`
+
+`SYSTEST` combines the old STKTEST, P0TEST, TABTEST and DELIMTES checks.
+A stack failure stops the run; the other checks continue after a failure.
+
+Then run `DIR`: the listing must be normal.  A garbled/run-on listing means
+the F110 delimiter leaked into the CCP's `$`-terminated messages instead of
+being reset at warm boot.
 
 ### BDOS file regression suite
 
@@ -141,47 +148,6 @@ stub (`A=0`, `HL=0`, DMA untouched), not real free-space accounting.
 `fdc_log` must stay retry-free.  A `FAIL` on T4 usually means the directory
 cache key/sector was corrupted; a `FAIL` on T11 means an extent's RC/alloc
 was not flushed.
-
-### Console TAB expansion
-
-Run:
-
-```text
-type "TABTEST`enter`"
-run 600
-```
-
-Require a screen line reading `A       B` — `A` in column 0 and `B` in
-column 8.  If the line is `AB`, TAB is being discarded instead of padded
-to the next 8-column stop.
-
-### Output delimiter (F110)
-
-Run:
-
-```text
-type "DELIMTES`enter`"
-run 600
-```
-
-Require `DELIM PASS` (not `DELIM BAD`).  The program sets the F9 delimiter
-to `#`, reads it back, and prints `OK#` through F9; only `OK` should
-appear.  Then run `DIR`: the listing must be normal.  A garbled/run-on
-listing means the delimiter leaked into the CCP's `$`-terminated messages
-instead of being reset at warm boot.
-
-### Page-zero compatibility bytes
-
-Run:
-
-```text
-type "P0TEST`enter`"
-run 600
-```
-
-Require `P0 PASS`.  The program sets IOBYTE through F8, user 3 through F32
-and drive A through F14, then checks page zero `0003h` and `0004h` before
-restoring user 0 / IOBYTE 0.
 
 ### 1. Boot and initial directory
 

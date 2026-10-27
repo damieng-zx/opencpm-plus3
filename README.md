@@ -41,10 +41,7 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 - disktest.com - File, directory, extent and SCB tests (T1-T17)
 - termtest.com - Terminal emulation/ESC codes
 - xtetest.com - XBIOS/TE probe
-- stktest.com - TPA stack, MOVE and clock
-- tabtest.com - Console TAB expansion
-- delimtes.com - F110 output delimiter
-- p0test.com - Page-zero IOBYTE/user-drive bytes
+- systest.com - Stack/MOVE/clock, page-zero, TAB and delimiter checks
   
 ### Wishlist/TODO
 

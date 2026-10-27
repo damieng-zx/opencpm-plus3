@@ -202,8 +202,8 @@ class Issue09BiosMove(unittest.TestCase):
         self.assertIn("pop hl", body)
         self.assertIn("ld iy, (_bc4_target)", body)
 
-    def test_stacktest_checks_move(self):
-        self.assertIn("MOVE OK", source("src/test/stacktest.asm"))
+    def test_systest_checks_move(self):
+        self.assertIn("MOVE OK", source("src/test/systest.asm"))
 
 
 class Issue10LoaderScan(unittest.TestCase):
@@ -243,9 +243,9 @@ class Issue12TpaClock(unittest.TestCase):
         self.assertIn("(0x0038)", body)
         self.assertNotIn("0xFB", body)
 
-    def test_stacktest_checks_clock(self):
-        self.assertIn("CLOCK OK", source("src/test/stacktest.asm"))
-        self.assertIn("(0xF63A)", source("src/test/stacktest.asm"))
+    def test_systest_checks_clock(self):
+        self.assertIn("CLOCK OK", source("src/test/systest.asm"))
+        self.assertIn("(0xF63A)", source("src/test/systest.asm"))
 
 
 class Issue13SubEcho(unittest.TestCase):
@@ -416,17 +416,17 @@ class VerificationExtentFlush(unittest.TestCase):
 
 
 class VerificationStackTestMath(unittest.TestCase):
-    """STKTEST's BIOS entry calculation must use 3 bytes per entry."""
+    """SYSTEST's BIOS entry calculation must use 3 bytes per entry."""
 
     def test_compute_bios_entry_is_three_times_fn(self):
-        text = source("src/test/stacktest.asm")
+        text = source("src/test/systest.asm")
         body = text[text.index("compute_bios_entry:"):text.index("call_bios_ent:")]
         self.assertRegex(
             body,
             r"ld e, l[^\n]*\n\s*ld d, h[^\n]*\n\s*add hl, hl[^\n]*\n\s*add hl, de")
 
     def test_move_selects_tpa_banks_with_xmove(self):
-        text = source("src/test/stacktest.asm")
+        text = source("src/test/systest.asm")
         self.assertIn("ld a, 29", text)
         self.assertIn("B = dest bank 0 (TPA), C = src bank 0", text)
 
@@ -528,8 +528,8 @@ class P2TabExpansion(unittest.TestCase):
         self.assertIn("and 0x07", body)
         self.assertIn("jr nz, _do_tab", body)
 
-    def test_tabtest_program(self):
-        text = source("src/test/tabtest.asm")
+    def test_systest_tab(self):
+        text = source("src/test/systest.asm")
         self.assertIn("ld e, 9", text)
         self.assertIn("ld e, 'B'", text)
 
@@ -576,8 +576,8 @@ class P2F110Delimiter(unittest.TestCase):
         self.assertIn("ld a, (out_delim)", body)
         self.assertNotIn("cp '$'", body)
 
-    def test_delimtest_program(self):
-        text = source("src/test/delimtest.asm")
+    def test_systest_delimiter(self):
+        text = source("src/test/systest.asm")
         self.assertIn("ld c, 110", text)
         self.assertIn("DELIM PASS", text)
         # Both the success and failure paths must restore '$'.
@@ -616,8 +616,8 @@ class P2PageZeroBytes(unittest.TestCase):
         f32 = text[text.index("bf_f32:"):text.index("; F37:")]
         self.assertIn("call sync_page0_du", f32)
 
-    def test_p0test_program(self):
-        text = source("src/test/p0test.asm")
+    def test_systest_page_zero(self):
+        text = source("src/test/systest.asm")
         self.assertIn("P0 PASS", text)
         self.assertIn("ld a, (0x0003)", text)
         self.assertIn("ld a, (0x0004)", text)

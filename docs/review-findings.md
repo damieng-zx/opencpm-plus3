@@ -67,9 +67,9 @@ Status: `[ ]` open, `[x]` fixed.
 - [x] **9. BIOS MOVE (fn 25) is reversed** relative to
   `docs/API.md` (`HL=dst, DE=src`) and to `interbank_move`.  `bios_move`
   now swaps for LDIR, and `bios_call_bank4`/`bv_shim` preserve HL/DE/BC
-  (and IY) so the visible-table path can pass MOVE's arguments.  STACKTEST
+  (and IY) so the visible-table path can pass MOVE's arguments.  SYSTEST
   covers MOVE.
-  Files: `src/bios/bios.zpa`, `src/bios/common.zpa`, `src/test/stacktest.asm`.
+  Files: `src/bios/bios.zpa`, `src/bios/common.zpa`, `src/test/systest.asm`.
 
 - [x] **10. Loader directory loop counter never terminates.**  `ld de,32`
   cleared D, so `dec d` never reached zero and the "not found" path was
@@ -84,9 +84,9 @@ Status: `[ ]` open, `[x]` fixed.
 
 - [x] **12. RTC only ticks in system mode.**  TPA 0038h was `EI; RETI`, so
   the clock and keyboard repeat stalled during TPA execution.  `start_tpa`
-  now installs `JP isr_handler` (common memory); STACKTEST polls SCB
+  now installs `JP isr_handler` (common memory); SYSTEST polls SCB
   seconds without making BDOS calls and requires CLOCK OK.
-  Files: `src/bios/common.zpa`, `src/test/stacktest.asm`, docs.
+  Files: `src/bios/common.zpa`, `src/test/systest.asm`, docs.
 
 - [x] **13. `echo_sub_line` never runs.**  `xor a` before `call nz` made
   the SETDEF DISPLAY path dead; it now tests `and CON_MODE_DISPLAY`.
@@ -161,12 +161,12 @@ set.
   `motor_on` explicitly.
   Files: `src/bios/fdc765.zpa`, `src/bios/bios.zpa`.
 
-- **`STKTEST` computed BIOS entries as 4×fn, not 3×fn.**  The test
+- **`SYSTEST` computed BIOS entries as 4×fn, not 3×fn.**  The test
   therefore called 0xF6C8 (mid-trampoline) for fn 25 and landed in its own
   `fail` label.  It now computes 3×fn.  `MOVE` is also preceded by
   `XMOVE` (fn 29) selecting TPA→TPA banks, since `MOVE` executes in the
   bank chosen by `XMOVE`.
-  File: `src/test/stacktest.asm`.
+  File: `src/test/systest.asm`.
 
 - **`DISKTEST T10` expected a working F46.**  F46 is deliberately a
   documented stub (#20), so the test now asserts the stub contract
@@ -182,12 +182,12 @@ set.
 - [x] **F6 pagination.** F6 direct console output bypasses
   `bdos_con_out`; F2/F9/F111 still paginate.
 - [x] **F110 delimiter.** Get/set implemented; F9 terminates on
-  `out_delim`. `DELIMTEST.COM` covers set/get and termination.
+  `out_delim`. `SYSTEST` covers set/get and termination.
 - [x] **Page-zero 0003/0004.** `start_tpa` writes IOBYTE and
-  `(user << 4) | drive`; F8/F14/F32 keep them current. `P0TEST.COM`
+  `(user << 4) | drive`; F8/F14/F32 keep them current. `SYSTEST`
   covers it.
 - [x] **TAB handling.** Console TAB pads to the next 8-column stop.
-  `TABTEST.COM` covers it.
+  `SYSTEST` covers it.
 - [x] **F34/F40 return codes.** 1 = directory full (F34), 2 = disk full,
   5 = no directory space (F40).
 - [x] **F36 return registers.** A=0/HL=0 via `bdos_eok`.
