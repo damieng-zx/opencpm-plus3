@@ -71,6 +71,15 @@ shutil.copy('build/bios.bin', 'build/CPM3.SYS')
 print(f'  CPM3.SYS: {__import__(\"os\").path.getsize(\"build/CPM3.SYS\")} bytes')
 "
 
+# The reference binaries are third-party files and are not tracked, so a
+# fresh clone (including CI) builds without them.
+REF_FILES=()
+for ref in references/binaries/*.COM references/binaries/*.SUB; do
+    if [ -f "$ref" ]; then
+        REF_FILES+=("$ref")
+    fi
+done
+
 python3 tools/mkdsk.py create build/cpm3.dsk \
     --boot build/bootsect.bin \
     --system build/loader.bin \
@@ -78,8 +87,8 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     build/bdostest.com build/xtetest.com \
     build/disktest.com build/termtest.com build/systest.com \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
-    build/RAMDISK.FID \
-    references/binaries/*.COM references/binaries/*.SUB \
+    build/RAMDISK.FID src/test/smoke.txt \
+    "${REF_FILES[@]}" \
     $EXTRAFILES
 
 echo "  Loader: $(wc -c < build/loader.bin) bytes"

@@ -473,7 +473,7 @@ tst_f15:
 
 ; ============================================================
 ; F16: Close File
-;   Open PROFILE.SUB, then close it. Should return 0 (success).
+;   Open SMOKE.TXT, then close it. Should return 0 (success).
 ; ============================================================
 tst_f16:
     ld de, lbl_f16
@@ -484,9 +484,9 @@ tst_f16:
     ld c, 26
     call BDOS
 
-    ; Set up FCB for PROFILE.SUB
+    ; Set up FCB for SMOKE.TXT
     call clear_test_fcb
-    ld hl, fn_profile
+    ld hl, fn_smoke
     ld de, 0x005D
     ld bc, 11
     ldir
@@ -675,7 +675,7 @@ tst_f19:
 
 ; ============================================================
 ; F20: Read Sequential
-;   Open PROFILE.SUB, read one record, check first byte = 'S'.
+;   Open SMOKE.TXT, read one record, check first byte = 'S'.
 ; ============================================================
 tst_f20:
     ld de, lbl_f20
@@ -685,9 +685,9 @@ tst_f20:
     ld c, 26
     call BDOS
 
-    ; Open PROFILE.SUB
+    ; Open SMOKE.TXT
     call clear_test_fcb
-    ld hl, fn_profile
+    ld hl, fn_smoke
     ld de, 0x005D
     ld bc, 11
     ldir
@@ -708,7 +708,7 @@ tst_f20:
     or a
     jr nz, .f20_fail            ; Read error
 
-    ; Check first byte = 'S' (SETDEF...)
+    ; Check first byte = 'S' (SMOKE OK)
     ld a, (0x0080)
     cp 'S'
     jr nz, .f20_fail
@@ -1386,7 +1386,7 @@ tst_f32:
 
 ; ============================================================
 ; F33: Read Random
-;   Open PROFILE.SUB, set R0=0 R1=0 R2=0, read random record 0,
+;   Open SMOKE.TXT, set R0=0 R1=0 R2=0, read random record 0,
 ;   check first byte = 'S'.
 ; ============================================================
 tst_f33:
@@ -1397,9 +1397,9 @@ tst_f33:
     ld c, 26
     call BDOS
 
-    ; Open PROFILE.SUB
+    ; Open SMOKE.TXT
     call clear_test_fcb
-    ld hl, fn_profile
+    ld hl, fn_smoke
     ld de, 0x005D
     ld bc, 11
     ldir
@@ -1568,7 +1568,7 @@ tst_f34:
 
 ; ============================================================
 ; F35: Compute File Size
-;   Check file size of PROFILE.SUB (should be > 0 records).
+;   Check file size of SMOKE.TXT (should be > 0 records).
 ; ============================================================
 tst_f35:
     ld de, lbl_f35
@@ -1579,7 +1579,7 @@ tst_f35:
     call BDOS
 
     call clear_test_fcb
-    ld hl, fn_profile
+    ld hl, fn_smoke
     ld de, 0x005D
     ld bc, 11
     ldir
@@ -1783,7 +1783,7 @@ msg_skip_no_input: DB "SKIP (no char ready)$"
 msg_skip_blocks:   DB "SKIP (blocks)$"
 
 fn_cpm3sys: DB "CPM3    SYS"
-fn_profile: DB "PROFILE SUB"
+fn_smoke: DB "SMOKE   TXT"
 fn_nofile:  DB "NOFILE  XXX"
 fn_temp:    DB "TEMP    $$$"
 fn_temp2:   DB "TEMP2   $$$"

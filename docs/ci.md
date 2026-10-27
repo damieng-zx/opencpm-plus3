@@ -35,6 +35,11 @@ needs the checkout, `npm ci`, and a writable ROM cache.
 `build/sjasmplus-src` and prints the binary path, so the workflow can set
 `SJASMPLUS` without a Windows-specific path.
 
+`references/binaries/` is untracked, so CI builds a source-only disk. The
+smoke runner always exercises `SMOKE.TXT` (from `src/test/smoke.txt`) and
+`DATE.COM`, and skips the `SUBMIT`, `RENAME` and `PIP` checks when those
+reference programs are not on the image.
+
 The zx84 checkout uses the current repository name,
 `damieng-zx/zx84`. If it is private in a future org, add
 `token: ${{ secrets.ZX84_TOKEN }}` to that `actions/checkout` step.

@@ -186,13 +186,13 @@ test1:
     ret
 
 test2:
-    ; === T2: Open PROFILE.SUB and read ===
+    ; === T2: Open SMOKE.TXT and read ===
     ld de, msg_t2
     ld c, 9
     call BDOS
 
     call clear_fcb
-    ld hl, fn_prof
+    ld hl, fn_smoke
     ld de, FCB1 + 1
     ld bc, 11
     ldir
@@ -214,7 +214,7 @@ test2:
     or a
     jr nz, .t2_fail
 
-    ; Check first byte = 'S' (SETDEF...)
+    ; Check first byte = 'S' (SMOKE OK)
     ld a, (DMA)
     cp 'S'
     jr nz, .t2_fail
@@ -2069,7 +2069,7 @@ f50_pb: ds 8
 default_path: db 0xFF, 0, 0, 0
 
 fn_cpm3:  db "CPM3    SYS"
-fn_prof:  db "PROFILE SUB"
+fn_smoke: db "SMOKE   TXT"
 fn_test:  db "TEST    TMP"
 fn_test2: db "TEST2   TMP"
 fn_ro:    db "TEST    RO "

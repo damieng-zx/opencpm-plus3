@@ -310,10 +310,14 @@ class Smoke:
 
     def run_ccp(self) -> None:
         self.command("DIR", 500)
-        self.expect("DIR", "CPM3     SYS", "SYSTEST  COM", "DISKTEST COM")
+        listing = self.text()
+        self.expect("DIR", "CPM3     SYS", "SYSTEST  COM", "DISKTEST COM",
+                    "SMOKE    TXT", screen=listing)
 
-        self.command("TYPE RPED.SUB", 400)
-        self.expect("TYPE", "basic rped")
+        # SMOKE.TXT is built from src/test/smoke.txt, so TYPE works even on a
+        # checkout without the untracked references/ directory.
+        self.command("TYPE SMOKE.TXT", 400)
+        self.expect("TYPE", "SMOKE OK")
 
         self.command("HELP", 500)
         self.expect("HELP", "Built-in commands:", "DIR", "TYPE", "SCREEN")
@@ -330,15 +334,30 @@ class Smoke:
             raise SmokeError("SCREEN 51 did not restore scr_cols=51")
         self.expect("SCREEN 51 prompt", "A>")
 
-        self.command("SUBMIT NOPE.SUB", 900)
-        self.expect("SUBMIT missing", "No 'SUB' File Found", "A>")
+        # DATE.COM is built from source, so it is present on every image.
+        self.command("DATE", 700)
+        if not re.search(r"\d\d/\d\d/\d\d\d\d", self.text()):
+            raise SmokeError("DATE did not print a date:\n" + self.text())
 
-        self.command("RENAME TEST.SUB RPED.SUB", 600)
-        self.command("DIR A:*.SUB", 500)
-        self.expect("RENAME", "TEST     SUB")
-        self.command("RENAME RPED.SUB TEST.SUB", 600)
-        self.command("DIR A:*.SUB", 500)
-        self.expect("RENAME restore", "RPED     SUB")
+        # SUBMIT.COM, RENAME.COM and PIP.COM come from the untracked
+        # references/binaries directory.  Check them when present and skip
+        # them on a fresh clone / CI, where the image is built from source.
+        if "SUBMIT   COM" in listing:
+            self.command("SUBMIT NOPE.SUB", 900)
+            self.expect("SUBMIT missing", "No 'SUB' File Found", "A>")
+        else:
+            self.log("SUBMIT.COM not on the disk; skipping SUBMIT checks")
+
+        if "RENAME   COM" in listing:
+            # CP/M RENAME takes NEW then OLD.
+            self.command("RENAME TEST.TXT SMOKE.TXT", 600)
+            self.command("DIR A:*.TXT", 500)
+            self.expect("RENAME", "TEST     TXT")
+            self.command("RENAME SMOKE.TXT TEST.TXT", 600)
+            self.command("DIR A:*.TXT", 500)
+            self.expect("RENAME restore", "SMOKE    TXT")
+        else:
+            self.log("RENAME.COM not on the disk; skipping RENAME checks")
 
         self.command("DIR D:", 400)
         self.expect("invalid drive", "No files")
@@ -346,17 +365,25 @@ class Smoke:
         self.command("DIR C:", 400)
         self.expect("C: empty", "No files")
 
-        self.command("PIP C:=A:DATE.COM", 1200)
-        self.command("DIR C:", 500)
-        self.expect("C: after PIP", "DATE     COM")
-
         self.command("C:", 300)
         self.expect("C: prompt", "C>")
-        self.command("DATE", 700)
-        if not re.search(r"\d\d/\d\d/\d\d\d\d", self.text()):
-            raise SmokeError("DATE did not print a date:\n" + self.text())
         self.command("A:", 300)
         self.expect("A: prompt", "A>")
+
+        if "PIP      COM" in listing:
+            self.command("PIP C:=A:DATE.COM", 1200)
+            self.command("DIR C:", 500)
+            self.expect("C: after PIP", "DATE     COM")
+
+            self.command("C:", 300)
+            self.expect("C: prompt", "C>")
+            self.command("DATE", 700)
+            if not re.search(r"\d\d/\d\d/\d\d\d\d", self.text()):
+                raise SmokeError("DATE did not print a date:\n" + self.text())
+            self.command("A:", 300)
+            self.expect("A: prompt", "A>")
+        else:
+            self.log("PIP.COM not on the disk; skipping the C: copy check")
 
     def check_fdc(self) -> None:
         log = self.mcp.call("fdc_log", {})

@@ -89,9 +89,14 @@ build.cmd --add FILE ...
 
 Output: `build/cpm3.dsk` — a standard +3 disk image ready for emulation.
 
+The third-party binaries under `references/binaries/` are untracked and
+optional. When present they are added automatically; a fresh clone (and CI)
+builds a source-only disk, and the smoke runner skips the checks that need
+them.
+
 ### Testing
 
-Use the [zx84](https://github.com/nickvdp/zx84) MCP emulator:
+Use the [zx84](https://github.com/damieng-zx/zx84) MCP emulator:
 
 ```
 model +3
