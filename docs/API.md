@@ -299,6 +299,11 @@ Programs should close any open files before exiting (BDOS F16).
   - operation 0x00: get word → returns SCB word at offset
   - operation 0xFE: set byte
   - operation 0xFF: set word
+- **Out**: A=0xFF, HL=0 for an invalid offset (0x63+) or unknown
+  operation; otherwise the value read/written.
+- **Note**: The SCB is 100 bytes (0x00-0x63). Offset 0x63 is the high
+  byte of `scb_tpa`, so it is rejected to keep word accesses from running
+  into the visible BIOS table.
 
 #### F50 — Direct BIOS Call
 - **In**: DE=PB (parameter block address)

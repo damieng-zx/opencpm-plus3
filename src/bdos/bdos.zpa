@@ -3691,10 +3691,7 @@ bf_f48:
     pop de
     pop bc
     call flush_deblock
-    xor a
-    ld l, a
-    ld h, a
-    jp bdos_ret
+    jp bdos_eok
 
 
 ; F49: Get/Set System Control Block
@@ -3728,6 +3725,13 @@ bf_f49:
     inc de
     ; DE now points to PB[2]
 
+    ; Reject offsets outside the 100-byte SCB.  Offset 0x63 is the high
+    ; byte of scb_tpa; a word access there would run into the visible BIOS
+    ; table, so the whole range 0x63+ is invalid.
+    ld a, c
+    cp 99
+    jp nc, .scb_bad
+
     ; Build the SCB value for this offset
     ld a, b
     or a
@@ -3737,9 +3741,10 @@ bf_f49:
     cp 0xFF
     jr z, .scb_setword
     ; Unknown op, return 0
-    ld hl, 0
-    ld a, l
-    jp bdos_ret
+    jp bdos_eok
+
+.scb_bad:
+    jp bdos_efail              ; A=0xFF, HL=0
 
 .scb_get:
     ; Get: return word from SCB at offset C

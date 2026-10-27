@@ -489,5 +489,23 @@ class P2F36Returns(unittest.TestCase):
         self.assertNotIn("jp bdos_ret", body)
 
 
+class P2F49Bounds(unittest.TestCase):
+    """F49 must not read or write past the 100-byte SCB."""
+
+    def test_offsets_are_bounded(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f49:"):text.index("scb_read_field:")]
+        self.assertIn("cp 99", body)
+        self.assertIn("jp nc, .scb_bad", body)
+        self.assertIn("jp bdos_efail", body)
+
+    def test_f48_and_unknown_f49_use_eok(self):
+        text = source("src/bdos/bdos.zpa")
+        f48 = text[text.index("bf_f48:"):text.index("; F49:")]
+        self.assertIn("jp bdos_eok", f48)
+        f49 = text[text.index("bf_f49:"):text.index(".scb_bad:")]
+        self.assertIn("jp bdos_eok", f49)
+
+
 if __name__ == "__main__":
     unittest.main()
