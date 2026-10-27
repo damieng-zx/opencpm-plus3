@@ -631,5 +631,19 @@ class P2WriteProtectDetection(unittest.TestCase):
         self.assertIn("jp z, .wseq_ro", body)
 
 
+class P2DiskChangeInvalidation(unittest.TestCase):
+    """F13 must drop directory/deblock caches, not just cached_drive."""
+
+    def test_f13_invalidates_all_caches(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f13:"):text.index("; F14:")]
+        self.assertIn("call flush_deblock", body)
+        self.assertIn("ld (cached_drive), a", body)
+        self.assertIn("ld (last_dir_sec), a", body)
+        self.assertIn("ld (last_dir_drv), a", body)
+        self.assertIn("ld (deblock_drv), a", body)
+        self.assertIn("ld (deblock_dirty), a", body)
+
+
 if __name__ == "__main__":
     unittest.main()

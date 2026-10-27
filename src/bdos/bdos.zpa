@@ -648,6 +648,18 @@ bf_f13:
     ; the sel_disk + DPB refetch + ALV rebuild (disc may have changed).
     ld a, 0xFF
     ld (cached_drive), a
+
+    ; Discard cached directory and deblock state as well.  Flush first so
+    ; a clean reset does not lose a pending write; a real disc change
+    ; should be done while no writes are pending.
+    call flush_deblock
+    ld a, 0xFF
+    ld (last_dir_sec), a
+    ld (last_dir_drv), a
+    ld (deblock_drv), a
+    xor a
+    ld (deblock_dirty), a
+
     ; Re-login drive A: caches DPH/DPB/ALV pointers and rebuilds ALV
     xor a
     call select_drive
