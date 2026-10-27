@@ -1,0 +1,10 @@
+; HELLO.Z80 - SLR Z80ASM smoke test
+        ORG 100H
+BDOS    EQU 5
+START   LD DE,MSG
+        LD C,9
+        CALL BDOS
+        RET
+MSG     DB "HELLO, WORLD", "$"
+        END
+

@@ -17,9 +17,15 @@
       "title": "Zork I",
       "url": "http://www.retroarchive.org/cpm/games/zork123_80.zip",
       "archive": "zip",
-      "members": ["ZORK1.COM", "ZORK1.DAT"],
+      "members": [
+        "ZORK1.COM",
+        "ZORK1.DAT"
+      ],
       "command": "ZORK1",
-      "expect": ["ZORK I", "West of House"],
+      "expect": [
+        "ZORK I",
+        "West of House"
+      ],
       "frames": 3000,
       "notes": "Infocom game with a large .DAT file; exercises random file reads and console output."
     },
@@ -28,20 +34,31 @@
       "title": "dBASE II 2.43",
       "url": "http://www.retroarchive.org/cpm/dbase/dbaseii.zip",
       "archive": "zip",
-      "members": ["DBASE.COM", "DBASEOVR.COM", "DBASEMSG.TXT"],
+      "members": [
+        "DBASE.COM",
+        "DBASEOVR.COM",
+        "DBASEMSG.TXT"
+      ],
       "command": "DBASE",
-      "expect": ["Enter today's date"],
+      "expect": [
+        "Enter today's date"
+      ],
       "frames": 2000,
       "steps": [
         {
           "key": "enter",
           "frames": 1500,
-          "expect": ["."]
+          "expect": [
+            "."
+          ]
         },
         {
           "text": "QUIT",
           "frames": 1500,
-          "expect": ["End run", "A>"]
+          "expect": [
+            "End run",
+            "A>"
+          ]
         }
       ],
       "notes": "Exercises FCB random I/O, overlays and the interactive dot prompt."
@@ -51,9 +68,16 @@
       "title": "SuperCalc2 1.00",
       "url": "http://www.retroarchive.org/cpm/business/sc2.zip",
       "archive": "zip",
-      "members": ["SC2.COM", "SC2.OVL", "SC2.HLP"],
+      "members": [
+        "SC2.COM",
+        "SC2.OVL",
+        "SC2.HLP"
+      ],
       "command": "SC2",
-      "expect": ["SuperCalc2", "Version"],
+      "expect": [
+        "SuperCalc2",
+        "Version"
+      ],
       "frames": 3000,
       "notes": "Spreadsheet with overlays and VT-100 screen output."
     },
@@ -62,9 +86,16 @@
       "title": "WordStar 3.0",
       "url": "http://www.retroarchive.org/cpm/text/WS30.ZIP",
       "archive": "zip",
-      "members": ["WS.COM", "WSMSGS.OVR", "WSOVLY1.OVR", "WIMSGS.OVR"],
+      "members": [
+        "WS.COM",
+        "WSMSGS.OVR",
+        "WSOVLY1.OVR",
+        "WIMSGS.OVR"
+      ],
       "command": "WS",
-      "expect": ["WordStar"],
+      "expect": [
+        "WordStar"
+      ],
       "frames": 3000,
       "known_issue": "Starts and draws its no-file menu, but WordStar is an 80-column program: the layout does not fit the 51-column screen, so the display wraps and is unreadable. Needs an 80-column screen mode (3px font).",
       "notes": "Full-screen editor; exercises terminal escape handling and overlays."
@@ -75,9 +106,13 @@
       "url": "http://www.retroarchive.org/cpm/lang/Mbasic.com",
       "archive": "file",
       "save_as": "MBASIC.COM",
-      "fixtures": ["HELLO.BAS"],
+      "fixtures": [
+        "HELLO.BAS"
+      ],
       "command": "MBASIC HELLO",
-      "expect": ["REAL OK"],
+      "expect": [
+        "REAL OK"
+      ],
       "frames": 3000,
       "notes": "Single .COM interpreter plus a BASIC fixture; exercises console and file I/O."
     },
@@ -86,18 +121,202 @@
       "title": "Turbo Pascal 3.0",
       "url": "http://www.retroarchive.org/cpm/lang/tpas30.zip",
       "archive": "zip",
-      "members": ["TURBO.COM", "TURBO.OVR", "TURBO.MSG"],
+      "members": [
+        "TURBO.COM",
+        "TURBO.OVR",
+        "TURBO.MSG"
+      ],
       "command": "TURBO",
-      "expect": ["TURBO Pascal system", "Include error messages"],
+      "expect": [
+        "TURBO Pascal system",
+        "Include error messages"
+      ],
       "frames": 3000,
       "steps": [
         {
           "text": "Y",
           "frames": 2500,
-          "expect": ["Loading A:TURBO.MSG", "Text:"]
+          "expect": [
+            "Loading A:TURBO.MSG",
+            "Text:"
+          ]
         }
       ],
       "notes": "Compiler/IDE with overlays; exercises TPA and console handling. The 80-column IDE layout is wider than the 51-column screen, so the display wraps."
+    },
+    {
+      "id": "m80l80",
+      "title": "Microsoft M80 + L80",
+      "url": "http://www.retroarchive.org/cpm/lang/MASM-80.ZIP",
+      "archive": "zip",
+      "members": [
+        "M80.COM",
+        "L80.COM"
+      ],
+      "fixtures": [
+        "HELLO.MAC"
+      ],
+      "command": "M80 =HELLO",
+      "expect": [
+        "No Fatal error(s)"
+      ],
+      "frames": 1500,
+      "steps": [
+        {
+          "text": "L80 HELLO,HELLO/N/E",
+          "frames": 1500,
+          "expect": [
+            "Link-80",
+            "Bytes Free"
+          ]
+        },
+        {
+          "text": "HELLO",
+          "frames": 800,
+          "expect": [
+            "HELLO, WORLD"
+          ]
+        }
+      ],
+      "notes": "Microsoft MACRO-80 assembler and Link-80 linker: assemble HELLO.MAC, link it to HELLO.COM and run it."
+    },
+    {
+      "id": "f80344",
+      "title": "Microsoft FORTRAN-80 3.44",
+      "url": "http://www.retroarchive.org/cpm/lang/F80-344.ZIP",
+      "archive": "zip",
+      "members": [
+        "F80.COM",
+        "L80.COM",
+        "FORLIB.REL"
+      ],
+      "fixtures": [
+        "CHELLO.FOR"
+      ],
+      "command": "F80 CHELLO=CHELLO",
+      "expect": [
+        "HELLO"
+      ],
+      "frames": 1500,
+      "steps": [
+        {
+          "text": "L80 CHELLO,FORLIB,CHELLO/N/E",
+          "frames": 5000,
+          "expect": [
+            "Bytes Free"
+          ]
+        },
+        {
+          "text": "CHELLO",
+          "frames": 1200,
+          "expect": [
+            "HELLO, WORLD"
+          ]
+        }
+      ],
+      "notes": "FORTRAN-80 compiler plus Link-80: compile CHELLO.FOR, link with FORLIB and run it."
+    },
+    {
+      "id": "bascom53",
+      "title": "Microsoft BASIC Compiler 5.3",
+      "url": "http://www.retroarchive.org/cpm/lang/BASCOM53.ZIP",
+      "archive": "zip",
+      "members": [
+        "BASCOM.COM",
+        "L80.COM",
+        "BASLIB.REL"
+      ],
+      "fixtures": [
+        "CHELLO.BAS"
+      ],
+      "command": "BASCOM CHELLO",
+      "expect": [],
+      "frames": 1500,
+      "known_issue": "BASCOM.COM exits immediately under this BDOS. Tracing shows its startup code checks for a JP (C3h) at 0100h and jumps to 0000h when it is not there; BASCOM's first instruction is LD HL,0106 / JP 138E, so the test always fails. Why it expects a JP there is still unknown; it may need to be loaded by a companion loader.",
+      "notes": "BASIC-80 compiler (BASCOM) plus Link-80. Fixture CHELLO.BAS is plain BASIC-80 source.",
+      "steps": [
+        {
+          "text": "DIR CHELLO.REL",
+          "frames": 900,
+          "expect": [
+            "CHELLO   REL"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aztec106",
+      "title": "Aztec C 1.06D",
+      "url": "http://www.retroarchive.org/cpm/lang/az106d.zip",
+      "archive": "zip",
+      "members": [
+        "CC.COM",
+        "AS.COM",
+        "LN.COM",
+        "LIBC.REL",
+        "C.LIB"
+      ],
+      "fixtures": [
+        "CHELLO.C"
+      ],
+      "command": "CC CHELLO",
+      "expect": [
+        "C Vers. 1.06D"
+      ],
+      "frames": 1500,
+      "steps": [
+        {
+          "text": "AS CHELLO",
+          "frames": 1500,
+          "expect": [
+            "8080 Assembler"
+          ]
+        },
+        {
+          "text": "LN CHELLO.O",
+          "frames": 1500,
+          "expect": [
+            "Linker"
+          ]
+        },
+        {
+          "text": "DIR CHELLO.COM",
+          "frames": 900,
+          "expect": [
+            "CHELLO   COM"
+          ]
+        }
+      ],
+      "known_issue": "The compiler and assembler both run (CHELLO.ASM and CHELLO.O are produced) but Linker 1.06D rejects the assembler output with 'Not an object file!', so no CHELLO.COM is produced. The object format the 1.06D linker expects (or an assembler switch) still needs to be found.",
+      "notes": "Manx Aztec C compiler toolchain: cc -> asm -> object -> link."
+    },
+    {
+      "id": "z80asm",
+      "title": "SLR Z80ASM 1.32",
+      "url": "http://www.retroarchive.org/cpm/lang/Z80ASM.ZIP",
+      "archive": "zip",
+      "members": [
+        "Z80ASM.COM"
+      ],
+      "fixtures": [
+        "HELLO.Z80"
+      ],
+      "command": "Z80ASM HELLO",
+      "expect": [
+        "0 Error(s) Detected"
+      ],
+      "frames": 2000,
+      "known_issue": "Z80ASM sets a multi-sector count with F44 (8 records), then reads its source once and assumes the BDOS transferred the whole block. This BDOS deliberately transfers one record per call and reports it in H (a legal partial transfer), so the second half of Z80ASM's source buffer is stale and the assembler reports 'Line Too Long' and assembles garbage. Making it pass needs full multi-sector F20 transfers; a prototype that did so broke PIP's copy, so the single-record behaviour is retained for now.",
+      "notes": "SLR Systems Z80ASM, a direct-to-.COM macro assembler.",
+      "steps": [
+        {
+          "text": "HELLO",
+          "frames": 900,
+          "expect": [
+            "HELLO, WORLD"
+          ]
+        }
+      ]
     }
   ]
 }

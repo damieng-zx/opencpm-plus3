@@ -24,6 +24,8 @@ Tests were run on 2026-10-27 through the zx84 MCP server.
 | **WordStar** | 3.0 | Banner and no-file menu appear; `INSTALL` patches terminals and writes `WS.COM` | 80-column layout wraps on the 51-column screen, so the display is not usable yet (needs an 80-column mode) |
 | **BBC BASIC** | — | Previously exercised from the disk image | Visual/interactive test; see the smoke-test notes |
 | **PIP** | reference binary | `PIP C:=A:DATE.COM`, then `DIR C:` | Covered by the automated smoke test |
+| **Microsoft M80 + L80** | MACRO-80 / Link-80 3.44 | `M80 =HELLO` assembles and links to `HELLO.COM`, which prints `HELLO, WORLD` | Exercises REL output, the linker's random I/O and the FCB command line |
+| **Microsoft FORTRAN-80** | 3.44 | `F80 CHELLO=CHELLO` compiles, `L80 CHELLO,FORLIB,CHELLO/N/E` links, `CHELLO` prints `HELLO, WORLD` | Library search, larger REL files |
 | **SUBMIT** (our build) | — | Explicit `SUBMIT SMOKE.SUB`, implicit `SMOKE`, `$1`/`$2` substitution, missing-file/missing-parameter paths | Project tool, not third-party |
 
 ## ❌ Doesn’t work yet
@@ -33,6 +35,9 @@ Tests were run on 2026-10-27 through the zx84 MCP server.
 | **WordStar 3.0 display** | The program runs and draws its menu, but WordStar is an 80×24 program and the character buffer is 51 columns, so each 80-column line wraps and overlaps the next. | The crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: an 80-column screen mode (3px font) or a WordStar install with a ≤51-column terminal. |
 | **Turbo Pascal display** | Runs correctly; the 80-column IDE frames wrap on screen. | Same root cause as WordStar's display: no 80-column mode. |
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
+| **BASCOM 5.3** | `BASCOM CHELLO` returns to the prompt immediately and produces no `.REL` file. | Its startup code checks for a `JP` (`C3h`) at `0100h` and jumps to `0000h` if absent; BASCOM's own entry is `LD HL,0106 / JP 138E`, so the check always fails. Needs a companion loader or a different build. |
+| **Aztec C 1.06D linker** | `CC` and `AS` work, but `LN CHELLO.O` reports `Not an object file!` and no `.COM` is written. | The object format produced by the 1.06D assembler is not the one its linker expects (or a switch is missing). |
+| **SLR Z80ASM 1.32** | Reads part of its source, reports `Line Too Long`, and assembles a corrupt `.COM`. | Z80ASM sets a multi-sector count with F44 and assumes one F20 transferred the whole block. This BDOS transfers one record per call (a legal partial transfer, H reports the count), so the rest of the source buffer is stale. Needs full multi-sector transfers, which broke PIP's copy in the prototype. |
 
 ## WordStar 3.0 display width
 
@@ -76,11 +81,11 @@ Pascal via TINST and leave WordStar unchanged.
 
 ### Languages and development tools
 
-- [ ] Microsoft BASIC compiler 5.3 (BASCOM)
+- [x] Microsoft BASIC compiler 5.3 (BASCOM) - known issue (startup check)
 - [ ] Microsoft BASIC 5.29
-- [ ] Microsoft FORTRAN-80 3.44
+- [x] Microsoft FORTRAN-80 3.44 - works (automated)
 - [ ] Microsoft COBOL-80 4.01
-- [ ] Aztec C 1.06D
+- [x] Aztec C 1.06D - compiler/assembler work; linker rejects the object (known issue)
 - [ ] BDS C
 - [ ] Software Toolworks C80 3.1
 - [ ] Tiny C
@@ -89,9 +94,9 @@ Pascal via TINST and leave WordStar unchanged.
 - [ ] FTL Modula-2 1.30
 - [ ] APL/Z 1.1
 - [ ] LISP/80
-- [ ] Microsoft M80 / L80
-- [ ] Microsoft MACRO-80 package
-- [ ] SLR Z80 assembler
+- [x] Microsoft M80 / L80 - works (automated)
+- [x] Microsoft MACRO-80 package - same binaries as M80 / L80 (automated)
+- [x] SLR Z80 assembler - known issue (needs multi-sector F20)
 - [ ] ZSID debugger
 
 ### Spreadsheets, business and databases

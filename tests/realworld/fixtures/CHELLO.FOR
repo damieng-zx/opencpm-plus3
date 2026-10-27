@@ -1,0 +1,5 @@
+      PROGRAM HELLO
+      WRITE(1,10)
+   10 FORMAT(' HELLO, WORLD')
+      STOP
+      END

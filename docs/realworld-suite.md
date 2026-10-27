@@ -55,6 +55,11 @@ separate, explicitly triggered workflow.
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Known issue |
 | `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
 | `turbo3` | Turbo Pascal 3.0 | Compiler/IDE, overlays, TPA | Pass |
+| `m80l80` | Microsoft M80 + L80 | Assembler → REL → `.COM`, then run | Pass |
+| `f80344` | Microsoft FORTRAN-80 3.44 | Compiler → REL → link with FORLIB → run | Pass |
+| `bascom53` | Microsoft BASIC Compiler 5.3 | BASIC-80 compiler startup | Known issue |
+| `aztec106` | Aztec C 1.06D | cc → asm → object → link | Known issue |
+| `z80asm` | SLR Z80ASM 1.32 | Direct-to-`.COM` macro assembler | Known issue |
 
 Known issues are recorded in the manifest and printed by the runner:
 
@@ -68,6 +73,25 @@ Known issues are recorded in the manifest and printed by the runner:
   remaining piece.
 - **Turbo Pascal 3.0** runs (banner, `TURBO.MSG` load, IDE menu) and its
   80-column frames wrap on the 51-column screen for the same reason.
+- **BASCOM 5.3** exits immediately.  Its startup code checks for a `JP`
+  (`C3h`) at `0100h` and jumps to `0000h` when it is not there; BASCOM's
+  own first instruction is `LD HL,0106 / JP 138E`, so the check always
+  fails.  Why it expects a jump there is not yet known.
+- **Aztec C 1.06D** compiles and assembles (`CHELLO.ASM`, `CHELLO.O` are
+  produced) but Linker 1.06D rejects the assembler output with
+  `Not an object file!`, so no `.COM` is produced.
+- **Z80ASM 1.32** sets a multi-sector count with F44 and then reads its
+  source once, assuming the whole block was transferred.  This BDOS
+  deliberately transfers one record per call and reports it in `H` (a
+  legal partial transfer), so the rest of Z80ASM's source buffer is stale
+  and it reports `Line Too Long`.  Full multi-sector F20 transfers would
+  fix it; the prototype that did so broke PIP's copy, so the documented
+  single-record behaviour stands for now.
+
+The assembler/compiler packages use fixtures from
+`tests/realworld/fixtures/` (`HELLO.MAC`, `CHELLO.FOR`, `CHELLO.BAS`,
+`CHELLO.C`, `HELLO.Z80`).  They are CRLF text files because the CP/M
+tools read them directly (see `.gitattributes`).
 
 SuperCalc2 starts successfully, but its VT-100 escape output is still visible
 in the character buffer (`[?3h[2J[H`), so terminal escape handling remains a
@@ -128,11 +152,11 @@ need conversion first.
 
 | Software | Download |
 |---|---|
-| Microsoft BASIC compiler 5.3 | [BASCOM53.ZIP](http://www.retroarchive.org/cpm/lang/BASCOM53.ZIP) |
+| Microsoft BASIC compiler 5.3 | [BASCOM53.ZIP](http://www.retroarchive.org/cpm/lang/BASCOM53.ZIP) - automated as `bascom53` |
 | Microsoft BASIC 5.29 | [MBASIC.ZIP](http://www.retroarchive.org/cpm/lang/mbasic.zip) |
-| Microsoft FORTRAN-80 3.44 | [F80-344.ZIP](http://www.retroarchive.org/cpm/lang/F80-344.ZIP) |
+| Microsoft FORTRAN-80 3.44 | [F80-344.ZIP](http://www.retroarchive.org/cpm/lang/F80-344.ZIP) - automated as `f80344` |
 | Microsoft COBOL-80 4.01 | [MSCOBOL401.ZIP](http://www.retroarchive.org/cpm/lang/MSCOBOL401.ZIP) |
-| Aztec C 1.06D | [AZ106D.ZIP](http://www.retroarchive.org/cpm/lang/az106d.zip) |
+| Aztec C 1.06D | [AZ106D.ZIP](http://www.retroarchive.org/cpm/lang/az106d.zip) - automated as `aztec106` |
 | BDS C user group | [BDSCUG.ZIP](http://www.retroarchive.org/cpm/lang/BDSCUG.ZIP) |
 | Software Toolworks C80 3.1 | [C80V31.ZIP](http://www.retroarchive.org/cpm/lang/c80v31.zip) |
 | Tiny C | [TINY_C.ZIP](http://www.retroarchive.org/cpm/lang/TINY_C.ZIP) |
@@ -142,8 +166,8 @@ need conversion first.
 | APL/Z 1.1 | [APLZ11.ZIP](http://www.retroarchive.org/cpm/lang/aplz11.zip) |
 | LISP/80 | [LISP80.ZIP](http://www.retroarchive.org/cpm/lang/lisp80.zip) |
 | M80 + L80 | [M80.COM](http://www.retroarchive.org/cpm/lang/m80.com), [L80.COM](http://www.retroarchive.org/cpm/lang/l80.com) |
-| Microsoft MACRO-80 package | [MASM-80.ZIP](http://www.retroarchive.org/cpm/lang/MASM-80.ZIP) |
-| SLR Z80 assembler | [Z80ASM.ZIP](http://www.retroarchive.org/cpm/lang/Z80ASM.ZIP) |
+| Microsoft MACRO-80 package | [MASM-80.ZIP](http://www.retroarchive.org/cpm/lang/MASM-80.ZIP) - automated as `m80l80` |
+| SLR Z80 assembler | [Z80ASM.ZIP](http://www.retroarchive.org/cpm/lang/Z80ASM.ZIP) - automated as `z80asm` |
 | ZSID debugger | [ZSID.ZIP](http://www.retroarchive.org/cpm/lang/ZSID.ZIP) |
 
 ### Word processing and text

@@ -2,3 +2,5 @@
 *.sh text eol=lf
 # Batch files are CRLF by convention.
 *.cmd text eol=crlf
+# CP/M fixtures are consumed by CP/M tools, which expect CRLF text.
+tests/realworld/fixtures/** text eol=crlf

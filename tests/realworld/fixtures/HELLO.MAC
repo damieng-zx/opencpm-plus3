@@ -1,0 +1,16 @@
+; HELLO.MAC - Microsoft M80 / L80 smoke test for the real-world suite.
+; Assemble:  M80 =HELLO
+; Link:      L80 HELLO,HELLO/N/E
+	ORG	100H
+
+BDOS	EQU	5
+PRINT	EQU	9
+
+START:	LXI	D,MSG
+	MVI	C,PRINT
+	CALL	BDOS
+	RET
+
+MSG:	DB	'HELLO, WORLD$'
+
+	END	START
