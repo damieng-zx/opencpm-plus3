@@ -46,6 +46,7 @@ echo   Assembling boot sector...
 %SJASMPLUS% --raw=build\bootsect.bin src\boot\bootsect.asm
 if errorlevel 1 goto :fail
 python3 tools\patchsum.py build\bootsect.bin
+if errorlevel 1 goto :fail
 
 echo   Assembling test programs...
 %SJASMPLUS% --raw=build\bdostest.com src\test\bdostest.asm
