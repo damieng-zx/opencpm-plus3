@@ -116,6 +116,7 @@ The automated smoke runner boots the image, runs `SYSTEST`, `DISKTEST`,
 ```bash
 python3 tools/zx84_smoke.py
 python3 tools/zx84_negative.py   # corrupted images must not boot
+python3 tools/zx84_realworld.py --list   # popular CP/M packages
 ```
 
 ### Project Structure
@@ -140,6 +141,7 @@ docs/       API reference, filesystem documentation
 - [XBIOS/TE Interface](docs/cpm-plus-xbios.md)
 - [CI with zx84](docs/ci.md)
 - [zx84 MCP Smoke Test](docs/mcp-smoke-test.md)
+- [Real-world CP/M Suite](docs/realworld-suite.md)
 
 ## License
 
