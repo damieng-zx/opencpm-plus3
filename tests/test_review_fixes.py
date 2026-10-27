@@ -197,10 +197,10 @@ class Issue09BiosMove(unittest.TestCase):
 
     def test_bios_call_bank4_preserves_hl(self):
         text = source("src/bios/common.zpa")
-        body = text[text.index("bios_call_bank4:"):text.index(".jp_iy:")]
+        body = text[text.index("bios_call_bank4:"):text.index(".jp_ix:")]
         self.assertIn("push hl", body)
         self.assertIn("pop hl", body)
-        self.assertIn("ld iy, (_bc4_target)", body)
+        self.assertIn("ld ix, (_bc4_target)", body)
 
     def test_systest_checks_move(self):
         self.assertIn("MOVE OK", source("src/test/systest.asm"))
@@ -261,14 +261,14 @@ class Issue14ComFcb(unittest.TestCase):
 
     def test_ccp_uses_common_fcb(self):
         text = source("src/ccp/miniccp.zpa")
-        self.assertIn("CCP_FCB_ADDR equ 0xFB61", text)
+        self.assertIn("CCP_FCB_ADDR equ 0xFB6B", text)
         self.assertIn("ld hl, CCP_FCB_ADDR", text)
         self.assertNotIn("0xF600 - 36", text)
 
     def test_common_reserves_fcb(self):
         text = source("src/bios/common.zpa")
         self.assertIn("ccp_fcb: ds 36", text)
-        self.assertIn("ccp_fcb == 0xFB61", text)
+        self.assertIn("ccp_fcb == 0xFB6B", text)
 
 
 class Issue15FdcTimeouts(unittest.TestCase):
