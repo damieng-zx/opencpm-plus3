@@ -24,7 +24,7 @@ bank 3 at `F600-FFFF` (the "common memory stub"). If you put writable code or
 data anywhere else and try to bank-switch, you lose access mid-instruction.
 
 `BANK0_1FFD = 0x01`, `BANK1_1FFD = 0x07`, `MOTOR_BIT = 0x08` — see
-`src/bios/bios.zpa:42-44`.
+`src/bios/bios.zpa`.
 
 ---
 
@@ -60,7 +60,7 @@ DI not yet asserted.
 The system image lands in **bank 3** at `C000-FFFF` because that's what mode 2
 maps there.
 
-### Stage 3 — CPM3.SYS init (`src/bios/bios.zpa:59-92`)
+### Stage 3 — CPM3.SYS init (`src/bios/bios.zpa`)
 
 Runs at `C000` in bank 3. **One-shot setup** — its job is to relocate the
 real code into the right banks before jumping into bank 4.
@@ -88,7 +88,7 @@ After init, **bank 3 still holds the rest of the loaded CPM3.SYS image at
 C000-F5FF, but nothing references it again** — it's just whatever the loader
 deposited there. Common memory at F600+ is the live copy.
 
-### Stage 4 — `cold_boot` (`src/bios/bios.zpa:168-203`, runs in bank 4)
+### Stage 4 — `cold_boot` (`src/bios/bios.zpa`, runs in bank 4)
 
 ```
 di
@@ -105,7 +105,7 @@ install ISR vector at 0x0038 (system bank's bank 4 page zero)
 fall through ──> warm_boot
 ```
 
-### Stage 5 — `warm_boot` (`src/bios/bios.zpa:211-232`)
+### Stage 5 — `warm_boot` (`src/bios/bios.zpa`)
 
 ```
 di
@@ -117,7 +117,7 @@ clear xmove_active, dma_bank, multi_count
 jp start_tpa            ; in common memory — never returns
 ```
 
-### Stage 6 — `start_tpa` (`src/bios/common.zpa:477-511`)
+### Stage 6 — `start_tpa` (`src/bios/common.zpa`)
 
 Runs in common memory because it switches *out* of bank 4.
 
@@ -224,8 +224,8 @@ FFFF  ────────────────────  hard limit (
 
 | Address  | What                          | Why pinned                                                       |
 |----------|-------------------------------|------------------------------------------------------------------|
-| `0xF996` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa:796.              |
-| `0xF99C` | `copy_record_from_tpa`        | Same - assert at common.zpa:797.                                 |
+| `0xF996` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa.              |
+| `0xF99C` | `copy_record_from_tpa`        | Same - assert at common.zpa.                                 |
 | `bdos_stub` | itself                     | scb_tpa = this address; user stacks set SP to it.                |
 | SCB offsets `0x05, 0x1A, 0x3A, 0x3C, 0x3E, 0x44, 0x58-0x5C, 0x62` | DRI documented | Programs index off scb_base.    |
 
@@ -250,7 +250,7 @@ bank 3 (always visible) so its content survives the switch.
 
 The BDOS stack is also in common memory for the same reason — `bdos_stub` is
 itself called from TPA mode and switches banks before invoking the real BDOS.
-See the dance in `common.zpa:161-210`.
+See the dance in `common.zpa`.
 
 ---
 
@@ -294,11 +294,11 @@ wrote in `start_tpa`.
 | Hang at red border immediately after ROM       | Stage 1 FDC read failed (motor not on, head load, sector mismatch)         | `bootsect.asm` |
 | Red border after green flicker                 | Loader couldn't find `CPM3    SYS` in directory                            | `loader.asm:.dir_sector` |
 | Loader runs, jump to C000, then hang           | CPM3.SYS image truncated or built without proper end pad                   | check `system_end <= 0x4000`, build/cpm3.sys size |
-| Boots but garbage after first BDOS call        | Common stub didn't land at F600 (PHASE wrong / size mismatch)              | `bios.zpa:1039-1045`, `common_end` assert |
-| RAMDISK.FID disk I/O reads garbage             | `copy_record_*_tpa` moved off pinned addrs                                 | asserts at `common.zpa:802-803` |
-| TPA program crashes randomly                   | Writable var placed before `bdos_stub` in common; TPA stack overran it     | assert at `common.zpa:167`, `saved_sp > bdos_stub` |
+| Boots but garbage after first BDOS call        | Common stub didn't land at F600 (PHASE wrong / size mismatch)              | `bios.zpa`, `common_end` assert |
+| RAMDISK.FID disk I/O reads garbage             | `copy_record_*_tpa` moved off pinned addrs                                 | asserts at `common.zpa` |
+| TPA program crashes randomly                   | Writable var placed before `bdos_stub` in common; TPA stack overran it     | assert at `common.zpa`, `saved_sp > bdos_stub` |
 | Hang on first SELDSK                           | XDPB Freeze byte stuck nonzero with stale geometry                         | `xdpb_a` byte 26, `fdc_login` |
-| ISR fires but motor never spins down           | `fdc_busy` left non-zero by a driver path                                  | `isr_handler` motor-off block, `common.zpa:392-415` |
+| ISR fires but motor never spins down           | `fdc_busy` left non-zero by a driver path                                  | `isr_handler` motor-off block, `common.zpa` |
 | Inter-bank `MOVE` returns wrong data           | xmove banks set with `xmove_active=0`, or copying with stale `_ibm_*_bank` | `bios_xmove`, `interbank_move` |
 | Mallard BASIC hangs probing XBIOS              | New XBIOS ID needs handler — currently returns 0xFF                        | `xbios_handler` in `bios.zpa` |
 
