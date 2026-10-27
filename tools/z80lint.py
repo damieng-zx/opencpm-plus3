@@ -33,6 +33,9 @@ Checks:
      write_1ffd, which maintains the last_1ffd shadow the ISR motor
      timer depends on.  Pre-shadow / ISR contexts carry
      `; lint-exempt: 1ffd`.
+  7. Duplicate labels: a non-local label defined twice inside the same
+     binary makes call resolution ambiguous and is an error.  Separate
+     binaries (tools) may reuse names.
 
 Routine header format:
     ; routine_name - Description
@@ -1472,7 +1475,14 @@ def check_clobber_annotations(routine_list, routine_map):
     succs = {}       # rid -> rid of control-flow successor routine
     jumps = set()    # (rid, target rid) — any jp/jr to a routine label
     indirect_exit = set()   # rids with a terminal indirect jump
-    referenced = set()   # routine names reached by call or tail jp
+    referenced = set()   # routine names reached by call, tail jp, or table
+    local_maps = {fp: {r.name: r for r in rs if r.lines}
+                  for fp, rs in by_file.items()}
+
+    def resolve(name, filepath):
+        """Same-file definition wins (tools reuse names like crlf)."""
+        return local_maps.get(filepath, {}).get(name) \
+            or routine_map.get(name)
 
     # Pass 1: structural successors.  An unconditional tail jp/jr to a
     # known routine, or fall-through into the next routine in the file,
@@ -1488,7 +1498,7 @@ def check_clobber_annotations(routine_list, routine_map):
             if (mn in ('jp', 'jr') and ops
                     and ops[0].kind not in ('cond', 'indirect_pair')
                     and raw_ops):
-                tgt = routine_map.get(raw_ops[0].strip())
+                tgt = resolve(raw_ops[0].strip(), r.filepath)
                 if tgt is not None and tgt.lines and tgt is not r:
                     succ = id(tgt)
             elif mn in ('ret', 'reti', 'retn', 'djnz', 'rst', 'halt'):
@@ -1598,7 +1608,7 @@ def check_clobber_annotations(routine_list, routine_map):
             elif mnemonic == 'call':
                 m = CALL_TARGET_RE.search(raw)
                 if m:
-                    tgt = routine_map.get(m.group(1))
+                    tgt = resolve(m.group(1), r.filepath)
                     if tgt is not None and tgt.lines:
                         prot = set()
                         for pair, d in depth.items():
@@ -1621,13 +1631,20 @@ def check_clobber_annotations(routine_list, routine_map):
                     tgt_name = None
                 if tgt_name:
                     referenced.add(tgt_name)
-                    tgt = routine_map.get(tgt_name)
+                    tgt = resolve(tgt_name, r.filepath)
                     # An unconditional tail jump to the structural
                     # successor is already chain-folded; adding its
                     # fragment-level effects would double-count.
                     if (tgt is not None and tgt.lines and tgt is not r
                             and id(tgt) != succs.get(rid)):
                         jumps.add((rid, id(tgt)))
+            elif mnemonic in ('dw', 'defw') and raw_ops:
+                # Dispatch-table entries: the targets are reachable, so
+                # they belong to the contract-coverage universe.
+                for op in raw_ops:
+                    name = op.strip()
+                    if name and not re.match(r'^[0-9$]', name):
+                        referenced.add(name)
         calls[rid] = tgts
 
     # Fixpoint: propagate actual callee and jump-target effects.
@@ -1846,6 +1863,43 @@ def check_1ffd_discipline(routine):
         if OUT_C_RE.match(raw) and 'lint: ignore' not in raw.lower():
             issues.append((lineno, strip_comment(stripped)))
     return issues
+
+
+def check_duplicate_labels(routine_list):
+    """
+    Flag routines defined more than once within the same binary.  The
+    linter's name map silently keeps the last definition, so a duplicate
+    makes every call/clobber analysis unreliable for that name.  Same
+    names in DIFFERENT binaries (the tools all define crlf) are fine.
+
+      In:       routine_list — every parsed Routine
+      Out:      list of (name, [routines]) duplicates
+      Clobbers: none
+    """
+    groups = {}
+    for r in routine_list:
+        if not _routine_has_instructions(r):
+            continue
+        groups.setdefault((binary_group(r.filepath), r.name), []).append(r)
+    return [(name, rs) for (grp, name), rs in sorted(groups.items())
+            if len(rs) > 1]
+
+
+def binary_group(filepath):
+    """Which binary a file assembles into (tools are separate programs)."""
+    f = filepath.replace('\\', '/').lower()
+    if '/build/zpa/' in f:
+        stem = f.rsplit('/', 1)[1].split('.')[0]
+        if stem in ('bios', 'bdos', 'common', 'screen', 'fdc765', 'keyboard'):
+            return 'system'
+        return stem
+    if '/boot/' in f:
+        return 'boot:' + f.rsplit('/', 1)[1].split('.')[0]
+    if '/fid/' in f:
+        return 'fid'
+    if '/tools/' in f:
+        return 'tool:' + f.rsplit('/', 1)[1].split('.')[0]
+    return 'other:' + f
 
 
 # -------------------------------------------------------------------------
@@ -2090,6 +2144,21 @@ def main():
     if pff_count == 0:
         print("  OK -- port 1FFD only written via write_1ffd.")
     total += pff_count
+
+    print()
+
+    # ---- Check 7: duplicate labels within one binary ----
+    print("=== Duplicate Labels ===")
+    dup_count = 0
+    routine_list = [r for rs in file_routines.values() for r in rs]
+    for name, rs in check_duplicate_labels(routine_list):
+        places = ', '.join(f"{r.filepath}:{r.start_lineno}" for r in rs)
+        print(f"  DUP    {name}: defined {len(rs)}x in the same binary "
+              f"({places})")
+        dup_count += 1
+    if dup_count == 0:
+        print("  OK -- no duplicate labels within any binary.")
+    total += dup_count
 
     print()
     if total:
