@@ -132,6 +132,7 @@ docs/       API reference, filesystem documentation
 - [CP/M 3.1 BDOS API Reference](docs/API.md)
 - [Filesystem Layout](docs/filesystem.md)
 - [XBIOS/TE Interface](docs/cpm-plus-xbios.md)
+- [CI with zx84](docs/ci.md)
 - [zx84 MCP Smoke Test](docs/mcp-smoke-test.md)
 
 ## License

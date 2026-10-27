@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build and static tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install sjasmplus
+        run: echo "SJASMPLUS=$(tools/install-sjasmplus.sh build/sjasmplus-src)" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -t .
+
+  emulator-test:
+    name: zx84 emulator smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # zx84 is a separate repository. If the checkout becomes private, add
+      # `token: ${{ secrets.ZX84_TOKEN }}` to this step.
+      - uses: actions/checkout@v4
+        with:
+          repository: damieng-zx/zx84
+          path: zx84
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: zx84/package-lock.json
+
+      - name: Install zx84 dependencies
+        run: npm ci
+        working-directory: zx84
+
+      # System ROMs are downloaded on first use and are not committed.
+      # This cache keeps CI from re-fetching them; the copyright still
+      # belongs to the ROM owners.
+      - uses: actions/cache@v4
+        with:
+          path: zx84/mcp/.cache
+          key: zx84-rom-cache-v1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install sjasmplus
+        run: echo "SJASMPLUS=$(tools/install-sjasmplus.sh build/sjasmplus-src)" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Emulator smoke test
+        run: python3 tools/zx84_smoke.py --zx84 zx84
+
+      - name: Negative boot image tests
+        run: python3 tools/zx84_negative.py --zx84 zx84

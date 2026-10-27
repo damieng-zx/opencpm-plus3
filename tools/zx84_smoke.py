@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -74,7 +75,19 @@ class MCP:
         )
         self.next_id = 1
         self.notifications: list[dict] = []
+        self._stderr: list[str] = []
+        threading.Thread(target=self._drain_stderr, daemon=True).start()
         self.initialize()
+
+    def _drain_stderr(self) -> None:
+        assert self.proc.stderr is not None
+        for line in self.proc.stderr:
+            self._stderr.append(line.rstrip())
+            if len(self._stderr) > 200:
+                del self._stderr[:100]
+
+    def stderr_tail(self) -> str:
+        return "\n".join(self._stderr[-40:])
 
     def _send(self, obj: dict) -> None:
         assert self.proc.stdin is not None
@@ -87,10 +100,7 @@ class MCP:
         while time.time() < deadline:
             line = self.proc.stdout.readline()
             if line == "":
-                err = ""
-                if self.proc.stderr is not None:
-                    err = self.proc.stderr.read()
-                raise SmokeError(f"zx84 MCP server exited\n{err}")
+                raise SmokeError(f"zx84 MCP server exited\n{self.stderr_tail()}")
             line = line.strip()
             if not line:
                 continue
