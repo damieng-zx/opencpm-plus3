@@ -174,14 +174,43 @@ set.
   free-space data.
   File: `src/test/disktest.asm`.
 
-## P2 — Later candidates
+## P2 — Later candidates (addressed)
 
-Dead code (`bdos_warm_init`, `multi_count`/F44, `xdph_c_login_slot`,
-`fdc_seek_1`, `te_*`/`cd_sa_*`/`cd_version`/`cd_info`/`find_fid`/
-`scr_run_routine`), F6 pagination, F110 delimiter, page-zero 0003/0004,
-TAB handling, F34/F40 return codes, F36 return registers, F49 offset
-range check, FDC ST1 mask (0x37), write-protect detection, disk-change
-invalidation, `build.sh` lint/glob, `build.cmd` assembler error checks,
-BUILD_NUM auto-bump dirtying tracked source, obsolete
-`check_clobber.py`/`zpa_compare.py`, lint coverage of boot/FID/tools,
-missing XBIOS/TE docs, stale README/comments.
+- [x] **Dead code.** Removed the unused `fdc_seek_1` boot-sector helper;
+  the other named labels were already gone. `xdph_c_login_slot` stays: it
+  is part of the 10-byte XDPH prefix and the FID copies `rd_login` into it.
+- [x] **F6 pagination.** F6 direct console output bypasses
+  `bdos_con_out`; F2/F9/F111 still paginate.
+- [x] **F110 delimiter.** Get/set implemented; F9 terminates on
+  `out_delim`. `DELIMTEST.COM` covers set/get and termination.
+- [x] **Page-zero 0003/0004.** `start_tpa` writes IOBYTE and
+  `(user << 4) | drive`; F8/F14/F32 keep them current. `P0TEST.COM`
+  covers it.
+- [x] **TAB handling.** Console TAB pads to the next 8-column stop.
+  `TABTEST.COM` covers it.
+- [x] **F34/F40 return codes.** 1 = directory full (F34), 2 = disk full,
+  5 = no directory space (F40).
+- [x] **F36 return registers.** A=0/HL=0 via `bdos_eok`.
+- [x] **F49 offset range check.** Offsets 0x63+ return A=0xFF/HL=0.
+- [x] **FDC ST1 mask.** 0x3B (DE, OR, ND, NW, MA); EN is normal.
+- [x] **Write-protect detection.** ST1.NW returns BIOS WRITE code 2 and
+  F21/F34 propagate it as read-only.
+- [x] **Disk-change invalidation.** F13 flushes, then invalidates
+  `last_dir_sec`, `last_dir_drv` and `deblock_drv` as well as
+  `cached_drive`.
+- [x] **Build/tooling.** LF `build.sh` + configurable assembler + lint
+  failure; recursive ZPA discovery; `BUILD_NUM` in `build/buildnum`
+  passed as `-DBUILD_NUM`; patchsum error check; obsolete
+  `check_clobber.py`/`zpa_compare.py` removed; lint covers boot/FID/tools.
+- [x] **XBIOS/TE docs.** `docs/cpm-plus-xbios.md` documents the inline-ID
+  convention, supported IDs and the unimplemented TE calls.
+- [x] **Stale README/comments.** README refreshed (61K/F600 map,
+  built-ins, test suites, wishlist).
+
+## P3 — Remaining follow-ups
+
+- F46 real free-space accounting (the stub returns 0).
+- F40 zero-fill is sparse.
+- Full `TE_*` / `SCR_RUN_ROUTINE` XBIOS functions.
+- 16-bit block formats (PCW 720K file I/O).
+- Pagination itself has no automated runtime test.
