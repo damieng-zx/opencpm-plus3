@@ -84,13 +84,15 @@ scr_border_v: db BORDER_COL    ; Current border colour 0-7
 scr_cols:     db 51            ; Runtime column count (32 or 51)
 font_ptr:     dw 0x8000       ; Active font in bank 6 (0x8000=51col, 0x8800=32col)
 
-char_buffer:
-    block SCR_COLS_MAX * SCR_ROWS, 0x20
+; The character buffer and row table are runtime-initialised and are not
+; stored in CPM3.SYS.  Bank 6 is mapped at 8000h in both system mode
+; (4,7,6,3) and screen mode (4,5,6,3).  Fonts occupy 8000h-8FFFh and the
+; optional RAMDISK.FID starts at 9000h, so these buffers live at A000h.
+char_buffer equ 0xA000
 
-; Row → char_buffer offset table. Populated by scr_init from scr_cols.
+; Row -> char_buffer offset table. Populated by scr_init from scr_cols.
 ; 24 words: row_buf_tbl[r] = r * scr_cols. Replaces iterative multiply.
-row_buf_tbl:
-    block SCR_ROWS * 2, 0
+row_buf_tbl equ 0xA700
 
 
 ; ==========================================================================

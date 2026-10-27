@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 from zx84_smoke import (  # noqa: E402
-    COLS, ROWS, MCP, SmokeError, find_zx84, label_address)
+    COLS, ROWS, MCP, SmokeError, bank_for_address, find_zx84, label_address)
 
 
 SECTOR = 512
@@ -75,10 +75,11 @@ class Negative:
     def __init__(self, mcp: MCP):
         self.mcp = mcp
         self.cb = label_address("char_buffer")
+        self.cb_bank = bank_for_address(self.cb)
 
     def screen(self) -> str:
         txt = self.mcp.call("read_memory", {
-            "address": hex(self.cb), "length": COLS * ROWS, "bank": 4})
+            "address": hex(self.cb), "length": COLS * ROWS, "bank": self.cb_bank})
         data = bytearray()
         for line in txt.splitlines():
             m = re.match(r"^([0-9A-F]{4})\s+((?:[0-9A-F]{2} )+)", line)

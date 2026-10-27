@@ -58,7 +58,10 @@ def _match_directive(rest: str) -> tuple[str, int | None] | None:
         try:
             base = int(num, 0)
         except ValueError:
-            return None
+            if num.upper() == "COMMON_BASE":
+                base = 0xF600
+            else:
+                return None
         return ("phase", base)
     if lowered == "dephase":
         return ("dephase", None)
@@ -109,8 +112,15 @@ def parse_listing(path: Path) -> list[Section]:
         if name.startswith("_"):
             # Skip internal/local labels — keep the map readable.
             continue
+        # Skip EQU constants: the listing's address column is the current PC,
+        # not the constant's value, so they are not useful in a memory map.
+        if re.match(r"^\s*[A-Za-z_][A-Za-z0-9_]*:?\s+equ\b", source, re.I):
+            continue
 
         current = section_stack[-1]
+        if not (current.base <= addr < current.limit):
+            # An EQU or alias outside this section's address window.
+            continue
         current.labels.append(Label(name=name, addr=addr, section=current.name, file_line=0))
 
     return [file_section, system_section, common_section]

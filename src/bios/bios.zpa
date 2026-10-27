@@ -1053,7 +1053,7 @@ load_fid:
 
 ; ALV vector for C: — read/written by BDOS while bank 4 is mapped.
 ; 16 blocks → ceil(16/8) = 2 bytes; add slack for safety.
-alv_c:          ds 4
+alv_c:          equ 0xA840
 
 
 ; ==========================================================================

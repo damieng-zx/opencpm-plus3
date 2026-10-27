@@ -98,14 +98,17 @@ MAX_RETRIES equ 10
 ; Checksum and allocation vectors — sized for the largest supported format.
 ; Type 3 PCW DS/DD worst case: CKS=64, DSM=355 → ALV=(355/8)+1=45.
 ; Smaller formats use only the first CKS / (DSM/8)+1 bytes; the rest is unused.
-csv_a:      ds 64
-alv_a:      ds 45
+; These vectors are built at runtime, so they live in bank 6 at A000h rather
+; than in CPM3.SYS (bank 6 is mapped in system and screen modes).
+csv_a:      equ 0xA740
+alv_a:      equ 0xA780
 
-csv_b:      ds 64
-alv_b:      ds 45
+csv_b:      equ 0xA7C0
+alv_b:      equ 0xA800
 
-; Sector deblocking buffer (one physical sector = 512 bytes)
-deblock_buf: ds 512
+; Sector deblocking buffer (one physical sector = 512 bytes).  Filled before
+; use by the FDC driver, so it does not need to be stored in CPM3.SYS.
+deblock_buf equ 0xA500
 
 ; Deblocking state
 deblock_drv:  db 0xFF          ; Drive of buffered sector (FF=invalid)

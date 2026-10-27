@@ -856,7 +856,8 @@ _ibm_byte:     db 0
 ; ==========================================================================
 ; Disk parameter structures — in common memory so TPA programs (e.g.
 ; DISCKIT.COM) can dereference them after calling DRVTBL/SELDSK.
-; csv_a, alv_a, dirbuf remain in bank 4; only BDOS follows those pointers.
+; csv_a/alv_a live in bank 6, dirbuf remains in common; only BDOS follows
+; those pointers.
 ; ==========================================================================
 
 ; Drive pointer table — 16 DPH pointers (BIOS fn 22 DRVTBL returns this)

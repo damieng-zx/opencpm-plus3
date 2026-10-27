@@ -42,7 +42,19 @@ def label_address(name: str) -> int:
         m = re.match(rf"^\s*\d+\+\s+([0-9A-F]{{4}})\b.*\b{re.escape(name)}:", line)
         if m:
             return int(m.group(1), 16)
+        m = re.match(
+            rf"^\s*\d+\+\s+[0-9A-F]{{4}}\s+.*\b{re.escape(name)}\s+equ\s+0x([0-9A-Fa-f]+)",
+            line, re.I)
+        if m:
+            return int(m.group(1), 16)
     raise SmokeError(f"{name} label not found in build/bios.lst")
+
+
+def bank_for_address(addr: int) -> int:
+    """Bank that maps a buffer address in system/screen mode."""
+    if 0x8000 <= addr < 0xC000:
+        return 6
+    return 4
 
 
 def char_buffer_address() -> int:
@@ -169,6 +181,7 @@ class Smoke:
         self.dsk = dsk
         self.verbose = verbose
         self.cb = char_buffer_address()
+        self.cb_bank = bank_for_address(self.cb)
         self.scr_cols = label_address("scr_cols")
         self.history: list[str] = []
 
@@ -189,7 +202,7 @@ class Smoke:
         cols = self.memory(4, self.scr_cols, 1)[0]
         if cols not in (32, 51):
             cols = COLS
-        data = self.memory(4, self.cb, cols * ROWS)
+        data = self.memory(self.cb_bank, self.cb, cols * ROWS)
         if len(data) < cols * ROWS:
             raise SmokeError(f"short char_buffer read: {len(data)} bytes")
         return ["".join(chr(b) if 32 <= b < 127 else "."

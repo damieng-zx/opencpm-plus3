@@ -75,10 +75,11 @@ load build/prompt.szx
 Find the screen buffer address from the BIOS listing:
 
 ```text
-rg "char_buffer:" build/bios.lst
+rg "char_buffer" build/bios.lst
 ```
 
-Use that address with the emulator's `char_buffer` command or memory viewer.
+`char_buffer` is an `equ` constant (currently `0xA000`) in **bank 6**.
+Use that address with the emulator's memory viewer and select bank 6.
 OCR is not reliable with the 5px font, so prefer the character buffer over OCR.
 
 ## Performance Notes
@@ -105,7 +106,7 @@ disk_boot
 run 1000
 ```
 
-Read `char_buffer` at the address shown in `build/bios.lst` and require:
+Read `char_buffer` (bank 6, address from `build/bios.lst`) and require:
 
 - the signon line contains `Open CP/M +3`
 - the signon line reports the expected TPA size

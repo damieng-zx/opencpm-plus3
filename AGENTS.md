@@ -33,7 +33,8 @@ The zx84 MCP emulator (F:\src\zx84) provides debugging tools. Key workflow:
 - `model +3` → `load build/cpm3.dsk` → `disk_boot` → `run 1000`
 - Snapshots are supported: `save build/prompt.szx` and later `load build/prompt.szx`
   to resume from a known-good prompt state without rebooting the DSK.
-- Read screen via char_buffer at the address shown in bios.lst for `char_buffer:`
+- Read screen via `char_buffer` in bank 6 (its `equ` value in `build/bios.lst`;
+  currently `0xA000`)
 - `fdc_log` shows all FDC operations (retries = bug)
 - `registers`, `memory`, `disassemble` for debugging
 - `type "text"` + `key enter` to send commands (`.` requires sym+m fix in emulator)
@@ -56,9 +57,9 @@ OCR does not work with our custom 5px font.
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
 
 **System mode (mode 3: banks 4,7,6,3)**:
-- **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers, font, buffers, CCP image
+- **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers, CCP image
 - **4000-7FFF**: Bank 7 — System data / growth
-- **8000-BFFF**: Bank 6 — Reserved
+- **8000-BFFF**: Bank 6 — fonts at 8000h-8FFFh, optional RAMDISK.FID at 9000h, runtime screen/FDC/BDOS buffers at A000h-A8FFh
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
 
 **Screen access (mode 2: banks 4,5,6,3)**:
