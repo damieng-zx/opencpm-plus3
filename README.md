@@ -8,7 +8,7 @@ for this project.
 
 - **Three text modes**: 32x24 (8px font), 51x24 (5px, the +3's native width)
   and 64x24 (4px "Compression" font, two characters per attribute cell).
-  `SCREEN 32|51|64`, or BIOS function 32.
+  `SCREEN 32|51|64` (the `SCREEN` utility), or BIOS function 32.
 - **Terminal**: VT52/ADM-3A cursor and erase sequences, colour and BRIGHT via
   `ESC b`/`ESC c`, wrap control (`ESC v`/`ESC w`), and the `ESC 3`/`ESC 4`
   screen-size and page-mode controls from the +3 CP/M manual.
@@ -24,8 +24,8 @@ for this project.
 - **Banked memory**: 61K TPA, a separate system bank, and a common-memory stub
   that bridges TPA calls into the BIOS/BDOS.
 - **MiniCCP**: `CCP.COM`, loaded from the boot disk at cold boot like real
-  CP/M 3, with DIR, TYPE, ERA, REN, USER, HELP and SCREEN built in, `.COM` loading, SUBMIT
-  chaining and F47 program chaining.
+  CP/M 3, with DIR, TYPE, ERA, REN, USER and HELP built in, `.COM` loading,
+  SUBMIT chaining and F47 program chaining.
 - **C: RAM disk**: optional 16K `RAMDISK.FID` in bank 7.
 - **Clock**: tick-driven date/time (F104/F105), maintained by an ISR in common
   memory so it keeps running while a TPA program executes.
@@ -44,7 +44,6 @@ SETDEF search path.
 | `ERA filespec` | delete files (wildcards; `*.*` asks `ALL (Y/N)?` first) |
 | `REN new=old` | rename a file (`REN new old` also works; wildcards are refused) |
 | `USER [n]` | show or set the user area (0-15) |
-| `SCREEN [32\|51\|64]` | set or query the screen width |
 | `HELP` | list the built-ins |
 
 `A:`, `B:` and `C:` prefixes are accepted wherever a filespec is expected.
@@ -99,6 +98,7 @@ Also supported:
 
 ## Tools
 
+- `SCREEN` — show or set the screen width (32, 51 or 64 columns).
 - `DATE` — set/show the clock (4-digit year, tick-driven).
 - `DUMP` — hex dump that adapts to the current screen width.
 - `SETDEF` — show/set the search order and search path (F120-F123).

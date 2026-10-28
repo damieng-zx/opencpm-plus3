@@ -233,10 +233,6 @@ parse_cmd:
     call str_match
     jp z, .do_help
 
-    ld de, cmd_screen
-    call str_match
-    jp z, .do_screen
-
     ld de, cmd_era
     call str_match
     jp z, .do_era
@@ -614,82 +610,6 @@ parse_cmd:
 
 .do_help:
     ld de, msg_help
-    ld c, F_PSTR
-    call BDOS
-    ret
-
-.do_screen:
-    ; Skip past "SCREEN" in the command buffer to find argument
-.screen_skip_cmd:
-    ld a, (hl)
-    cp ' '
-    jr z, .screen_skip_sp
-    or a
-    jr z, .screen_query        ; No argument: query current mode
-    inc hl
-    jr .screen_skip_cmd
-.screen_skip_sp:
-    inc hl
-    ld a, (hl)
-    cp ' '
-    jr z, .screen_skip_sp
-    or a
-    jr z, .screen_query        ; Only spaces after command: query mode
-
-    ; Parse argument
-    cp '3'
-    jr nz, .try_51
-    inc hl
-    ld a, (hl)
-    cp '2'
-    jp nz, .screen_bad
-    ld a, 32
-    jr .screen_set
-
-.try_51:
-    cp '5'
-    jr nz, .try_64
-    inc hl
-    ld a, (hl)
-    cp '1'
-    jp nz, .screen_bad
-    ld a, 51
-    jr .screen_set
-
-.try_64:
-    cp '6'
-    jr nz, .screen_bad
-    inc hl
-    ld a, (hl)
-    cp '4'
-    jp nz, .screen_bad
-    ld a, 64
-
-.screen_set:
-    ld (screen_biospb + 1), a  ; Patch A field in BIOSPB (byte 1 = A param)
-    ld de, screen_biospb
-    ld c, F_BIOS
-    call BDOS
-    ret
-
-.screen_query:
-    ld de, scr_query_pb
-    ld c, F_SCB
-    call BDOS
-    inc a                      ; conwidth+1 = actual columns
-    push af
-    ld de, str_screen_mode
-    ld c, F_PSTR
-    call BDOS
-    pop af
-    call print_decimal_a
-    ld de, str_cols_crlf
-    ld c, F_PSTR
-    call BDOS
-    ret
-
-.screen_bad:
-    ld de, str_screen_usage
     ld c, F_PSTR
     call BDOS
     ret
@@ -1842,7 +1762,6 @@ cmd_era:    db "ERA", 0
 cmd_ren:    db "REN", 0
 cmd_user:   db "USER", 0
 cmd_help:   db "HELP", 0
-cmd_screen: db "SCREEN", 0
 
 ; Messages ('$' terminated for BDOS F9)
 msg_version:
@@ -1894,13 +1813,8 @@ msg_help:
     db "  ERA    - Erase files (wildcards: * ?)", 0x0D, 0x0A
     db "  REN    - Rename file (new=old)", 0x0D, 0x0A
     db "  USER   - Show/set the user area (0-15)", 0x0D, 0x0A
-    db "  SCREEN - Set/query screen width (32, 51 or 64)", 0x0D, 0x0A
     db "  HELP   - This help", 0x0D, 0x0A
     db '$'
-
-str_screen_mode:  db "Mode: $"
-str_cols_crlf:    db " columns", 0x0D, 0x0A, '$'
-str_screen_usage: db "Usage: SCREEN 32|51|64", 0x0D, 0x0A, '$'
 
 ; ------------------------------------------------------------------
 ; print_hex16 — Print HL as 4-digit hex
@@ -2231,11 +2145,9 @@ cur_drive:        db 0               ; Current drive (0=A:)
 dir_maxcols:      db 3               ; Columns for DIR display
 dir_display_drive: db 0              ; Drive to display in prefix (0=A:)
 
-; SCREEN command data
+; SCB query used by DIR to pick its column count (conwidth at 0x1A)
 scr_query_pb:
     db 0x1A, 0                   ; SCB offset=conwidth (0x1A), op=0 (get)
-screen_biospb:
-    db 32, 0, 0, 0, 0, 0, 0, 0  ; func=32, A=cols (patched at runtime), rest 0
 
 ; FCB for DIR command
 dir_fcb:

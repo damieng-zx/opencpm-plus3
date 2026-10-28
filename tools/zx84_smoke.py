@@ -477,8 +477,11 @@ class Smoke:
         self.expect("TYPE", "SMOKE OK")
 
         self.command("HELP", 500)
-        self.expect("HELP", "Built-in commands:", "DIR", "TYPE", "SCREEN")
+        self.expect("HELP", "Built-in commands:", "DIR", "ERA", "REN", "USER")
+        if "SCREEN -" in self.text():
+            raise SmokeError("HELP still advertises a SCREEN built-in")
 
+        # SCREEN is SCREEN.COM, not a built-in: the command loads from disk.
         self.command("SCREEN", 500)
         self.expect("SCREEN query", "Mode: 51 columns")
 
@@ -688,16 +691,19 @@ class Smoke:
         self.log(f"DIR at 64: {line.strip()}")
 
         # Scrolling at 64: repeated listings must scroll cleanly, not smear.
-        # (The row table and screen-row copy are width-driven; this is the
-        # only place a wrong width would show up as a corrupt screen.)
+        # Every populated row must still be a directory line, a command echo
+        # or the prompt - garbled rows mean the row table/width went wrong.
         for _ in range(3):
             self.command("DIR", 900)
         rows = self.screen()
-        if not rows[0].strip():
-            raise SmokeError("64-col scroll left row 0 blank")
-        last = [i for i, r in enumerate(rows) if r.strip()][-1]
-        if not rows[last].startswith("A>"):
-            raise SmokeError(f"64-col scroll: last line {rows[last]!r}")
+        populated = sum(1 for r in rows if r.strip())
+        if populated < 15:
+            raise SmokeError(
+                f"64-col scroll left only {populated} populated rows")
+        bad = [r for r in rows if r.strip()
+               and not (r.startswith("A:") or r.startswith("A>"))]
+        if bad:
+            raise SmokeError(f"64-col scroll garbled rows: {bad[:3]}")
 
         self.command("SCREEN 51", 800)
         if self.memory(4, self.scr_cols, 1)[0] != 51:

@@ -187,7 +187,8 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
 - `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/compression.ch8` by `tools/mkfont64.py`
 - `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O)
-- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER, HELP and SCREEN built in, plus `.COM` loading; built as `CCP.COM`
+- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`
+- `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
 - `tools/mkdsk.py` — DSK image builder
 - `tools/zpa.py` — ZPA preprocessor (see **ZPA Preprocessing**)
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)

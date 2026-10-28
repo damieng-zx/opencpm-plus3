@@ -9,8 +9,8 @@ on the ZX Spectrum +3.
 - **Doesn't work:** the observed failure is described below.
 - **Not yet tested:** candidate software; no claim either way.
 
-Build used for the current results: `CPM3.SYS` 12,933 bytes plus `CCP.COM` 3,088 bytes (the CCP is loaded from the disk), no FDC retries.
-Tests were run on 2026-10-27 through the zx84 MCP server.
+Build used for the current results: `CPM3.SYS` 13,094 bytes plus `CCP.COM` 3,620 bytes (the CCP is loaded from the disk), no FDC retries.
+Tests were run on 2026-10-28 through the zx84 MCP server.
 
 ## ✅ Works
 

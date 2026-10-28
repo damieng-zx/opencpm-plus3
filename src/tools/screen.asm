@@ -47,32 +47,54 @@ start:
     jr z, .tens5
     cp '6'
     jr z, .tens6
-    jr usage
+    jp usage
 .tens3:
     inc hl
     ld a, (hl)
     cp '2'
-    jr nz, usage
+    jp nz, usage
+    call .check_end
+    jp nz, usage
     ld a, 32
     jr .set
 .tens5:
     inc hl
     ld a, (hl)
     cp '1'
-    jr nz, usage
+    jp nz, usage
+    call .check_end
+    jp nz, usage
     ld a, 51
     jr .set
 .tens6:
     inc hl
     ld a, (hl)
     cp '4'
-    jr nz, usage
+    jp nz, usage
+    call .check_end
+    jp nz, usage
     ld a, 64
 .set:
     ld (bios_pb + 1), a
     ld de, bios_pb
     ld c, F_BIOS
-    jp BDOS                    ; fn 32 clears the screen and returns
+    call BDOS                  ; fn 32 clears the screen and returns
+    rst 0                      ; warm boot: reload the CCP
+
+; .check_end — reject trailing junk after the two digits ("SCREEN 320")
+;   In:       HL = last digit
+;   Out:      Z = nothing but space/NUL/CR follows
+;   Clobbers: AF, B
+.check_end:
+    inc hl
+    ld b, (hl)
+    ld a, b
+    or a
+    ret z
+    cp 0x0D
+    ret z
+    cp ' '
+    ret
 
 .query:
     ld de, query_pb
@@ -87,7 +109,8 @@ start:
     call print_decimal_a
     ld de, str_cols
     ld c, F_PSTR
-    jp BDOS
+    call BDOS
+    rst 0                      ; warm boot: reload the CCP
 
 ; ==========================================================================
 ; print_decimal_a — print A (0-255) as decimal
@@ -127,7 +150,8 @@ print_decimal_a:
 usage:
     ld de, msg_usage
     ld c, F_PSTR
-    jp BDOS
+    call BDOS
+    rst 0                      ; warm boot: reload the CCP
 
 ; --- Data ---
 bios_pb:    db 32, 0, 0, 0, 0, 0, 0, 0  ; BIOS fn 32, A = columns (patched)

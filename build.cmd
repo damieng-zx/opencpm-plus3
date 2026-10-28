@@ -75,6 +75,8 @@ if errorlevel 1 goto :fail
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\submit.com src\tools\submit.asm
 if errorlevel 1 goto :fail
+%SJASMPLUS% --raw=build\screen.com src\tools\screen.asm
+if errorlevel 1 goto :fail
 
 echo   Assembling FID modules...
 %SJASMPLUS% --raw=build\RAMDISK.FID src\fid\ramdisk.asm
@@ -96,7 +98,7 @@ shift
 goto collect_extra_files
 :extra_files_done
 
-python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\RAMDISK.FID src\test\smoke.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\RAMDISK.FID src\test\smoke.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 for %%A in (build\loader.bin) do echo   Loader: %%~zA bytes

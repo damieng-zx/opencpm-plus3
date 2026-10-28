@@ -539,8 +539,8 @@ jump table directly:
 | 32-col | 32 | 24 | 8px | 8px byte-aligned |
 | 64-col | 64 | 24 | 4px | 4px, two characters per attribute cell |
 
-Switch modes: `SCREEN 51`, `SCREEN 32` or `SCREEN 64` from the CCP, or
-BIOS fn 32.  64 columns is an extension: the +3 manual's `ESC 3` only
+Switch modes with `SCREEN.COM` (`SCREEN 51`, `SCREEN 32` or `SCREEN 64`), or
+BIOS fn 32 directly.  64 columns is an extension: the +3 manual's `ESC 3` only
 defines 32, 51 and 80, and 80 is still unimplemented.
 
 Default: 51 columns.

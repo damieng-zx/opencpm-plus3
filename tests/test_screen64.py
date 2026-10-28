@@ -76,13 +76,21 @@ class Loader(unittest.TestCase):
 
 
 class Command(unittest.TestCase):
-    def test_screen_command_accepts_64(self):
-        text = source("src/ccp/miniccp.zpa")
-        body = text[text.index(".try_64:"):text.index(".screen_set:")]
+    def test_screen_utility_accepts_64(self):
+        text = source("src/tools/screen.asm")
+        body = text[text.index(".parse:"):text.index(".query:")]
+        self.assertIn("cp '3'", body)
+        self.assertIn("cp '5'", body)
         self.assertIn("cp '6'", body)
-        self.assertIn("cp '4'", body)
         self.assertIn("ld a, 64", body)
-        self.assertIn("SCREEN 32|51|64", text)
+        self.assertIn("ld (bios_pb + 1), a", body)
+        self.assertIn("ld c, F_BIOS", body)
+
+    def test_screen_is_not_a_ccp_builtin(self):
+        # Changing the screen width does not deserve resident CCP bytes; it
+        # is SCREEN.COM, built from src/tools/screen.asm.
+        ccp = source("src/ccp/miniccp.zpa")
+        self.assertNotIn("cmd_screen", ccp)
 
 
 class Font(unittest.TestCase):

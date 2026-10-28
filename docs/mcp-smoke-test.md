@@ -14,7 +14,8 @@ python3 tools/zx84_smoke.py
 python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3.dsk
 ```
 
-The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, `SCREEN 32`/`SCREEN 51`,
+The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, the `SCREEN` utility
+(`SCREEN 32`/`SCREEN 51`),
 `ERA` (usage, `No file`, the `ALL (Y/N)?` guard and a real delete), `REN`
 (`REN new=old`, `No file`, a real rename and the wildcard refusal), `USER`
 (query, `USER 3`/`USER 10`, range and junk rejection, restore to 0),
