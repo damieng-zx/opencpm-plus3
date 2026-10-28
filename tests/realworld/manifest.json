@@ -5,6 +5,7 @@
     "system": "build/loader.bin",
     "files": [
       "build/CPM3.SYS",
+      "build/CCP.COM",
       "src/bios/font51.bin",
       "src/bios/font32.bin",
       "build/RAMDISK.FID"

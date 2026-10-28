@@ -15,7 +15,9 @@ python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3.dsk
 ```
 
 The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, `SCREEN 32`/`SCREEN 51`,
-`DATE`, invalid `D:`, and the C: prompt. It also runs `SUBMIT SMOKE.SUB`, the
+`DATE`, invalid `D:`, and the C: prompt. They also verify that `CCP.COM` is
+on the disk and staged byte-for-byte at `CCP_STAGE` (bank 6, B000h), and that
+`CPM3.SYS` no longer embeds the CCP image. The runner also runs `SUBMIT SMOKE.SUB`, the
 implicit `SMOKE` -> `SUBMIT SMOKE.SUB` chain, the missing-file path,
 `$1`/`$2` substitution via `SUBMIT PARAM SMOKE.TXT *.TXT`, and the
 missing-parameter error. When the untracked reference binaries are on the
@@ -29,8 +31,8 @@ python3 tools/zx84_negative.py
 ```
 
 Cases: missing/deleted `CPM3.SYS`, truncated allocation map, block number
-past the end of the disk, corrupted boot-sector checksum, and no disk in
-drive A:.
+past the end of the disk, corrupted boot-sector checksum, deleted `CCP.COM`
+(boots, prints `CCP.COM missing`, no prompt), and no disk in drive A:.
 
 Both scripts exit 0 on success and 1 on a failed assertion. Set `ZX84_DIR`
 or pass `--zx84` when the emulator checkout is not next to this repository.

@@ -813,7 +813,7 @@ copy_record_from_tpa:
 ; copy_to_user (systemâ†’stagingâ†’TPA in 32-byte chunks); tail-call into it.
 ;
 ; @proc copy_block_to_tpa
-; @param %src:u16   hl          ; source in bank 4 (system)
+; @param %src:u16   hl          ; source in system memory (bank 4 or 6)
 ; @param %dst:u16   de          ; destination in TPA
 ; @param %count:u16 bc          ; byte count
 ; @clobbers af,bc,de,hl

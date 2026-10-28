@@ -14,7 +14,7 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 - **BDOS** with console I/O, file operations and extended functions (F46 free-space accounting is a stub)
 - **uPD765A FDC driver** with 512->128 byte sector deblocking
 - **Banked memory** - TPA mode (~61K user space) and system mode with bank switching
-- **MiniCCP** with built-in DIR, TYPE, HELP, SCREEN commands and `.COM` loading
+- **MiniCCP** with built-in DIR, TYPE, HELP, SCREEN commands and `.COM` loading — built as `CCP.COM` and loaded from the boot disk at cold boot
 - **Z80 linter** (`z80lint.py`) that validates stack balance and register clobbering across all return paths
 - **ZPA preprocessor** for source-level abstractions on top of Z80 assembly
 - **RTC clock** (runs during TPA execution; interrupts are briefly disabled during FDC access)
@@ -89,6 +89,11 @@ build.cmd --add FILE ...
 ```
 
 Output: `build/cpm3.dsk` — a standard +3 disk image ready for emulation.
+
+The system files on the disk are `CPM3.SYS` (BIOS + BDOS), `CCP.COM` (the
+command processor), `FONT51.BIN`/`FONT32.BIN` (screen fonts) and, optionally,
+`RAMDISK.FID` (C: RAM disk). A disk without `CCP.COM` boots to a diagnostic
+instead of a prompt.
 
 The third-party binaries under `references/binaries/` are untracked and
 optional. When present they are added automatically; a fresh clone (and CI)

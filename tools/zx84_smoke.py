@@ -44,14 +44,16 @@ def label_address(name: str) -> int:
     # without this pass `scr_attr` would match `SCR_ATTR equ 0x5800`
     # instead of the variable at 0x0261.  `[^;]*` keeps comments such as
     # "; Scroll char_buffer: ..." from being mistaken for labels.
+    # Lines from an included file carry a trailing `+` after the listing
+    # number; lines from the top-level file do not, so accept both.
     for line in lines:
         m = re.match(
-            rf"^\s*\d+\+\s+([0-9A-F]{{4}})\s+[^;]*\b{re.escape(name)}:", line)
+            rf"^\s*\d+\+*\s+([0-9A-F]{{4}})\s+[^;]*\b{re.escape(name)}:", line)
         if m:
             return int(m.group(1), 16)
     for line in lines:
         m = re.match(
-            rf"^\s*\d+\+\s+[0-9A-F]{{4}}\s+[^;]*\b{re.escape(name)}\s+equ\s+0x([0-9A-Fa-f]+)",
+            rf"^\s*\d+\+*\s+[0-9A-F]{{4}}\s+[^;]*\b{re.escape(name)}\s+equ\s+0x([0-9A-Fa-f]+)",
             line, re.I)
         if m:
             return int(m.group(1), 16)
@@ -197,6 +199,7 @@ class Smoke:
         self.cursor_row = label_address("cursor_row")
         self.con_mode = label_address("con_mode")
         self.esc_state = label_address("esc_state")
+        self.ccp_stage = label_address("CCP_STAGE")
         self.history: list[str] = []
 
     def log(self, msg: str) -> None:
@@ -549,6 +552,29 @@ class Smoke:
         else:
             self.log("PIP.COM not on the disk; skipping the C: copy check")
 
+    def run_ccp_external(self) -> None:
+        """CCP.COM lives on the disk and is staged at CCP_STAGE on cold boot."""
+        ccp = (ROOT / "build" / "CCP.COM").read_bytes()
+        if not ccp:
+            raise SmokeError("build/CCP.COM is empty")
+
+        staged = self.memory(6, self.ccp_stage, len(ccp))
+        if staged != ccp:
+            raise SmokeError(
+                "CCP.COM is not staged at %04X in bank 6 "
+                "(read %s...)" % (self.ccp_stage, staged[:8].hex()))
+
+        image = (ROOT / "build" / "CPM3.SYS").read_bytes()
+        if image.find(ccp) >= 0:
+            raise SmokeError("CPM3.SYS still embeds the CCP image")
+
+        self.command("DIR CCP.COM", 500)
+        self.expect("CCP.COM on disk", "A: CCP")
+
+        # Every command above already warm-booted from the staged copy; prove
+        # the CCP is a real file by looking at its size.
+        self.log(f"CCP.COM {len(ccp)} bytes, CPM3.SYS {len(image)} bytes")
+
     def check_fdc(self) -> None:
         log = self.mcp.call("fdc_log", {})
         bad = [l for l in log.splitlines()
@@ -567,6 +593,7 @@ class Smoke:
         self.run_bdostest()
         self.run_ccp()
         self.run_terminal_escapes()
+        self.run_ccp_external()
         self.check_fdc()
         self.log("all checks passed")
 

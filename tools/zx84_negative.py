@@ -8,6 +8,7 @@ reach the CP/M prompt:
   truncated  CPM3.SYS allocation map starts with block 0
   badblock   CPM3.SYS points at a block past the end of the disk
   badsum     boot-sector checksum corrupted
+  noccp      CCP.COM directory entry marked deleted (signon + diagnostic)
   nodisk     drive A ejected before disk_boot
 
 The loader's expected failure mode is a red border/tight loop (or the ROM
@@ -68,6 +69,18 @@ def make_images(src: Path, outdir: Path) -> dict[str, Path]:
     badsum[0x3FF] ^= 0xFF                    # boot-sector checksum byte
     images["badsum"] = write("badsum", badsum)
 
+    # CCP.COM is loaded from the disk at cold boot; without it the system
+    # must say so instead of jumping into a half-built TPA.
+    noccp = bytearray(base)
+    for i in range(64):
+        off = entry_offset(i)
+        if bytes(noccp[off + 1:off + 12]) == b"CCP     COM":
+            noccp[off] = 0xE5                # mark the entry deleted
+            break
+    else:
+        raise SmokeError("CCP.COM directory entry not found")
+    images["noccp"] = write("noccp", noccp)
+
     return images
 
 
@@ -100,6 +113,19 @@ class Negative:
         if "A>" in screen or "Open CP/M +3" in screen:
             raise SmokeError(f"{name}: unexpectedly booted:\n{screen}")
         print(f"[negative] {name}: no boot (ok)")
+
+    def no_ccp(self, path: Path) -> None:
+        """No CCP.COM: signon, a clear diagnostic, and no prompt."""
+        self.reset()
+        self.mcp.call("load", {"file": str(path)})
+        self.mcp.call("disk_boot", {})
+        self.mcp.call("run", {"frames": 1500})
+        screen = self.screen()
+        if "A>" in screen:
+            raise SmokeError(f"noccp: reached a prompt without CCP.COM:\n{screen}")
+        if "CCP.COM missing" not in screen:
+            raise SmokeError(f"noccp: no diagnostic on screen:\n{screen}")
+        print("[negative] noccp: reports missing CCP.COM, no prompt (ok)")
 
     def nodisk(self) -> None:
         self.reset()
@@ -139,7 +165,10 @@ def main() -> int:
         try:
             neg = Negative(mcp)
             for name, path in images.items():
-                neg.no_boot(name, path)
+                if name == "noccp":
+                    neg.no_ccp(path)
+                else:
+                    neg.no_boot(name, path)
             neg.nodisk()
         finally:
             mcp.close()

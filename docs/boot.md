@@ -84,9 +84,10 @@ not clobber overlapping source/destination ranges. The system-image copy uses
 LDIR with an assert that `system_image >= 0x0000 + size` — i.e. source is above
 destination.
 
-After init, **bank 3 still holds the rest of the loaded CPM3.SYS image at
-C000-F5FF, but nothing references it again** — it's just whatever the loader
-deposited there. Common memory at F600+ is the live copy.
+After init, **bank 3 still holds the rest of the loaded CPM3.SYS image from
+C000 up to the image end (~F28x for a 12.9K image), but nothing references it
+again** — it's just whatever the loader deposited there. Common memory at
+F600+ is the live copy.
 
 ### Stage 4 — `cold_boot` (`src/bios/bios.zpa`, runs in bank 4)
 
@@ -96,10 +97,12 @@ ld sp, bdos_stack       ; common-memory stack (F600+ region)
 call scr_init           ; clear screen, set attrs
 call kbd_init           ; reset keyboard state
 call fdc_init           ; recalibrate FDC
-call load_fonts         ; pull FONT51/FONT32 into bank 6
+call load_fonts         ; scan directory; pull FONT51/FONT32 into bank 6
+call load_ccp           ; read CCP.COM into bank 6 at B000 (staged)
 call load_fid           ; optional: register C: ramdisk if RAMDISK.FID present
 call motor_off          ; spin down before CCP
 print signon
+halt with a diagnostic if CCP.COM was not found
 patch SCB:              scb_common = scb_base; scb_tpa = bdos_stub
 install ISR vector at 0x0038 (system bank's bank 4 page zero)
 fall through ──> warm_boot
@@ -110,8 +113,9 @@ fall through ──> warm_boot
 ```
 di
 ld sp, bdos_stack
-copy_block_to_tpa(ccp_stored ──> 0x0100, ccp_stored_end-ccp_stored)
-                                ; cross-bank copy: bank 4 → bank 0
+copy_block_to_tpa(CCP_STAGE ──> 0x0100, _ccp_len)
+                                ; cross-bank copy: bank 6 → bank 0
+                                ; (staged by load_ccp; no disk access here)
 ld (disk_dma), 0x0080
 clear xmove_active, dma_bank, multi_count
 jp start_tpa            ; in common memory — never returns
@@ -143,7 +147,7 @@ bank 4 when the user calls BDOS or BIOS.
 | Range       | Contents                                                  |
 |-------------|-----------------------------------------------------------|
 | `0000-00FF` | Page zero. JP at 0000 → WBOOT, JP at 0005 → bdos_stub.    |
-| `0100-`     | CCP (loaded from `ccp_stored` blob in bank 4).            |
+| `0100-`     | CCP (copied from the bank-6 staging area on every boot).  |
 | up to TPA top | TPA proper — programs load and run here.                |
 | `F600-F5FF`*  | (bank 3, always visible) — common stub starts at F600.  |
 | `F600-FFFF` | SCB, bios_visible jump table, **bdos_stub**, BDOS stack, FCB buf, dirbuf, drive table, XDPHs/XDPBs. |
@@ -162,10 +166,10 @@ and trampolines. `scb_tpa` is patched to `TPA_TOP` too.
 
 | Range       | Contents                                                  |
 |-------------|-----------------------------------------------------------|
-| `0000-3FFF` | Bank 4. BIOS jump table at 0000, then state, drivers, font/FID loaders, embedded CCP, BDOS. Asserted ≤ 16K (`system_end <= 0x4000`). |
+| `0000-3FFF` | Bank 4. BIOS jump table at 0000, then state, drivers, font/CCP/FID loaders, BDOS. Asserted ≤ 16K (`system_end <= 0x4000`). |
 | `0038`      | ISR vector — JP isr_handler (in common memory).           |
-| `4000-7FFF` | Bank 7. System data / growth (currently unused).          |
-| `8000-BFFF` | Bank 6. Font data at `8000` (FONT51) and `8800` (FONT32); RAMDISK.FID at `9000` if loaded. |
+| `4000-7FFF` | Bank 7. C: RAM disk (16K) when RAMDISK.FID is loaded.     |
+| `8000-BFFF` | Bank 6. Font data at `8000` (FONT51) and `8800` (FONT32); RAMDISK.FID at `9000` if loaded; screen/FDC/BDOS buffers at `A000-A8FF`; staged `CCP.COM` at `B000-BFFF`. |
 | `F600-FFFF` | Common stub (bank 3). Same content as in mode 0 — that's the point. |
 
 ---

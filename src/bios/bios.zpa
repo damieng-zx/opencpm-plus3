@@ -45,6 +45,13 @@ MOTOR_BIT   equ 0x08              ; OR this in for motor on
 
 ; --- CP/M constants ---
 CCP_ADDR    equ 0x0100            ; CCP loads here in TPA
+; The CCP is no longer embedded in CPM3.SYS.  CCP.COM is read from the boot
+; disk into the top of bank 6 on cold boot and copied to CCP_ADDR on every
+; warm boot.  Bank 7 belongs to the C: RAM disk, and bank 6 below A900 holds
+; the fonts, FID and screen/FDC/BDOS buffers, so B000-BFFF is the only free
+; 4K window that nothing touches at run time.
+CCP_STAGE   equ 0xB000            ; Staged CCP image (bank 6)
+CCP_MAX_BLK equ 4                 ; 1K blocks staged (the whole B000-BFFF window)
 JMP_OPCODE  equ 0xC3              ; JP instruction
 COMMON_BASE equ 0xF600            ; Start of bank-3 common memory
 TPA_TOP     equ COMMON_BASE       ; First byte of common memory = top of TPA
@@ -185,7 +192,8 @@ cold_boot:
     call scr_init                  ; Screen: clear, set attributes
     call kbd_init                  ; Keyboard: reset state
     call fdc_init                  ; FDC: recalibrate drive
-    call load_fonts                ; Load fonts from disk into bank 7
+    call load_fonts                ; Directory scan: fonts, CCP.COM, RAMDISK.FID
+    call load_ccp                  ; Stage CCP.COM in bank 6
     call load_fid                  ; Optional: register C: ramdisk if RAMDISK.FID present
     call motor_off                 ; Spin drive down before CCP takes over
 
@@ -199,6 +207,18 @@ cold_boot:
     ld hl, RAMDISK_MSG
     call print_str(hl)
 .no_fid_msg:
+
+    ; Without a CCP there is nothing to run: say so instead of jumping into
+    ; whatever happens to be at 0100h.
+    ld hl, (_ccp_len)
+    ld a, h
+    or l
+    jr nz, .ccp_ok
+    ld hl, MSG_NO_CCP
+    call print_str
+.halt:
+    jr .halt
+.ccp_ok:
 
     ; Initialize state
     xor a
@@ -241,10 +261,13 @@ warm_boot:
     ld a, 1
     ld (scb_multi), a
 
-    ; Copy embedded CCP from bank 4 to TPA at 0100h via inter-bank copy
-    ld hl, ccp_stored              ; Source: bank 4
+    ; Copy the staged CCP from bank 6 to TPA at 0100h via inter-bank copy.
+    ; The image was loaded from CCP.COM during cold boot; warm boot never
+    ; touches the disk, so a program that clobbers the TPA (or erases
+    ; CCP.COM) still gets a clean CCP.
+    ld hl, CCP_STAGE               ; Source: bank 6 (system mode)
     ld de, CCP_ADDR                ; Dest: 0100h in bank 0
-    ld bc, ccp_stored_end - ccp_stored
+    ld bc, (_ccp_len)
     call copy_block_to_tpa(hl, de, bc)
 
     ; Set default DMA to 0080h
@@ -704,6 +727,9 @@ signon_msg:
     db 0x0D, 0x0A
     db 0
 
+MSG_NO_CCP:
+    db "CCP.COM missing on drive A:", 0x0D, 0x0A, 0
+
 ; ==========================================================================
 ; Screen driver (includes font data)
 ; ==========================================================================
@@ -724,14 +750,17 @@ signon_msg:
 
 
 ; ==========================================================================
-; load_fonts — Read FONT51.BIN and FONT32.BIN from disk into bank 7
-;   Scans the CP/M directory (track 1, physical sectors 1-4) for the two
-;   font files and loads them into bank 7 (always-visible in system mode):
-;     FONT51.BIN → 0x4000 (5px-wide, used for 51-col mode)
-;     FONT32.BIN → 0x4800 (8px-wide, used for 32-col mode)
+; load_fonts — Directory scan for FONT51.BIN, FONT32.BIN, CCP.COM, RAMDISK.FID
+;   Scans the CP/M directory (track 1, physical sectors 1-4) once, records
+;   the blocks of the files we need, then loads the two fonts into bank 6
+;   (always visible in system mode):
+;     FONT51.BIN → 0x8000 (5px-wide, used for 51-col mode)
+;     FONT32.BIN → 0x8800 (8px-wide, used for 32-col mode)
+;   CCP.COM is only *recorded* here (see load_ccp); load_fonts leaves the
+;   motor on and drive A: selected for it and for load_fid.
 ;   Called from cold_boot after fdc_init.  fdc_init leaves the motor off,
-;   so spin it up here and leave it on for load_fid (cold_boot spins it
-;   down after both loaders).
+;   so spin it up here and leave it on for the other loaders (cold_boot
+;   spins it down after them).
 ;   In:  nothing
 ;   Out: nothing
 ;   Clobbers: AF, BC, DE, HL
@@ -747,6 +776,7 @@ load_fonts:
     ld (_font51_blk1), a
     ld (_font32_blk0), a
     ld (_font32_blk1), a
+    ld (_ccp_al), a                 ; CCP not found yet
     ld (_fid_block), a              ; FID not yet found; load_fid will check this
 
     call motor_on                   ; fdc_init left the motor off
@@ -781,24 +811,27 @@ load_fonts:
     pop bc
 
     ld a, (_lf_found)
-    cp 7
-    jr z, .lf_dsec_done             ; found font51, font32, FID — done early
+    cp 15
+    jr z, .lf_dsec_done             ; found font51, font32, CCP, FID — done early
     inc c
     jr .lf_dsec
 
 .lf_dsec_done:
     ld hl, _font51_blk0
     ld de, 0x8000
-    call _lf_load_file              ; load font51 → bank 6 at 0x8000
+    ld b, 2
+    call _lf_load_n                 ; load font51 → bank 6 at 0x8000
 
     ld hl, _font32_blk0
     ld de, 0x8800
-    call _lf_load_file              ; load font32 → bank 6 at 0x8800
+    ld b, 2
+    call _lf_load_n                 ; load font32 → bank 6 at 0x8800
     ret
 
 
-; _lf_check_entry — If HL is a FONT51/FONT32 dir entry, record its blocks
+; _lf_check_entry — Record blocks for FONT51/FONT32/CCP/RAMDISK dir entries
 ;   In:  HL = 32-byte directory entry
+;   Out:  _lf_found bit set for a recognised file
 ;   Clobbers: AF, BC, DE, HL
 ; @proc _lf_check_entry
 ; @clobbers af,bc,de,hl
@@ -835,7 +868,7 @@ _lf_check_entry:
     ld b, 11
     call _lf_cmp11
     pop hl
-    jr nz, .lf_try_fid
+    jr nz, .lf_try_ccp
 
     ld bc, 16
     add hl, bc
@@ -846,6 +879,27 @@ _lf_check_entry:
     ld (_font32_blk1), a
     ld a, (_lf_found)
     or 0x02
+    ld (_lf_found), a
+    ret
+
+.lf_try_ccp:
+    ; The CCP is loaded later (load_ccp) so keep the whole allocation map:
+    ; a future CCP may use every block of its extent.
+    push hl
+    inc hl
+    ld de, _lf_name_ccp
+    ld b, 11
+    call _lf_cmp11
+    pop hl
+    jr nz, .lf_try_fid
+
+    ld bc, 16
+    add hl, bc                      ; HL = &entry[16] = AL[0]
+    ld de, _ccp_al
+    ld bc, 16
+    ldir
+    ld a, (_lf_found)
+    or 0x08
     ld (_lf_found), a
     ret
 
@@ -888,15 +942,17 @@ _lf_cmp11:
     ret                             ; Z set from last cp (all matched)
 
 
-; _lf_load_file — Load 2 × 1K blocks from disk to destination DE
-;   In:  HL = pointer to [blk0, blk1] byte array
-;        DE = destination address (in bank 7)
+; _lf_load_n — Load up to B × 1K blocks from disk to destination DE
+;   In:  HL = pointer to a 16-byte allocation map (0 = not allocated / end)
+;        DE = destination address (system memory)
+;        B  = maximum blocks to load
+;   Out: DE = first byte after the loaded image
 ;   Clobbers: AF, BC, DE, HL
-; @proc _lf_load_file
-; @clobbers af,bc,de,hl,ix
+; @proc _lf_load_n
+; @out   de
+; @clobbers af,bc,hl,ix
 ; @end
-_lf_load_file:
-    ld b, 2                         ; 2 × 1K blocks per font file
+_lf_load_n:
 .lf_blk:
     push bc
     push hl
@@ -909,6 +965,36 @@ _lf_load_file:
     inc hl
     pop bc
     djnz .lf_blk
+    ret
+
+
+; ==========================================================================
+; load_ccp — Stage CCP.COM from the boot disk into bank 6
+;   load_fonts has already scanned the directory and copied the file's
+;   allocation map into _ccp_al, so no second directory pass is needed.
+;   Keeping the CCP out of CPM3.SYS makes the system image ~3K smaller;
+;   the staging window is otherwise unused RAM, so it costs no file bytes.
+;   In:  _ccp_al populated by load_fonts; motor on, drive A: selected
+;   Out: _ccp_len = bytes staged (0 = CCP.COM is not on the disk)
+;   Clobbers: AF, BC, DE, HL
+; ==========================================================================
+; @proc load_ccp
+; @clobbers af,bc,de,hl,ix
+; @end
+load_ccp:
+    ld hl, 0
+    ld (_ccp_len), hl
+    ld a, (_ccp_al)
+    or a
+    ret z                           ; not on the disk — cold_boot reports it
+    ld hl, _ccp_al
+    ld de, CCP_STAGE
+    ld b, CCP_MAX_BLK
+    call _lf_load_n                 ; DE = first byte past the staged image
+    ex de, hl                       ; HL = end of image
+    ld bc, 0 - CCP_STAGE
+    add hl, bc                      ; HL = bytes staged
+    ld (_ccp_len), hl
     ret
 
 
@@ -981,17 +1067,20 @@ _lf_div9:
     ret
 
 
-; --- Font/FID loader data ---
-_lf_found:    db 0                  ; bit 0=font51, 1=font32, 2=fid
+; --- Font/FID/CCP loader data ---
+_lf_found:    db 0                  ; bit 0=font51, 1=font32, 2=fid, 3=ccp
 _font51_blk0: db 0                  ; first block number of FONT51.BIN
 _font51_blk1: db 0                  ; second block number
 _font32_blk0: db 0                  ; first block number of FONT32.BIN
 _font32_blk1: db 0
 _fid_block:   db 0                  ; first block number of RAMDISK.FID (0 = absent)
+_ccp_al:      ds 16                 ; CCP.COM allocation map (0 = end of file)
+_ccp_len:     dw 0                  ; bytes staged at CCP_STAGE (0 = missing)
 _lf_abs_phys: dw 0                  ; scratch: current absolute physical sector
 _lf_sec_id:   db 0                  ; scratch: sector ID saved across fdc_seek
 _lf_name51:   db "FONT51  BIN"      ; 11-char CP/M name (6+2spaces+3ext)
 _lf_name32:   db "FONT32  BIN"
+_lf_name_ccp: db "CCP     COM"
 _lf_name_fid: db "RAMDISK FID"
 _fid_magic:   db "OCFID", 0         ; 6-byte signature inside RAMDISK.FID
 
@@ -1068,12 +1157,13 @@ alv_c:          equ 0xA840
 
 
 ; ==========================================================================
-; Embedded CCP (copied to 0100h on warm/cold boot via inter-bank copy)
+; CCP
 ; ==========================================================================
-
-ccp_stored:
-    incbin "miniccp.bin"
-ccp_stored_end:
+; The CCP is not part of CPM3.SYS.  It is CCP.COM on the boot disk, staged
+; into the top of bank 6 by load_ccp and copied to 0100h on every boot.
+; CCP_STAGE must hold one full 4K window inside bank 6.
+    assert CCP_STAGE + CCP_MAX_BLK * 1024 <= 0xC000, "CCP staging area exceeds bank 6!"
+    assert CCP_STAGE >= 0xB000, "CCP staging area collides with the RAMDISK.FID / screen buffers"
 
 
 ; ==========================================================================

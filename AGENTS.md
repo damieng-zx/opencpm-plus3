@@ -15,7 +15,7 @@ build.cmd --add FILE ...     # Build with extra CP/M files on disk
 
 Requires: `sjasmplus` (Z80 assembler at C:\Apps\sjasmplus.exe), `python3`.
 
-Build chain: ZPA preprocessing → CCP → BIOS (includes CCP, BDOS, drivers, font) → loader → boot sector → DSK image. The BIOS is stored as `CPM3.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0.
+Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) → loader → boot sector → DSK image. The BIOS is stored as `CPM3.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0. The CCP is a separate file, `CCP.COM`, read from the boot disk during cold boot (see Boot Chain).
 
 ### ZPA Preprocessing
 Source files use `.zpa` extension (e.g. `src/bios/common.zpa`). The build runs `tools/zpa.py` to preprocess `.zpa` files into `build/zpa/*.asm`, which the assembler then uses directly. **Always edit the `.zpa` files** — the `build/zpa/` output is generated and not checked in.
@@ -45,10 +45,16 @@ OCR does not work with our custom 5px font.
 
 ### Boot Chain
 1. Boot sector (512B at FE00h) → loads loader from track 0
-2. Loader (917B) → finds CPM3.SYS in directory, loads to C000h
+2. Loader (~935B) → finds CPM3.SYS in directory, loads to C000h
 3. Init code at C000h → copies system to bank 4, common stub to F600h
-4. Cold boot in bank 4 → init screen/kbd/FDC, inter-bank copy CCP to 0100h
-5. start_tpa (common) → switch to TPA mode, set page zero, JP 0100h
+4. Cold boot in bank 4 → init screen/kbd/FDC, load fonts + `CCP.COM` + FID from disk
+5. `warm_boot` → copy the staged CCP (bank 6, B000h) to 0100h
+6. start_tpa (common) → switch to TPA mode, set page zero, JP 0100h
+
+The CCP is **not** part of CPM3.SYS: `CCP.COM` (the MiniCCP PRL) is read from
+the boot disk into bank 6 at B000h on cold boot (`load_ccp`) and copied to
+0100h on every warm boot, so a normal exit never touches the disk. A cold
+boot without `CCP.COM` prints a diagnostic and halts.
 
 ### Memory Layout (Banked)
 **TPA mode (mode 0: banks 0,1,2,3)**:
@@ -57,9 +63,9 @@ OCR does not work with our custom 5px font.
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
 
 **System mode (mode 3: banks 4,7,6,3)**:
-- **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers, CCP image
-- **4000-7FFF**: Bank 7 — System data / growth
-- **8000-BFFF**: Bank 6 — fonts at 8000h-8FFFh, optional RAMDISK.FID at 9000h, runtime screen/FDC/BDOS buffers at A000h-A8FFh
+- **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers
+- **4000-7FFF**: Bank 7 — C: RAM disk (16K, owned by `RAMDISK.FID`)
+- **8000-BFFF**: Bank 6 — fonts at 8000h-8FFFh, optional RAMDISK.FID at 9000h, runtime screen/FDC/BDOS buffers at A000h-A8FFh, staged `CCP.COM` at B000h-BFFFh
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
 
 **Screen access (mode 2: banks 4,5,6,3)**:
@@ -109,9 +115,10 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/bios/fdc765.asm` — uPD765A driver with sector deblocking (512→128 byte)
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
 - `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O)
-- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, VER, HELP, DUMP, .COM loading
+- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, VER, HELP, DUMP, .COM loading; built as `CCP.COM`
 - `tools/mkdsk.py` — DSK image builder
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)
+- `tools/check_ccp.py` — Fails the build if `CCP.COM` does not fit the bank-6 staging window
 - `tools/z80lint.py` — Z80 linter, all build-gated: stack balance across all return paths, register clobbering after CALL, dead stores, Clobbers/Out annotation verification (declared vs actual effects), DI/EI balance, 1FFD write discipline, duplicate labels. `--suggest-anno` prints computed effects as paste-ready Clobbers: lines
 
 ## Conventions

@@ -8,8 +8,9 @@
 ;
 ; BDOS calls go through address 0005 (set up by BIOS).
 ;
-; Assembled separately, INCBINed by the BIOS module.
-;   sjasmplus --raw=build/miniccp.bin src/ccp/miniccp.asm
+; Assembled separately as CCP.COM and loaded from the boot disk by the
+; BIOS (cold boot), staged in bank 7, then copied to 0100h.
+;   sjasmplus --raw=build/CCP.COM build/zpa/miniccp.asm
 ;
 ; ==========================================================================
 

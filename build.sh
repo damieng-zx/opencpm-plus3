@@ -24,7 +24,7 @@ python3 tools/z80lint.py
 
 # Stage 1: Assemble components
 echo "  Assembling CCP..."
-"$SJASMPLUS" --raw=build/miniccp.bin build/zpa/miniccp.asm
+"$SJASMPLUS" --raw=build/CCP.COM build/zpa/miniccp.asm
 
 echo "  Assembling BIOS..."
 "$SJASMPLUS" --raw=build/bios.bin --lst=build/bios.lst -i build/zpa -i src/bios/ -i src/bdos/ -i build/ -DBUILD_NUM="$BUILD_NUM" build/zpa/bios.asm
@@ -32,6 +32,7 @@ echo "  Assembling BIOS..."
 echo "  Checking layout..."
 python3 tools/build_memory_map.py
 python3 tools/check_layout.py
+python3 tools/check_ccp.py
 
 echo "  Assembling loader..."
 "$SJASMPLUS" --raw=build/loader.bin src/boot/loader.asm
@@ -87,7 +88,8 @@ done
 python3 tools/mkdsk.py create build/cpm3.dsk \
     --boot build/bootsect.bin \
     --system build/loader.bin \
-    --add build/CPM3.SYS src/bios/font51.bin src/bios/font32.bin \
+    --add build/CPM3.SYS build/CCP.COM \
+    src/bios/font51.bin src/bios/font32.bin \
     build/bdostest.com build/xtetest.com \
     build/disktest.com build/termtest.com build/systest.com \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
@@ -98,5 +100,6 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
 
 echo "  Loader: $(wc -c < build/loader.bin) bytes"
 echo "  CPM3.SYS: $(wc -c < build/bios.bin) bytes"
+echo "  CCP.COM: $(wc -c < build/CCP.COM) bytes"
 
 echo "=== Done ==="

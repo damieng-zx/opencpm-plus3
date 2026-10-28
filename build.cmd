@@ -25,7 +25,7 @@ if errorlevel 1 goto :fail
 
 :: Stage 1: Assemble components
 echo   Assembling CCP...
-%SJASMPLUS% --raw=build\miniccp.bin build\zpa\miniccp.asm
+%SJASMPLUS% --raw=build\CCP.COM build\zpa\miniccp.asm
 if errorlevel 1 goto :fail
 
 echo   Assembling BIOS...
@@ -36,6 +36,8 @@ echo   Checking layout...
 python3 tools\build_memory_map.py
 if errorlevel 1 goto :fail
 python3 tools\check_layout.py
+if errorlevel 1 goto :fail
+python3 tools\check_ccp.py
 if errorlevel 1 goto :fail
 
 echo   Assembling loader...
@@ -94,11 +96,12 @@ shift
 goto collect_extra_files
 :extra_files_done
 
-python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS src\bios\font51.bin src\bios\font32.bin build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\RAMDISK.FID src\test\smoke.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\RAMDISK.FID src\test\smoke.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 for %%A in (build\loader.bin) do echo   Loader: %%~zA bytes
 for %%A in (build\bios.bin) do echo   CPM3.SYS: %%~zA bytes
+for %%A in (build\CCP.COM) do echo   CCP.COM: %%~zA bytes
 
 echo === Done ===
 goto :eof
