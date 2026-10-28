@@ -184,9 +184,11 @@ type "DISKTEST`enter`"
 run 3000
 ```
 
-Require every line from `T1 Search PASS` through `T22 F40 random write PASS`
-and `All tests done.` in `char_buffer`.  T10 checks the documented F46
-stub (`A=0`, `HL=0`, DMA untouched), not real free-space accounting.
+Require every line from `T1 Search PASS` through `T29 F99 truncate PASS`
+and `All tests done.` in `char_buffer`.  T10 (`F46 free space`) is a real
+accounting check, not a stub: the count is non-zero, drops by 8 records
+after writing one 1K block, and returns to its original value once the
+file is deleted.
 
 `fdc_log` must stay retry-free.  A `FAIL` on T4 usually means the directory
 cache key/sector was corrupted; a `FAIL` on T11 means an extent's RC/alloc

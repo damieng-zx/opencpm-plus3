@@ -126,7 +126,8 @@ Status: `[ ]` open, `[x]` fixed.
 
 - [x] **20. BSH=0 hangs F20/F21; F46 uses undocumented IXH/IXL.**
   All six `CR >> BSH` / `block << BSH` loops now skip the loop when BSH=0;
-  the F46 IXH/IXL body was replaced by a stub earlier.
+  the F46 IXH/IXL body was replaced by a stub earlier, and that stub has
+  since become the real allocation-vector scan.
   File: `src/bdos/bdos.zpa`.
 
 ## Verification follow-ups (zx84 MCP run)
@@ -168,10 +169,11 @@ set.
   bank chosen by `XMOVE`.
   File: `src/test/systest.asm`.
 
-- **`DISKTEST T10` expected a working F46.**  F46 is deliberately a
-  documented stub (#20), so the test now asserts the stub contract
-  (`A=0`, `HL=0`, DMA untouched) with a sentinel rather than expecting
-  free-space data.
+- **`DISKTEST T10` expected a working F46.**  F46 was then a documented
+  stub, so the test asserted the stub contract (`A=0`, `HL=0`, DMA
+  untouched).  Both have since been superseded by the real accounting:
+  the count is non-zero, drops by 8 records per 1K block written, and is
+  restored when the file is deleted.
   File: `src/test/disktest.asm`.
 
 ## P2 — Later candidates (addressed)
@@ -206,10 +208,16 @@ set.
   convention, supported IDs and the unimplemented TE calls.
 - [x] **Stale README/comments.** README refreshed (61K/F600 map,
   built-ins, test suites, wishlist).
+- [x] **F46 free-space accounting.** `bf_f46` scans the selected drive's
+  allocation vector (ALV bits `0..DSM`), scales free blocks to 128-byte
+  records with `BSH` and returns the count as three bytes (low, high, 0)
+  at the DMA address, with the DMA pointer unchanged; an invalid drive
+  returns `A=0xFF`.  `DISKTEST T10` checks a non-zero count, the 8-record
+  drop after writing one 1K block, and the restore after the delete.
+  Files: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
 ## P3 — Remaining follow-ups
 
-- F46 real free-space accounting (the stub returns 0).
 - F40 zero-fill is sparse.
 - Full `TE_*` / `SCR_RUN_ROUTINE` XBIOS functions.
 - 16-bit block formats (PCW 720K file I/O).
