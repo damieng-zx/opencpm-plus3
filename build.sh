@@ -20,7 +20,7 @@ python3 tools/zpa.py src -o build/zpa
 
 # Stage 0b: Lint (runs on the ZPA-expanded output, which is authoritative)
 echo "  Linting..."
-python3 tools/z80lint.py
+python3 tools/z80lint.py --gate-annotations
 
 # Stage 1: Assemble components
 echo "  Assembling CCP..."

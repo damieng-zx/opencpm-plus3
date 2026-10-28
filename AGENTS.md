@@ -18,12 +18,78 @@ Requires: `sjasmplus` (Z80 assembler at C:\Apps\sjasmplus.exe), `python3`.
 Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) → loader → boot sector → DSK image. The BIOS is stored as `CPM3.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0. The CCP is a separate file, `CCP.COM`, read from the boot disk during cold boot (see Boot Chain).
 
 ### ZPA Preprocessing
-Source files use `.zpa` extension (e.g. `src/bios/common.zpa`). The build runs `tools/zpa.py` to preprocess `.zpa` files into `build/zpa/*.asm`, which the assembler then uses directly. **Always edit the `.zpa` files** — the `build/zpa/` output is generated and not checked in.
 
-Always run the linter before building:
-```bash
-python3 tools/z80lint.py
+Source files use the `.zpa` extension (`src/bios/*.zpa`, `src/bdos/*.zpa`,
+`src/ccp/*.zpa`, `src/util/*.zpa`). `tools/zpa.py` expands them into
+`build/zpa/*.asm` and the assembler only ever sees that output. **Always edit
+the `.zpa` files** — `build/zpa/` is generated and not checked in.
+
+ZPA adds pinned-register annotations and call-site checking on top of plain
+Z80:
+
+```asm
+; @proc read_user_byte
+; @param %addr:u16  de           ; address in the TPA, pinned to DE
+; @out   a                       ; byte read
+; @clobbers bc
+; @end
+read_user_byte:
+    ...
+    ld a, (%addr)                  ; %addr is substituted with DE
 ```
+
+- Declarations go in a structured comment block immediately before the label.
+  Types are `u8`/`i8`/`flag` (8-bit) and `u16`/`i16` (16-bit).
+- `%name` anywhere in an operand is replaced by the pinned register.
+- `call proc(%a, %b)` expands to the argument moves plus `call`;
+  `call proc(%a) -> %out` captures an output. Both forms are type-checked
+  against the callee's `@param` list and cross-checked across all files.
+- `call proc(%a) preserving %var, ...` emits push/pop for every pinned
+  register the callee clobbers, and warns if an active `%var` is clobbered
+  without being preserved.
+- `@extern` declares a routine whose body is raw assembly in another file.
+- `; zpa: ignore` on a call line suppresses clobber warnings for that call.
+
+The generated `build/bios.lst` is the authoritative symbol map: the memory-map
+checker, layout checker (`check_layout.py`), CCP size check and the smoke
+runner all read labels and `equ` values from it.
+
+### Linting
+
+`tools/z80lint.py` is a parser-based linter (instruction table plus
+control-flow analysis, not regex). The build runs it with
+`--gate-annotations`, so any finding fails the build; run it directly while
+editing:
+
+```bash
+python3 tools/z80lint.py                  # all checks
+python3 tools/z80lint.py --suggest-anno   # print computed effects as paste-ready lines
+```
+
+Checks:
+
+1. **Stack balance** — every `RET` must be reached with net push/pop depth 0
+   along every path (CFG with a fixed-point solver). `ld sp, …` is a stack
+   rebase; `inc sp`/`dec sp`/`jp (hl/ix/iy)` need `; lint-exempt: stack`.
+2. **Register clobber after CALL** — reading a register a preceding call
+   clobbered without restoring it.
+3. **Dead stores** — writes between `push` and `pop` that the pop discards.
+4. **Clobber annotations** — the declared `Clobbers:`/`Out:` set must cover
+   what the routine (including its callees, by actual effect) leaves changed,
+   and every `Out:` register must really be produced. `; lint: ignore` on the
+   `Clobbers:` line skips a routine.
+5. **DI/EI balance** — every `RET` leaves the interrupt-enable flag as it
+   found it; primitives that deliberately change it carry
+   `; lint-exempt: ie`.
+6. **1FFD write discipline** — port `1FFD` may only be written through
+   `write_1ffd` (which maintains the `last_1ffd` shadow the ISR motor timer
+   needs); pre-shadow/ISR contexts carry `; lint-exempt: 1ffd`.
+7. **Duplicate labels** — a non-local label defined twice in the same binary
+   makes call resolution ambiguous.
+
+Every routine documents In/Out/Clobbers (see Conventions). In `.zpa` sources
+the machine-readable form is the `@param`/`@out`/`@clobbers` block, which ZPA
+carries into the generated assembly for the linter to verify.
 
 **Never commit broken code.** Test in the emulator first.
 
@@ -118,10 +184,11 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O)
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, VER, HELP, DUMP, .COM loading; built as `CCP.COM`
 - `tools/mkdsk.py` — DSK image builder
+- `tools/zpa.py` — ZPA preprocessor (see **ZPA Preprocessing**)
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)
 - `tools/check_ccp.py` — Fails the build if `CCP.COM` does not fit the bank-6 staging window
 - `tools/mkfont64.py` — Builds `font64.bin` from the Compression `.ch8` (`--check` verifies the committed binary)
-- `tools/z80lint.py` — Z80 linter, all build-gated: stack balance across all return paths, register clobbering after CALL, dead stores, Clobbers/Out annotation verification (declared vs actual effects), DI/EI balance, 1FFD write discipline, duplicate labels. `--suggest-anno` prints computed effects as paste-ready Clobbers: lines
+- `tools/z80lint.py` — Parser-based Z80 linter (see **Linting**)
 
 ## Conventions
 

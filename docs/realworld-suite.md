@@ -52,9 +52,9 @@ separate, explicitly triggered workflow.
 | `zork1` | Zork I | Large `.DAT`, random reads, console | Pass |
 | `dbase2` | dBASE II 2.43 | FCB random I/O, overlays, dot prompt | Pass |
 | `supercalc2` | SuperCalc2 1.00 | Spreadsheet, overlays, VT-100 output | Pass |
-| `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Known issue |
+| `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
-| `turbo3` | Turbo Pascal 3.0 | Compiler/IDE, overlays, TPA | Pass |
+| `turbo3` | Turbo Pascal 3.0 | Compiler/IDE, overlays, TPA | Pass (80-column caveat) |
 | `m80l80` | Microsoft M80 + L80 | Assembler → REL → `.COM`, then run | Pass |
 | `f80344` | Microsoft FORTRAN-80 3.44 | Compiler → REL → link with FORLIB → run | Pass |
 | `bascom53` | Microsoft BASIC Compiler 5.3 | BASIC-80 → OBSLIB → stand-alone `.COM`, then run | Pass |
@@ -66,18 +66,21 @@ separate, explicitly triggered workflow.
 | `wordmaster` | MicroPro WordMaster 1.07A | Full-screen edit, BREAK/ESC, save, TYPE | Pass |
 | `supercalc1` | SuperCalc 1.05 | Spreadsheet start, cell entry, quit | Pass |
 
-Known issues are recorded in the manifest and printed by the runner:
+Notes on individual packages (only Z80ASM is recorded as a known issue in
+the manifest; the others are history or display caveats):
 
-- **WordStar 3.0** now starts and draws its no-file menu, but it is an
-  80-column program: on the 51-column screen each line wraps and overlaps
-  the next, so the display is not usable yet.  The underlying crash was a
+- **WordStar 3.0** starts and draws its no-file menu, and the automated
+  check (banner and menu) passes.  It is an 80-column program, so on the
+  51-column screen each line wraps and overlaps the next; an 80-column
+  screen mode is the remaining display piece.  The original crash was a
   page-zero bug - `(0006h)` held `bdos_stub` (F737) instead of the TPA top
   (F600), so WordStar sized its screen buffer from the wrong ceiling and
   overwrote the BIOS jump table.  `common.zpa` now places `bdos_vector` at
-  F600 and page zero 0006h points at it.  An 80-column screen mode is the
-  remaining piece.
+  F600 and page zero 0006h points at it.
 - **Turbo Pascal 3.0** runs (banner, `TURBO.MSG` load, IDE menu) and its
   80-column frames wrap on the 51-column screen for the same reason.
+  TINST can install the editor for a 64-column terminal, which the
+  64-column mode (`SCREEN 64`) then fits.
 - **BASCOM 5.3** used to exit immediately because the suite pulled
   `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
   machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`
