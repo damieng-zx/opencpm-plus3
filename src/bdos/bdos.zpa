@@ -681,6 +681,8 @@ bf_f10:
     jp z, .rd_bs
     cp 0x03
     jp z, .rd_ctlc
+    cp 0x1B
+    jp z, .rd_esc
     cp 0x20
     jp c, .rd_loop
     push af
@@ -729,6 +731,16 @@ bf_f10:
     call con_out
     pop bc
     jp fn_wboot
+.rd_esc:
+    ; Let ESC reach the screen: the +3 manual changes screen size and
+    ; colours by typing BREAK (ESC) sequences at the command prompt.
+    ; The following characters are echoed normally and also enter the
+    ; command line, exactly as the manual describes.
+    push bc
+    ld c, 0x1B
+    call con_out
+    pop bc
+    jp .rd_loop
 .rd_done:
     ld hl, (rdbuf_ptr)
     inc hl

@@ -82,6 +82,7 @@ scr_flash:    db 0             ; Flash: 0x00 or 0x80
 scr_attr:     db DEFAULT_ATTR  ; Computed attribute byte (F B PPP III)
 scr_border_v: db BORDER_COL    ; Current border colour 0-7
 scr_cols:     db 51            ; Runtime column count (32 or 51)
+scr_wrap:     db 1             ; 1 = wrap at the right edge (ESC v/w)
 font_ptr:     dw 0x8000       ; Active font in bank 6 (0x8000=51col, 0x8800=32col)
 
 ; The character buffer and row table are runtime-initialised and are not
@@ -105,6 +106,9 @@ row_buf_tbl equ 0xA700
 ; @clobbers af,bc,de,hl
 ; @end
 scr_init:
+    ; A size change cancels any escape sequence in progress.
+    xor a
+    ld (esc_state), a
     ; Build row_buf_tbl[r] = r * scr_cols for r in 0..SCR_ROWS-1
     ld hl, row_buf_tbl
     ld a, (scr_cols)
@@ -186,10 +190,22 @@ scr_putchar:
     jp z, .esc_x_h
     cp ESC_WAIT_X_W
     jp z, .esc_x_w
-    ; ESC_WAIT_1P — consume byte, return to NORMAL
+    ; ESC_WAIT_1P — consume the parameter and apply one-param commands
+    pop af                     ; A = parameter byte
+    ld b, a
+    ld a, (esc_cmd)
+    cp '3'
+    jp z, .esc_p3              ; screen size
+    cp '4'
+    jp z, .esc_p4              ; page mode
+    cp 'b'
+    jp z, .esc_pb              ; foreground colour
+    cp 'c'
+    jp z, .esc_pc              ; background colour
+    ; '2' (national charset) and '5' (24x80 auto-flip) are consumed and
+    ; ignored; we have one font and no 24x80 mode.
     xor a
     ld (esc_state), a
-    pop af
     ret
 
 .esc_normal:
@@ -232,22 +248,8 @@ scr_putchar:
     call _render_char          ; Clobbers AF, BC, DE, HL, IX
     call _page_out             ; Clobbers AF, BC
 
-    ; Advance cursor
-    ld a, (cursor_col)
-    inc a
-    ld b, a
-    ld a, (scr_cols)
-    dec a                      ; compare against max valid col, so new=scr_cols wraps
-    cp b
-    ld a, b
-    jr nc, .store_col
-    ; Wrap: CR + LF
-    xor a
-    ld (cursor_col), a
-    jp _do_lf
-.store_col:
-    ld (cursor_col), a
-    ret
+    ; Advance cursor (wrap or clamp, per ESC v/w)
+    jp _adv_col
 
 .enter_esc:
     ; Received 0x1B — enter ESC state
@@ -305,20 +307,8 @@ scr_putchar:
     ld d, a
     call _render_char
     call _page_out
-    ld a, (cursor_col)
-    inc a
-    ld b, a
-    ld a, (scr_cols)
-    dec a                      ; compare against max valid col, so new=scr_cols wraps
-    cp b
-    ld a, b
-    jr nc, .unk_store
-    xor a
-    ld (cursor_col), a
-    jp _do_lf
-.unk_store:
-    ld (cursor_col), a
-    ret
+    ; Advance cursor (wrap or clamp, per ESC v/w)
+    jp _adv_col
 
 ; Jump table: byte cmd, word target (little-endian)
 .esc_table:
@@ -397,9 +387,9 @@ scr_putchar:
     db 'u'
     dw .esc_ret         ; underline off    — ignore
     db 'v'
-    dw .esc_ret         ; wrap on          — ignore (default)
+    dw .esc_v          ; wrap on
     db 'w'
-    dw .esc_ret         ; wrap off         — ignore
+    dw .esc_w          ; wrap off
     db 'x'
     dw .esc_ret         ; enter 80-col     — ignore
     db 'y'
@@ -416,6 +406,111 @@ scr_putchar:
     ld (esc_cmd), a
     ld a, ESC_WAIT_1P
     ld (esc_state), a
+    ret
+
+; ------- one-parameter sequences (ESC 3 / 4 / b / c) -------
+
+.esc_p3:
+    ; ESC 3 n - screen size.  The +3 manual has you type ESC 3 0/1/2, so
+    ; the parameter arrives as an ASCII digit (raw 0-2 is accepted too).
+    ; Anything else is consumed and ignored: old WordStar Z19 drivers use
+    ; ESC 3 / ESC 4 with a space parameter as attribute controls, which
+    ; must not resize the screen.
+    ld a, b
+    cp '0'
+    jr c, .p3_raw
+    cp '3'
+    jr nc, .p3_ignore
+    sub '0'
+    jr .p3_have
+.p3_raw:
+    cp 3
+    jr nc, .p3_ignore
+.p3_have:
+    cp 2
+    jr z, .p3_ignore           ; 24x80 needs the deferred 80-column mode
+    cp 1
+    ld a, 32
+    jr nz, .p3_apply
+    ld a, 51
+.p3_apply:
+    push af
+    xor a
+    ld (esc_state), a
+    call _cancel_paging
+    pop af
+    jp scr_set_cols
+.p3_ignore:
+    xor a
+    ld (esc_state), a
+    ret
+
+.esc_p4:
+    ; ESC 4 n - page mode (0 off, 1 on); other parameters are ignored.
+    ld a, b
+    cp '0'
+    jr c, .p4_raw
+    cp '2'
+    jr nc, .p4_done
+    sub '0'
+    jr .p4_have
+.p4_raw:
+    cp 2
+    jr nc, .p4_done
+.p4_have:
+    or a
+    jr z, .p4_off
+    ld a, (con_mode)
+    or 0x01
+    ld (con_mode), a
+    jr .p4_done
+.p4_off:
+    ld a, (con_mode)
+    and 0xFE
+    ld (con_mode), a
+.p4_done:
+    xor a
+    ld (esc_state), a
+    ret
+
+.esc_pb:
+    ; ESC b c - foreground colour
+    ld a, b
+    call _decode_colour
+    ld a, b
+    ld (scr_ink), a
+    ld a, c
+    ld (scr_ink_br), a
+    call _set_attr
+    xor a
+    ld (esc_state), a
+    ret
+
+.esc_pc:
+    ; ESC c c - background colour; the border follows the paper
+    ld a, b
+    call _decode_colour
+    ld a, b
+    ld (scr_paper), a
+    ld (scr_border_v), a
+    out (PORT_ULA), a
+    ld a, c
+    ld (scr_paper_br), a
+    call _set_attr
+    xor a
+    ld (esc_state), a
+    ret
+
+.esc_v:
+    ; ESC v - wrap at the right edge
+    ld a, 1
+    ld (scr_wrap), a
+    ret
+
+.esc_w:
+    ; ESC w - no wrap: the last column is overwritten
+    xor a
+    ld (scr_wrap), a
     ret
 
 ; ------- cursor movement -------
@@ -663,6 +758,174 @@ scr_putchar:
 
 
 ; ==========================================================================
+; _decode_colour - Decode an ESC b/c colour parameter
+;   In:  A = parameter byte (32..95, per the +3 CP/M manual)
+;   Out: B = Spectrum colour 0-7 (bit0 blue, bit1 red, bit2 green)
+;        C = bright flag 0 or 1
+;   Clobbers: AF, DE
+; ==========================================================================
+; @proc _decode_colour
+; @param %param:u8 a
+; @out   bc
+; @clobbers af,de
+; @end
+_decode_colour:
+    sub 32
+    ld e, a
+    xor a
+    ld b, a                    ; colour
+    ld c, a                    ; bright
+    bit 1, e
+    jr z, .dc_red
+    set 0, b                   ; blue
+.dc_red:
+    bit 3, e
+    jr z, .dc_green
+    set 1, b                   ; red
+.dc_green:
+    bit 5, e
+    jr z, .dc_bright
+    set 2, b                   ; green
+.dc_bright:
+    ld a, e
+    and 0x15                   ; bright bits: blue 1, red 4, green 16
+    ret z
+    ld c, 1
+    ret
+
+
+; ==========================================================================
+; _set_attr - Recompute scr_attr from the ink/paper/bright state
+;   Both colours must be bright for the BRIGHT attribute to be set,
+;   matching the +3's "mix normal with bright and both stay normal".
+;   Clobbers: AF, B
+; ==========================================================================
+; @proc _set_attr
+; @clobbers af,b
+; @end
+_set_attr:
+    ld a, (scr_ink_br)
+    and a
+    jr z, .sa_nobr
+    ld a, (scr_paper_br)
+    and a
+    jr z, .sa_nobr
+    ld a, 0x40
+    jr .sa_have
+.sa_nobr:
+    xor a
+.sa_have:
+    ld b, a
+    ld a, (scr_paper)
+    and 0x07
+    add a, a
+    add a, a
+    add a, a
+    or b
+    ld b, a
+    ld a, (scr_ink)
+    and 0x07
+    or b
+    ld (scr_attr), a
+    ret
+
+
+; ==========================================================================
+; _cancel_paging - Clear the BDOS page-mode bit (ESC 3 resets paging)
+;   Clobbers: AF
+; ==========================================================================
+; @proc _cancel_paging
+; @clobbers af
+; @end
+_cancel_paging:
+    ld a, (con_mode)
+    and 0xFE
+    ld (con_mode), a
+    ret
+
+
+; ==========================================================================
+; _adv_col - Advance the cursor after a printable character
+;   Wraps to the next line when scr_wrap is set; otherwise clamps to
+;   the last column so the next character overwrites it.
+;   Clobbers: AF, B
+; ==========================================================================
+; @proc _adv_col
+; @clobbers af,bc,de,hl,ix,iy
+; @end
+_adv_col:
+    ld a, (cursor_col)
+    inc a
+    ld b, a
+    ld a, (scr_cols)
+    dec a
+    cp b
+    jr c, .ac_past
+    ; Still inside the row: store the new column.
+    ld a, b
+    ld (cursor_col), a
+    ret
+.ac_past:
+    ld a, (scr_wrap)
+    or a
+    jr z, .ac_clamp
+    xor a
+    ld (cursor_col), a
+    jp _do_lf
+.ac_clamp:
+    ld a, (scr_cols)
+    dec a
+    ld (cursor_col), a
+    ret
+
+
+; ==========================================================================
+; _put_attr - Stamp scr_attr into the attribute cell for a character
+;   In:  C = column, D = row
+;   Clobbers: AF, DE, HL (D is destroyed; callers save the row first)
+; ==========================================================================
+; @proc _put_attr
+; @param %col:u8 c
+; @param %row:u8 d
+; @clobbers af,de,hl
+; @end
+_put_attr:
+    ld a, d
+    ld l, a
+    ld h, 0
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl                 ; row * 32
+    ld a, (scr_cols)
+    cp 32
+    ld a, c
+    jr z, .pa_32
+    ld e, a
+    add a, a
+    add a, a
+    add a, e                   ; col * 5 (51-column font)
+    jr .pa_shift
+.pa_32:
+    add a, a
+    add a, a
+    add a, a                   ; col * 8 (32-column font)
+.pa_shift:
+    srl a
+    srl a
+    srl a                      ; pixel_x / 8
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld de, SCR_ATTR
+    add hl, de
+    ld a, (scr_attr)
+    ld (hl), a
+    ret
+
+
+; ==========================================================================
 ; _do_cr — Carriage return: cursor to column 0
 ;   In:      nothing
 ;   Out:     nothing
@@ -731,6 +994,10 @@ _do_bs:
     jr nz, .back_in_row
     ; col 0: wrap to end of previous row so BDOS fn 10 can
     ; backspace through a line that auto-wrapped during entry.
+    ; ESC w (no wrap) keeps the cursor on the top-left cell.
+    ld a, (scr_wrap)
+    or a
+    ret z
     ld a, (cursor_row)
     or a
     ret z                      ; (0,0) — nothing left to back over
@@ -876,6 +1143,9 @@ _render_char:
     ; Save row to memory (we'll need D for other things)
     ld a, d
     ld (_rnd_row), a
+
+    ; Stamp the 8x8 attribute cell with the current colours (ESC b/c).
+    call _put_attr
 
     ; --- Font data pointer → IX ---
     ; B = char code. HL and DE are free to use.

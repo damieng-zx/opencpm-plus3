@@ -597,16 +597,34 @@ Send these via BDOS F2 (one character at a time).
 | `ESC M` | DL | Delete cursor row (pull up) |
 | `ESC N` | DCH | Delete character at cursor (shift left) |
 
+#### Screen, Wrap and Colour (CP/M Plus Appendix III)
+
+| Sequence | Effect |
+|----------|--------|
+| `ESC 3 n` | Screen size: n = `0` → 24×32, `1` → 24×51, `2` → 24×80 (not implemented). Also clears the screen, resets the viewport and **cancels page mode**. Typed at the prompt as `ESC 3 0`/`ESC 3 1`. Any other parameter is consumed and ignored (old WordStar Z19 drivers use `ESC 3`/`ESC 4` with a space parameter as attribute controls). |
+| `ESC 4 n` | Page mode: `0` disables, `1` enables (the `con_mode` bit used by `F109`). Other parameters are ignored. |
+| `ESC v` | Enable wrapping at the right edge (default). |
+| `ESC w` | Disable wrapping; the last column is overwritten. |
+| `ESC b c` | Foreground colour. `c` is the +3 palette number + 32 (32 black … 95 bright white). |
+| `ESC c c` | Background colour; the border follows the background. |
+
+Colour values follow the manual: blue = 34, red = 40, magenta = 42,
+green = 64, cyan = 66, yellow = 72, white = 74, with bright variants
+35/44/47/80/83/92/95.  The Spectrum BRIGHT attribute is set only when
+both ink and paper are bright.  New characters take the current
+attribute; existing text keeps the colours it was drawn with.
+
 #### Ignored Sequences
 
 These are consumed without error but have no effect:
 
 `ESC 0` `ESC 1` (status line), `ESC e` `ESC f` (cursor on/off),
-`ESC p` `ESC q` (reverse), `ESC r` (underline), `ESC v` `ESC w` (wrap),
-`ESC x` `ESC y` (80-col mode).
+`ESC p` `ESC q` (reverse), `ESC r` `ESC u` (underline),
+`ESC x` `ESC y` (24×80 mode).
 
-Sequences with a consumed parameter: `ESC 2 p` `ESC 3 p` `ESC 4 p` `ESC 5 p`
-`ESC b col` `ESC c col` `ESC X tr lc h w`.
+Sequences with a consumed parameter: `ESC 2 p` (national charset),
+`ESC 5 p` (auto-flip), `ESC X tr lc h w` (viewport; parameters are
+parsed but the viewport is not applied).
 
 ### Keyboard
 

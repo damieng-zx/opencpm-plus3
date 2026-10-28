@@ -38,12 +38,20 @@ def label_address(name: str) -> int:
     listing = ROOT / "build" / "bios.lst"
     if not listing.exists():
         raise SmokeError("build/bios.lst is missing; run build.cmd first")
-    for line in listing.read_text(encoding="utf-8", errors="replace").splitlines():
-        m = re.match(rf"^\s*\d+\+\s+([0-9A-F]{{4}})\b.*\b{re.escape(name)}:", line)
+    lines = listing.read_text(encoding="utf-8", errors="replace").splitlines()
+    # Prefer an exact-case label definition.  The equate pass below is
+    # case-insensitive (so callers can ask for an `equ` constant), and
+    # without this pass `scr_attr` would match `SCR_ATTR equ 0x5800`
+    # instead of the variable at 0x0261.  `[^;]*` keeps comments such as
+    # "; Scroll char_buffer: ..." from being mistaken for labels.
+    for line in lines:
+        m = re.match(
+            rf"^\s*\d+\+\s+([0-9A-F]{{4}})\s+[^;]*\b{re.escape(name)}:", line)
         if m:
             return int(m.group(1), 16)
+    for line in lines:
         m = re.match(
-            rf"^\s*\d+\+\s+[0-9A-F]{{4}}\s+.*\b{re.escape(name)}\s+equ\s+0x([0-9A-Fa-f]+)",
+            rf"^\s*\d+\+\s+[0-9A-F]{{4}}\s+[^;]*\b{re.escape(name)}\s+equ\s+0x([0-9A-Fa-f]+)",
             line, re.I)
         if m:
             return int(m.group(1), 16)
@@ -183,6 +191,12 @@ class Smoke:
         self.cb = char_buffer_address()
         self.cb_bank = bank_for_address(self.cb)
         self.scr_cols = label_address("scr_cols")
+        self.scr_wrap = label_address("scr_wrap")
+        self.scr_attr = label_address("scr_attr")
+        self.cursor_col = label_address("cursor_col")
+        self.cursor_row = label_address("cursor_row")
+        self.con_mode = label_address("con_mode")
+        self.esc_state = label_address("esc_state")
         self.history: list[str] = []
 
     def log(self, msg: str) -> None:
@@ -242,6 +256,131 @@ class Smoke:
         if missing:
             raise SmokeError(
                 f"{label}: missing {missing!r} -- screen:\n{screen}")
+
+    # ---- terminal escape helpers -------------------------------------
+
+    def key(self, name: str, frames: int = 150) -> None:
+        self.mcp.call("key", {"name": name})
+        self.mcp.call("run", {"frames": frames})
+
+    def esc(self, text: str, frames: int = 500) -> None:
+        """Send BREAK (ESC) followed by a sequence, as at the A> prompt."""
+        self.log(f"ESC {text}")
+        self.key("shift+space")
+        self.mcp.call("type", {"text": text})
+        self.mcp.call("run", {"frames": frames})
+        self.record()
+        self.log(
+            "  cols=%d wrap=%d attr=%02X mode=%04X state=%d" % (
+                self.memory(4, self.scr_cols, 1)[0],
+                self.memory(4, self.scr_wrap, 1)[0],
+                self.memory(4, self.scr_attr, 1)[0],
+                int.from_bytes(self.memory(4, self.con_mode, 2), "little"),
+                self.memory(4, self.esc_state, 1)[0],
+            ))
+
+    def finish_prompt(self, frames: int = 900) -> None:
+        """Run the junk command left in the line buffer and get a prompt."""
+        self.key("enter")
+        self.wait_for(["A>"], frames=frames)
+
+    def run_terminal_escapes(self) -> None:
+        """ESC 3/4/b/c/v/w typed at the A> prompt (CP/M Plus App. III)."""
+        if self.memory(4, self.scr_cols, 1)[0] != 51:
+            raise SmokeError("expected 51 columns before the ESC tests")
+
+        # ESC 4 n: page mode bit of the BDOS console mode word.
+        self.esc("41")
+        if not (self.memory(4, self.con_mode, 2)[0] & 1):
+            raise SmokeError("ESC 4 1 did not set page mode")
+        self.finish_prompt()
+        self.esc("40")
+        if self.memory(4, self.con_mode, 2)[0] & 1:
+            raise SmokeError("ESC 4 0 did not clear page mode")
+        self.finish_prompt()
+
+        # ESC 3 n: 0 = 24x32, 1 = 24x51; it also cancels page mode, so
+        # turn page mode back on first and watch ESC 3 clear it.
+        self.esc("41")
+        self.finish_prompt()
+        self.esc("30")
+        if self.memory(4, self.scr_cols, 1)[0] != 32:
+            raise SmokeError("ESC 3 0 did not select 32 columns")
+        if self.memory(4, self.con_mode, 2)[0] & 1:
+            raise SmokeError("ESC 3 did not cancel page mode")
+        self.finish_prompt()
+
+        self.esc("31")
+        if self.memory(4, self.scr_cols, 1)[0] != 51:
+            raise SmokeError("ESC 3 1 did not restore 51 columns")
+        self.finish_prompt()
+
+        # ESC v/w: wrapping at the right edge.  Use 32 columns so a short
+        # line fills a row.
+        self.esc("30")
+        self.finish_prompt()
+        self.esc("w")
+        if self.memory(4, self.scr_wrap, 1)[0] != 0:
+            raise SmokeError("ESC w did not clear the wrap flag")
+        self.esc("H")
+        self.mcp.call("type", {"text": "X" * 40})
+        self.mcp.call("run", {"frames": 1200})
+        row = self.memory(4, self.cursor_row, 1)[0]
+        col = self.memory(4, self.cursor_col, 1)[0]
+        if (row, col) != (0, 31):
+            raise SmokeError(f"ESC w: cursor {row}/{col}, expected 0/31")
+        self.finish_prompt()
+
+        self.esc("v")
+        if self.memory(4, self.scr_wrap, 1)[0] != 1:
+            raise SmokeError("ESC v did not set the wrap flag")
+        self.esc("H")
+        self.mcp.call("type", {"text": "X" * 40})
+        self.mcp.call("run", {"frames": 1200})
+        if self.memory(4, self.cursor_row, 1)[0] == 0:
+            raise SmokeError("ESC v: a 40-character line did not wrap")
+        self.finish_prompt()
+
+        # ESC b/c: the parameter is the +3 palette value + 32.
+        self.esc("31")
+        self.finish_prompt()
+        self.esc("b(")          # 40 = normal red ink
+        self.esc('c"')          # 34 = normal blue paper
+        attr = self.memory(4, self.scr_attr, 1)[0]
+        if attr != 0x0A:
+            raise SmokeError(
+                f"ESC b/c red on blue: attribute {attr:02X}, expected 0A")
+        self.esc("b_")          # 95 = bright white ink
+        self.esc("c#")          # 35 = bright blue paper
+        attr = self.memory(4, self.scr_attr, 1)[0]
+        if attr != 0x4F:
+            raise SmokeError(
+                f"ESC b/c bright: attribute {attr:02X}, expected 4F")
+        # A character drawn now must carry the new attribute.
+        self.esc("H")
+        self.mcp.call("type", {"text": "Q"})
+        self.mcp.call("run", {"frames": 800})
+        cell = self.memory(5, 0x5800, 2)
+        if cell[0] != 0x4F:
+            raise SmokeError(
+                f"new character attribute {cell[0]:02X}, expected 4F")
+        self.finish_prompt()
+
+        # Restore the defaults: bright white on blue (the +3 mixes that
+        # down to normal), 51 columns, page mode and wrapping on.
+        self.esc("b_")
+        self.esc('c"')
+        attr = self.memory(4, self.scr_attr, 1)[0]
+        if attr != 0x0F:
+            raise SmokeError(
+                f"default colours restored as {attr:02X}, expected 0F")
+        self.esc("31")
+        self.finish_prompt()
+        self.esc("41")
+        self.esc("v")
+        self.finish_prompt()
+        if self.memory(4, self.scr_cols, 1)[0] != 51:
+            raise SmokeError("ESC tests left the screen at the wrong width")
 
     def boot(self) -> None:
         self.log(f"booting {self.dsk}")
@@ -427,6 +566,7 @@ class Smoke:
         self.run_disktest()
         self.run_bdostest()
         self.run_ccp()
+        self.run_terminal_escapes()
         self.check_fdc()
         self.log("all checks passed")
 
