@@ -283,7 +283,7 @@ Check:
 To restore the original filename before finishing:
 
 ```text
-RENAME RPED.SUB TEST.SUB
+REN RPED.SUB=TEST.SUB
 DIR A:*.SUB
 ```
 
@@ -345,6 +345,6 @@ Before committing, this smoke test should pass with:
 - successful boot
 - correct screen-buffer contents at each checkpoint
 - BBC BASIC launch, `RUN`, and `QUIT` working
-- successful `TYPE`, `RENAME`, and wildcard `DIR`
+- successful `TYPE`, `ERA`, `REN`, and wildcard `DIR`
 - no FDC retries
 - no unexplained cycle-count regression

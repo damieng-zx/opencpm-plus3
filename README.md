@@ -91,8 +91,9 @@ Also supported:
   16-bit block file I/O is not implemented.
 - Optional third-party CP/M utilities (BBC BASIC, PIP, ED, RENAME, SET, ...)
   are picked up from `references/binaries/` when present; a source-only
-  checkout ships the project's own tools. PIP and RENAME are also exercised by
-  the smoke runner when those binaries are on the disk.
+  checkout ships the project's own tools and the CCP's DIR/TYPE/ERA/REN
+  built-ins, so it can list, display, delete and rename files. PIP and RENAME
+  are also exercised by the smoke runner when those binaries are on the disk.
 
 ## Tools
 

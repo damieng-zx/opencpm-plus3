@@ -627,7 +627,7 @@ AL:    Block numbers. 1 byte each if DSM ≤ 255, 2 bytes (LE) if DSM > 255.
 | Read Sequential | 20 | DE = FCB | Read 128 bytes at current position |
 | Write Sequential | 21 | DE = FCB | Write 128 bytes at current position |
 | Make File | 22 | DE = FCB | Create a new directory entry |
-| Rename File | 23 | DE = FCB | Rename (new name at FCB+16) |
+| Rename File | 23 | DE = FCB | Rename (old name at FCB+1, new at FCB+17) |
 | Open File | 15 | DE = FCB | Open existing file |
 | Close File | 16 | DE = FCB | Write FCB back to directory |
 | Read Random | 33 | DE = FCB | Read record at R0-R2 position |
