@@ -37,6 +37,7 @@ needs the checkout, `npm ci`, and a writable ROM cache.
 
 `references/binaries/` is untracked, so CI builds a source-only disk. The
 smoke runner always exercises `SMOKE.TXT` (from `src/test/smoke.txt`),
+`PAGE.TXT` (from `src/test/page.txt`, the pagination fixture),
 `SMOKE.SUB` (from `src/test/smoke.sub`), `PARAM.SUB` (from
 `src/test/param.sub`), the source-built `SUBMIT.COM`, `DATE.COM`, and the
 built-in `ERA`/`REN` commands; only the external `RENAME.COM` (added to a

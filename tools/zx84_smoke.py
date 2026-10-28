@@ -710,6 +710,59 @@ class Smoke:
             raise SmokeError("SCREEN 51 did not restore 51 columns")
         self.expect("SCREEN 51 prompt", "A>")
 
+    def run_pagination(self) -> None:
+        """PAGE console mode: stop at the page height and resume on RETURN."""
+        if self.memory(4, self.scr_cols, 1)[0] != 51:
+            raise SmokeError("expected 51 columns before the pagination test")
+
+        # Make the result independent of the ESC 4/ESC 3 tests above.
+        self.command("SETDEF [PAGE]", 700)
+        self.expect("SETDEF [PAGE]", "A>")
+
+        # The fixture has 30 lines; a page holds conpage+1 = 24 rows, so the
+        # first page must stop at LINE 24 and withhold 25..30.
+        self.command("TYPE PAGE.TXT", 900)
+        for _ in range(8):
+            if "Press RETURN" in self.text():
+                break
+            self.mcp.call("run", {"frames": 400})
+            self.record()
+        else:
+            raise SmokeError("no page pause after 30 lines:\n" + self.text())
+
+        screen = self.text()
+        for required in ("LINE 20", "LINE 24"):
+            if required not in screen:
+                raise SmokeError(
+                    f"page pause fired too early ({required} missing):\n"
+                    + screen)
+        for withheld in ("LINE 25", "LINE 30"):
+            if withheld in screen:
+                raise SmokeError(
+                    f"page pause did not withhold {withheld}:\n{screen}")
+
+        # RETURN resumes; the pager prompt must be erased, not left behind.
+        self.mcp.call("key", {"name": "enter"})
+        for _ in range(8):
+            self.mcp.call("run", {"frames": 400})
+            self.record()
+            screen = self.text()
+            if "LINE 30" in screen and "Press RETURN" not in screen:
+                break
+        else:
+            raise SmokeError("paging did not resume:\n" + self.text())
+
+        # NOPAGE: the same file prints to the end with no prompt and no key.
+        self.command("SETDEF [NOPAGE]", 700)
+        self.command("TYPE PAGE.TXT", 1500)
+        screen = self.text()
+        if "Press RETURN" in screen:
+            raise SmokeError("[NOPAGE] still paused:\n" + screen)
+        if "LINE 30" not in screen:
+            raise SmokeError("[NOPAGE] lost the end of the file:\n" + screen)
+
+        self.command("SETDEF [PAGE]", 700)
+
     def run_ccp_external(self) -> None:
         """CCP.COM lives on the disk and is staged at CCP_STAGE on cold boot."""
         ccp = (ROOT / "build" / "CCP.COM").read_bytes()
@@ -755,6 +808,7 @@ class Smoke:
         self.run_user()
         self.run_screen64()
         self.run_terminal_escapes()
+        self.run_pagination()
         self.run_ccp_external()
         self.check_fdc()
         self.log("all checks passed")

@@ -473,7 +473,7 @@ bdos_page_pause:
     ld (bdos_page_row), a
     ret
 
-bdos_pause_msg: db 'Press RETURN to continue ', 0x80, 0
+bdos_pause_msg: db 'Press RETURN to continue.', 0
 
 
 ; ==========================================================================

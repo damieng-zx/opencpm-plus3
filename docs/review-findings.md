@@ -225,9 +225,15 @@ set.
   cleared, and F34 leaving that data in place.
   Files: `src/bdos/bdos.zpa`, `src/bios/common.zpa`,
   `src/test/disktest.asm`.
+- [x] **Pagination runtime test.** The smoke runner now drives it through the
+  `PAGE.TXT` fixture: with `SETDEF [PAGE]`, `TYPE PAGE.TXT` must stop after
+  `LINE 24` with the pager prompt on screen and `LINE 25`..`LINE 30`
+  withheld; RETURN must erase the prompt and print the rest; with
+  `SETDEF [NOPAGE]` the whole file must print without a prompt or a key.
+  Files: `tools/zx84_smoke.py`, `src/test/page.txt`, `src/bdos/bdos.zpa`
+  (the prompt now ends in a plain period instead of a stray 0x80 byte).
 
 ## P3 — Remaining follow-ups
 
 - Full `TE_*` / `SCR_RUN_ROUTINE` XBIOS functions.
 - 16-bit block formats (PCW 720K file I/O).
-- Pagination itself has no automated runtime test.

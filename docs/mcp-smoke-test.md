@@ -30,6 +30,11 @@ missing-parameter error. When the untracked reference binaries are on the
 image, it checks a third-party `RENAME` (added to a scratch copy of the DSK)
 with wildcard `DIR`, and the C: PIP/DATE flow.
 
+Pagination is checked with `SETDEF [PAGE]` and the 30-line `PAGE.TXT`
+fixture: `TYPE PAGE.TXT` must stop at `LINE 24` with the pager prompt shown
+and `LINE 25`..`LINE 30` withheld, RETURN must resume and erase the prompt,
+and `SETDEF [NOPAGE]` must print the whole file with no prompt and no key.
+
 `tools/zx84_negative.py` builds corrupted copies of the image and requires
 that they do **not** reach `A>`:
 
