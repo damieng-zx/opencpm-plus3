@@ -71,7 +71,6 @@
 ; The common stub switches to bdos_stack before calling bdos_entry.
 
 rdbuf_ptr:  dw 0               ; Buffer pointer for F10
-; f46_buf removed: F46 is a deferred stub
 
 ; --- BDOS state ---
 bdos_dma:   dw 0x0080          ; Current DMA address (default 0080h)
@@ -107,6 +106,13 @@ f46_left:   dw 0               ; blocks still to scan
 f46_ptr:    dw 0               ; current ALV byte pointer
 f46_mask:   db 0               ; bit mask within the current byte
 f46_byte:   db 0               ; current ALV byte
+
+; --- F40 zero-fill scratch ---
+f40_zfill:  db 0               ; 1 = the next allocation must be zeroed
+f40_pending: db 0              ; request consumed by bf_f21_core
+f40_block:  db 0               ; block being filled
+f40_left:   db 0               ; records still to write
+f40_rec:    dw 0               ; next absolute record in that block
 
 ; --- F59 / F111 scratch ---
 f59_fcb:    dw 0               ; FCB passed to F59
@@ -2628,6 +2634,14 @@ f21_body:
 bf_f21_core:
     ; Entry point for F34 (Write Random) and F40 — IX = FCB, EX/CR set.
 
+    ; Consume a pending F40 zero-fill request.  Exactly one block is
+    ; zeroed per call, and clearing the flag here keeps a request left
+    ; over by a failed F40 from affecting a later F21/F34 write.
+    ld a, (f40_zfill)
+    ld (f40_pending), a
+    xor a
+    ld (f40_zfill), a
+
     ; Cache DPB/ALV for the FCB's drive so cached_* is consistent with
     ; this operation.
     call select_fcb_drive
@@ -2739,6 +2753,20 @@ bf_f21_core:
     pop af
     pop hl
     ld (hl), a                 ; Store block number in FCB alloc map
+
+    ; F40 zero fill: a newly allocated block is filled with zeros before
+    ; the record is written, so unwritten records read back as zeros.
+    ld a, (f40_pending)
+    or a
+    jr z, .wseq_alloc_nofill
+    push hl                    ; save the alloc slot pointer
+    ld a, (hl)                 ; block number just allocated
+    call zero_fill_block
+    pop hl
+    or a
+    jp nz, .wseq_error         ; A = BIOS WRITE error code
+.wseq_alloc_nofill:
+    ld a, (hl)                 ; A = block number for .wseq_have_block
     jp .wseq_have_block
 
 .wseq_full:
@@ -2862,6 +2890,78 @@ wseq_close_cur:
     ld de, (fcb_user_addr)
     call setup_fcb(de)         ; IX = fcb_buf
     ret
+
+; zero_fill_block — Fill a newly allocated data block with zeros
+;   Writes every record in the block from the common zero buffer, so the
+;   user's DMA area is never touched.  The caller must have the drive's
+;   DPB cached (select_fcb_drive) before calling.
+;   In:  A = block number
+;   Out: A = 0 on success, or the BIOS WRITE code (1 = error, 2 = read-only)
+;   Clobbers: AF, BC, DE, HL
+; @proc zero_fill_block
+; @param %block:u8 a
+; @out   a
+; @clobbers af,bc,de,hl
+; @end
+zero_fill_block:
+    ld (f40_block), a
+
+    ; Clear the common zero buffer (a stray write cannot poison the fill).
+    ld hl, f40_zero
+    ld b, 128
+.zf_clear:
+    ld (hl), 0
+    inc hl
+    djnz .zf_clear
+
+    ; First absolute record: block << BSH
+    ld a, (f40_block)
+    ld l, a
+    ld h, 0
+    ld a, (cached_bsh)
+    ld b, a
+    or a
+    jr z, .zf_base
+.zf_shl:
+    add hl, hl
+    djnz .zf_shl
+.zf_base:
+    ld (f40_rec), hl
+
+    ; Records per block = BLM + 1 (2^BSH)
+    ld a, (cached_blm)
+    inc a
+    ld (f40_left), a
+
+.zf_loop:
+    ld hl, (f40_rec)
+    ld bc, (cached_spt)
+    call div_hl_bc             ; HL = track in data area, DE = sector
+    push de
+    ld de, (cached_off)
+    add hl, de                 ; HL = absolute track
+    ld b, h
+    ld c, l
+    call set_trk
+    pop bc
+    call set_sec
+
+    ld bc, f40_zero
+    call set_dma
+    call disk_write
+    or a
+    ret nz                     ; A = BIOS WRITE error code
+
+    ld hl, (f40_rec)
+    inc hl
+    ld (f40_rec), hl
+    ld a, (f40_left)
+    dec a
+    ld (f40_left), a
+    jr nz, .zf_loop
+    xor a
+    ret
+
 
 ; F22: Make File
 ;   In:  DE = FCB (filename in bytes 1-11)
@@ -3703,9 +3803,10 @@ bf_f36:
 
 
 ; F40: Write Random with Zero Fill
-;   Same as F34, but the intervening records of a newly created extent
-;   should be zero-filled.  The extent lookup/creation is shared with F34;
-;   zero-fill is still sparse (documented P2 follow-up).
+;   Same as F34, except that a newly allocated data block is filled with
+;   zeros before the record is written, so unwritten records in that block
+;   read back as zeros.  bf_f40 just marks the request; bf_f21_core does
+;   the fill at the single block-allocation point.
 ; @proc bf_f40
 ; @param %fcb:u16   de
 ; @param %func:u8   c
@@ -3729,6 +3830,8 @@ bf_f40:
     call create_fcb_extent
     jp c, .wrrand0_full
 .wrrand0_write:
+    ld a, 1
+    ld (f40_zfill), a          ; bf_f21_core zero-fills the new block
     jp bf_f21_core
 .wrrand0_ro:
     ld l, a

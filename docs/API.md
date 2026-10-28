@@ -284,8 +284,11 @@ Programs should close any open files before exiting (BDOS F16).
 #### F40 — Write Random with Zero Fill
 - **In**: DE=FCB (R0/R1/R2 set)
 - **Out**: A=0 (OK), 5 (no directory space), 6 (random record overflow)
-- **Note**: Same as F34 in this implementation, except that a missing
-  directory slot returns 5 as defined for F40.
+- **Note**: Same as F34, except that a newly allocated data block is
+  filled with zeros before the record is written (CP/M 3 semantics, so an
+  all-zero record identifies an unwritten random record). The fill writes
+  every record of the block from a zero buffer in common memory and never
+  touches the user's DMA area. A missing directory slot returns 5.
 
 ### CP/M 3 Extended Functions
 

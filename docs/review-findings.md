@@ -34,8 +34,8 @@ Status: `[ ]` open, `[x]` fixed.
   extent.**  A random write to `EX > 0` used the current FCB map, wrote
   the wrong block, and was not closed into the directory.  F34/F40 now
   use `find_fcb_extent` and create the target extent when needed.
-  `DISKTEST` T11 now writes/reads record 200 (EX=1).  F40 zero-fill is
-  still sparse (P2).
+  `DISKTEST` T11 now writes/reads record 200 (EX=1).  F40 zero-fill
+  followed separately (see the P2 list).
   File: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
 
 - [x] **5. `select_drive` errors are ignored by most file functions.**
@@ -215,10 +215,19 @@ set.
   returns `A=0xFF`.  `DISKTEST T10` checks a non-zero count, the 8-record
   drop after writing one 1K block, and the restore after the delete.
   Files: `src/bdos/bdos.zpa`, `src/test/disktest.asm`.
+- [x] **F40 zero-fill.**  A newly allocated data block is written with
+  zeros before the target record, as CP/M 3 requires: `bf_f40` raises a
+  one-shot `f40_zfill` flag, `bf_f21_core` consumes it, and the single
+  block-allocation path calls `zero_fill_block`, which writes every record
+  of the block from a 128-byte zero buffer in common memory (`f40_zero`,
+  above the BDOS stack) so the user's DMA area is untouched.  `DISKTEST
+  T22` covers a fresh block, a reused block whose 0xAA contents must be
+  cleared, and F34 leaving that data in place.
+  Files: `src/bdos/bdos.zpa`, `src/bios/common.zpa`,
+  `src/test/disktest.asm`.
 
 ## P3 — Remaining follow-ups
 
-- F40 zero-fill is sparse.
 - Full `TE_*` / `SCR_RUN_ROUTINE` XBIOS functions.
 - 16-bit block formats (PCW 720K file I/O).
 - Pagination itself has no automated runtime test.

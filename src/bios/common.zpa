@@ -1108,9 +1108,18 @@ bdos_stack equ bdos_stack_base + 128
     assert bdos_stack - bdos_stack_base == 128, "BDOS stack must be 128 bytes"
     assert bdos_stack <= 0x10000, "BDOS stack must fit in common memory"
 
+; Zero-fill source for F40 (Write Random with Zero Fill).  One 128-byte
+; record of zeros in common memory: both the FDC and the RAM-disk FID
+; direct-copy a DMA address at or above C000h, so the BDOS can point the
+; BIOS DMA here without touching the user's buffer.  This sits above the
+; BDOS stack (no image bytes; zero_fill_block clears it on each use).
+f40_zero equ bdos_stack
+    assert f40_zero == bdos_stack, "f40_zero must follow the BDOS stack"
+    assert f40_zero + 128 <= 0x10000, "f40_zero must fit in common memory"
+
 ; ==========================================================================
 ; End of common memory stub
 ; ==========================================================================
-common_end equ bdos_stack
+common_end equ f40_zero + 128
 
     assert common_end <= 0xFFFF, "Common stub overflows bank 3!"

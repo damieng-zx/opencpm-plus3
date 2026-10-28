@@ -1973,74 +1973,29 @@ test21:
     ret
 
 test22:
-    ; === T22: F40 random write ===
+    ; === T22: F40 random write with zero fill ===
     ld de, msg_t22
     ld c, 9
     call BDOS
 
+    ; --- 1. A fresh block: F40 zeroes the records around the target.
     ld hl, fn_test3
     call delete_name
-
     ld hl, fn_test3
-    call set_fcb
-    ld de, FCB1
-    ld c, 22                 ; make
-    call BDOS
-    cp 0xFF
+    call t22_new
     jp z, .t22_fail
-
-    ld hl, DMA
-    ld b, 128
-.t22_fill:
-    ld (hl), 'Q'
-    inc hl
-    djnz .t22_fill
-    ld de, DMA
-    ld c, 26
-    call BDOS
-
-    ld a, 3
-    ld (FCB1 + 33), a
-    xor a
-    ld (FCB1 + 34), a
-    ld (FCB1 + 35), a
-    ld de, FCB1
-    ld c, 40                 ; write random with zero fill
-    call BDOS
-    or a
+    ld a, 'Q'
+    call t22_fill_dma
+    ld c, 40                 ; write random with zero fill, record 3
+    call t22_rand_write
     jp nz, .t22_fail
-
-    ld de, FCB1
-    ld c, 16                 ; close
-    call BDOS
+    call t22_close
 
     ld hl, fn_test3
-    call set_fcb
-    ld de, FCB1
-    ld c, 15                 ; reopen
-    call BDOS
-    cp 0xFF
+    call t22_open
     jp z, .t22_fail
-
-    ld hl, DMA
-    ld b, 128
-.t22_clr:
-    ld (hl), 0
-    inc hl
-    djnz .t22_clr
-    ld de, DMA
-    ld c, 26
-    call BDOS
-
     ld a, 3
-    ld (FCB1 + 33), a
-    xor a
-    ld (FCB1 + 34), a
-    ld (FCB1 + 35), a
-    ld de, FCB1
-    ld c, 33                 ; read random
-    call BDOS
-    or a
+    call t22_read
     jp nz, .t22_fail
     ld a, (DMA)
     cp 'Q'
@@ -2048,10 +2003,111 @@ test22:
     ld a, (DMA + 127)
     cp 'Q'
     jp nz, .t22_fail
+    xor a                    ; records 0-2 must read back as zeros
+    call t22_all_zero
+    jp nz, .t22_fail
+    ld a, 1
+    call t22_all_zero
+    jp nz, .t22_fail
+    ld a, 2
+    call t22_all_zero
+    jp nz, .t22_fail
 
     ld de, FCB1
-    ld c, 19                 ; delete
+    ld c, 19                 ; delete: the block is free again
     call BDOS
+
+    ; --- 2. A reused block: the stale bytes must become zeros.
+    ld hl, fn_test2
+    call delete_name
+    ld hl, fn_test2
+    call t22_new
+    jp z, .t22_fail
+    ld a, 0xAA
+    call t22_fill_dma
+    ld b, 8                  ; one 1K block of 0xAA
+.t22_aa_wr:
+    push bc
+    ld de, FCB1
+    ld c, 21
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t22_fail
+    djnz .t22_aa_wr
+    call t22_close
+    ld de, FCB1
+    ld c, 19
+    call BDOS
+
+    ld hl, fn_test3
+    call t22_new
+    jp z, .t22_fail
+    ld a, 'Q'
+    call t22_fill_dma
+    ld c, 40
+    call t22_rand_write
+    jp nz, .t22_fail
+    call t22_close
+    ld hl, fn_test3
+    call t22_open
+    jp z, .t22_fail
+    xor a                    ; record 0 is zero, not the old 0xAA
+    call t22_all_zero
+    jp nz, .t22_fail
+    ld a, 3
+    call t22_read
+    jp nz, .t22_fail
+    ld a, (DMA)
+    cp 'Q'
+    jp nz, .t22_fail
+    ld de, FCB1
+    ld c, 19
+    call BDOS
+
+    ; --- 3. F34 does not zero fill: the stale 0xAA must survive.
+    ld hl, fn_test2
+    call t22_new
+    jp z, .t22_fail
+    ld a, 0xAA
+    call t22_fill_dma
+    ld b, 8
+.t22_aa_wr2:
+    push bc
+    ld de, FCB1
+    ld c, 21
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t22_fail
+    djnz .t22_aa_wr2
+    call t22_close
+    ld de, FCB1
+    ld c, 19
+    call BDOS
+
+    ld hl, fn_test3
+    call t22_new
+    jp z, .t22_fail
+    ld a, 'Q'
+    call t22_fill_dma
+    ld c, 34                 ; write random (no zero fill)
+    call t22_rand_write
+    jp nz, .t22_fail
+    call t22_close
+    ld hl, fn_test3
+    call t22_open
+    jp z, .t22_fail
+    xor a
+    call t22_read
+    jp nz, .t22_fail
+    ld a, (DMA)
+    cp 0xAA                  ; F34 left the previous contents in place
+    jp nz, .t22_fail
+    ld de, FCB1
+    ld c, 19
+    call BDOS
+
     ld de, msg_pass
     ld c, 9
     call BDOS
@@ -2060,9 +2116,89 @@ test22:
 .t22_fail:
     ld hl, fn_test3
     call delete_name
+    ld hl, fn_test2
+    call delete_name
     ld de, msg_fail
     ld c, 9
     call BDOS
+    ret
+
+; t22_new: HL = 11-byte name; create it.  NZ = success.
+t22_new:
+    call set_fcb
+    ld de, FCB1
+    ld c, 22
+    call BDOS
+    cp 0xFF
+    ret
+
+; t22_open: HL = 11-byte name; reopen it.  NZ = success.
+t22_open:
+    call set_fcb
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    ret
+
+; t22_close: close FCB1.
+t22_close:
+    ld de, FCB1
+    ld c, 16
+    jp BDOS
+
+; t22_fill_dma: A = byte to repeat across the 128-byte DMA buffer.
+t22_fill_dma:
+    ld hl, DMA
+    ld b, 128
+.t22_fill_loop:
+    ld (hl), a
+    inc hl
+    djnz .t22_fill_loop
+    ld de, DMA
+    ld c, 26
+    jp BDOS
+
+; t22_rand_write: write record 3 via the BDOS function in C.
+;   Out: A = BDOS result (Z = success).
+t22_rand_write:
+    ld a, 3
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    call BDOS
+    or a
+    ret
+
+; t22_read: A = random record number; read it into DMA via F33.
+;   Out: A = BDOS result (Z = success).
+t22_read:
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 33
+    call BDOS
+    or a
+    ret
+
+; t22_all_zero: A = random record number; require 128 zero bytes.
+;   Out: Z = the record is all zeros.
+t22_all_zero:
+    call t22_read
+    ret nz
+    ld hl, DMA
+    ld b, 128
+.t22_zero_loop:
+    ld a, (hl)
+    or a
+    ret nz
+    inc hl
+    djnz .t22_zero_loop
+    xor a
     ret
 
 ; --- T23-T26: CP/M 3 extended BDOS functions ---
@@ -2924,7 +3060,7 @@ msg_t18:  db "T18 Extended BDOS$"
 msg_t19:  db "T19 Invalid drives$"
 msg_t20:  db "T20 Directory full$"
 msg_t21:  db "T21 C: ramdisk$"
-msg_t22:  db "T22 F40 random write$"
+msg_t22:  db "T22 F40 zero fill$"
 msg_t23:  db "T23 F44 multi-sector$"
 msg_t24:  db "T24 F108 return code$"
 msg_t25:  db "T25 F111 write block$"
