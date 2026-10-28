@@ -241,6 +241,10 @@ parse_cmd:
     call str_match
     jp z, .do_era
 
+    ld de, cmd_ren
+    call str_match
+    jp z, .do_ren
+
     ; Not a built-in — try loading as .COM file
     ; HL still points to start of command text (str_match preserves HL)
     jp .do_load_com
@@ -743,12 +747,123 @@ parse_cmd:
     call BDOS
     inc a                      ; A = 0xFF (nothing matched) -> Z
     ret nz
-    ld de, msg_era_nf
+    ld de, msg_no_file
     ld c, F_PSTR
     jp BDOS
 
 .era_usage:
     ld de, msg_era_usage
+    ld c, F_PSTR
+    jp BDOS
+
+
+; ==========================================================================
+; .do_ren — REN new=old: rename a file (F23)
+;   Wildcards are rejected: F23 renames every matching entry, so a wildcard
+;   could rename several files to the same name.
+; ==========================================================================
+
+.do_ren:
+    ; Skip the command word and any spaces
+.ren_skip_cmd:
+    ld a, (hl)
+    cp ' '
+    jr z, .ren_skip_sp
+    or a
+    jp z, .ren_usage
+    cp 0x0D
+    jp z, .ren_usage
+    inc hl
+    jr .ren_skip_cmd
+.ren_skip_sp:
+    inc hl
+    ld a, (hl)
+    cp ' '
+    jr z, .ren_skip_sp
+    or a
+    jp z, .ren_usage
+    cp 0x0D
+    jp z, .ren_usage
+    ld (ren_new), hl           ; start of the new name
+
+    ; Find the '=' that separates new from old
+.ren_find_eq:
+    ld a, (hl)
+    or a
+    jp z, .ren_usage
+    cp 0x0D
+    jp z, .ren_usage
+    cp '='
+    jr z, .ren_got_eq
+    inc hl
+    jr .ren_find_eq
+.ren_got_eq:
+    ld (hl), 0                 ; terminate the new name here
+    inc hl
+    ld (ren_old), hl
+
+    ; --- New name ---
+    ld hl, (ren_new)
+    call parse_filename
+    jp c, .ren_usage
+    call _fcb_wild
+    jr z, .ren_wild
+    ld a, (type_fcb)
+    ld (ren_drive), a
+    ld hl, type_fcb + 1
+    ld de, ren_fcb + 17        ; F23 expects the new name at 17..27
+    ld bc, 11
+    ldir
+
+    ; --- Old name ---
+    ld hl, (ren_old)
+    call parse_filename
+    jp c, .ren_usage
+    call _fcb_wild
+    jr z, .ren_wild
+    ld a, (type_fcb)           ; an explicit old drive wins
+    or a
+    jr z, .ren_drive_done
+    ld (ren_drive), a
+.ren_drive_done:
+    ld a, (ren_drive)
+    ld (ren_fcb), a
+    ld hl, type_fcb + 1
+    ld de, ren_fcb + 1
+    ld bc, 11
+    ldir
+
+    ; Zero the fields F23 must not see: EX/S1/S2/RC (12-15), the spare
+    ; byte 16 and the tail (28-35).
+    ld hl, ren_fcb + 12
+    ld b, 5
+.ren_zero_a:
+    ld (hl), 0
+    inc hl
+    djnz .ren_zero_a
+    ld hl, ren_fcb + 28
+    ld b, 8
+.ren_zero_b:
+    ld (hl), 0
+    inc hl
+    djnz .ren_zero_b
+
+    ld de, ren_fcb
+    ld c, 23                   ; F23: Rename File
+    call BDOS
+    inc a                      ; 0xFF (nothing matched) -> Z
+    ret nz
+    ld de, msg_no_file
+    ld c, F_PSTR
+    jp BDOS
+
+.ren_wild:
+    ld de, msg_ren_wild
+    ld c, F_PSTR
+    jp BDOS
+
+.ren_usage:
+    ld de, msg_ren_usage
     ld c, F_PSTR
     jp BDOS
 
@@ -1369,6 +1484,29 @@ _era_all:
     ret
 
 
+; ==========================================================================
+; _fcb_wild — Z if the FCB in type_fcb contains a '?' wildcard
+;   Out: Z set when any name/extension byte is '?'
+;   Clobbers: AF, B, HL
+; ==========================================================================
+; @proc _fcb_wild
+; @out   zero
+; @clobbers af,b,hl
+; @end
+_fcb_wild:
+    ld hl, type_fcb + 1
+    ld b, 11
+.fw_loop:
+    ld a, (hl)
+    cp '?'
+    ret z
+    inc hl
+    djnz .fw_loop
+    ld a, 1
+    or a                       ; NZ: no wildcard found
+    ret
+
+
 ; ------------------------------------------------------------------
 ; to_upper — Convert A to uppercase if lowercase
 ;   In:  A = character
@@ -1589,6 +1727,7 @@ cmd_buf:
 cmd_dir:    db "DIR", 0
 cmd_type:   db "TYPE", 0
 cmd_era:    db "ERA", 0
+cmd_ren:    db "REN", 0
 cmd_help:   db "HELP", 0
 cmd_screen: db "SCREEN", 0
 
@@ -1620,14 +1759,21 @@ msg_era_usage:
 msg_era_all:
     db "ALL (Y/N)? $"
 
-msg_era_nf:
+msg_no_file:
     db "No file", 0x0D, 0x0A, '$'
+
+msg_ren_usage:
+    db "REN new=old", 0x0D, 0x0A, '$'
+
+msg_ren_wild:
+    db "No wildcards", 0x0D, 0x0A, '$'
 
 msg_help:
     db "Built-in commands:", 0x0D, 0x0A
     db "  DIR    - Directory listing (wildcards: * ?)", 0x0D, 0x0A
     db "  TYPE   - Display file", 0x0D, 0x0A
     db "  ERA    - Erase files (wildcards: * ?)", 0x0D, 0x0A
+    db "  REN    - Rename file (new=old)", 0x0D, 0x0A
     db "  SCREEN - Set/query screen width (32, 51 or 64)", 0x0D, 0x0A
     db "  HELP   - This help", 0x0D, 0x0A
     db '$'
@@ -1952,6 +2098,13 @@ parse_fcb:
 ; FCB for TYPE command
 type_fcb:
     ds 36
+
+; REN state: the two halves of "REN new=old" are parsed into type_fcb in
+; turn, then assembled into ren_fcb for F23 (old name 1..11, new 17..27).
+ren_new:   dw 0
+ren_old:   dw 0
+ren_drive: db 0
+ren_fcb:   ds 36
 
 ; DIR state
 cur_drive:        db 0               ; Current drive (0=A:)

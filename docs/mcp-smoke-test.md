@@ -15,7 +15,8 @@ python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3.dsk
 ```
 
 The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, `SCREEN 32`/`SCREEN 51`,
-`ERA` (usage, `No file`, the `ALL (Y/N)?` guard and a real delete),
+`ERA` (usage, `No file`, the `ALL (Y/N)?` guard and a real delete), `REN`
+(`REN new=old`, `No file`, a real rename and the wildcard refusal),
 `DATE`, invalid `D:`, and the C: prompt. They also verify that `CCP.COM` is
 on the disk and staged byte-for-byte at `CCP_STAGE` (bank 6, B000h), and that
 `CPM3.SYS` no longer embeds the CCP image. `SCREEN 64` is checked against the
@@ -51,7 +52,7 @@ The goal is to catch:
 - boot regressions
 - CCP command regressions
 - BBC BASIC launch/exit regressions
-- file operation regressions (`TYPE`, `RENAME`, wildcard `DIR`)
+- file operation regressions (`TYPE`, `ERA`, `REN`, wildcard `DIR`)
 - disk-performance regressions (extra retries or materially higher cycle counts)
 
 ## Setup
@@ -260,13 +261,14 @@ Check:
 
 ### 5. Rename the SUB file
 
-`miniccp` has no built-in `REN`; the disk ships `RENAME.COM`, whose syntax is
-`RENAME NEWNAME OLDNAME` (destination first).
+`miniccp` has a built-in `REN` (`REN NEWNAME=OLDNAME`). The untracked
+`RENAME.COM` from the reference binaries uses the opposite convention
+(`RENAME NEWNAME OLDNAME`); the scripted smoke test uses it when present.
 
 Run:
 
 ```text
-RENAME TEST.SUB RPED.SUB
+REN TEST.SUB=RPED.SUB
 DIR A:*.SUB
 ```
 

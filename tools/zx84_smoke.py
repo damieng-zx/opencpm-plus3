@@ -585,6 +585,36 @@ class Smoke:
         self.command("DIR ERA1.TXT", 500)
         self.expect("ERA deleted the file", "No files")
 
+    def run_ren(self) -> None:
+        """REN NEW=OLD: usage, missing old, a real rename and wildcards."""
+        self.command("REN", 500)
+        self.expect("REN usage", "REN new=old")
+
+        self.command("REN NEW.TXT=NOSUCH.TXT", 600)
+        self.expect("REN missing", "No file")
+
+        # PIP is optional; without it there is nothing safe to rename.
+        self.command("DIR PIP.COM", 500)
+        if "PIP      COM" not in self.text():
+            self.log("PIP.COM not on the disk; skipping the REN rename check")
+            return
+        self.command("PIP REN1.TXT=SMOKE.TXT", 800)
+        self.command("REN REN2.TXT=REN1.TXT", 600)
+        self.command("DIR REN2.TXT", 500)
+        self.expect("REN new name", "REN2     TXT")
+        self.command("DIR REN1.TXT", 500)
+        self.expect("REN old name gone", "No files")
+
+        # Wildcards are refused and leave the file alone.
+        self.command("REN BAD.TXT=*.TXT", 600)
+        self.expect("REN wildcard", "No wildcards")
+        self.command("DIR REN2.TXT", 500)
+        self.expect("REN wildcard changed nothing", "REN2     TXT")
+
+        self.command("ERA REN2.TXT", 500)
+        self.command("DIR REN2.TXT", 500)
+        self.expect("REN cleanup", "No files")
+
     def run_screen64(self) -> None:
         """SCREEN 64: 4-pixel font, two characters per attribute cell."""
         self.command("SCREEN 64", 800)
@@ -680,6 +710,7 @@ class Smoke:
         self.run_bdostest()
         self.run_ccp()
         self.run_era()
+        self.run_ren()
         self.run_screen64()
         self.run_terminal_escapes()
         self.run_ccp_external()

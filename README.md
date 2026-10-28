@@ -24,13 +24,29 @@ for this project.
 - **Banked memory**: 61K TPA, a separate system bank, and a common-memory stub
   that bridges TPA calls into the BIOS/BDOS.
 - **MiniCCP**: `CCP.COM`, loaded from the boot disk at cold boot like real
-  CP/M 3, with DIR, TYPE, ERA, HELP and SCREEN built in, `.COM` loading, SUBMIT
+  CP/M 3, with DIR, TYPE, ERA, REN, HELP and SCREEN built in, `.COM` loading, SUBMIT
   chaining and F47 program chaining.
 - **C: RAM disk**: optional 16K `RAMDISK.FID` in bank 7.
 - **Clock**: tick-driven date/time (F104/F105), maintained by an ISR in common
   memory so it keeps running while a TPA program executes.
 - **Tooling**: a DSK image builder, font generator and emulator-driven test
   runners.
+
+## CCP commands
+
+Everything not built in is loaded from `?.COM` on the current drive or the
+SETDEF search path.
+
+| Command | Action |
+|---|---|
+| `DIR [filespec]` | directory listing (wildcards; the column count follows the screen width) |
+| `TYPE filespec` | display a text file |
+| `ERA filespec` | delete files (wildcards; `*.*` asks `ALL (Y/N)?` first) |
+| `REN new=old` | rename a file (wildcards are refused) |
+| `SCREEN [32\|51\|64]` | set or query the screen width |
+| `HELP` | list the built-ins |
+
+`A:`, `B:` and `C:` prefixes are accepted wherever a filespec is expected.
 
 ## Compatibility
 
@@ -106,8 +122,6 @@ Also supported:
   broke PIP's copy, so the single-record behaviour stands until that is
   understood.
 - **16-bit block formats** (PCW 720K file I/O).
-- **Built-in REN**, so a source-only disk can rename files without a
-  third-party `.COM` (ERA is already built in).
 - **Richer command-line file specs** (wildcards for `TYPE`, and the like).
 
 ## Out of scope
