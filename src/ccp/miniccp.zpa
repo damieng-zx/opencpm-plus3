@@ -25,6 +25,7 @@ CCP_CHAIN_ADDR equ 0xF607      ; SCB[0x07]: BDOS F47 chain pending
 CCP_RC_ADDR    equ 0xF608      ; SCB[0x08]: program return code (F108)
 
 ; BDOS function numbers
+F_CIN   equ 1                  ; Console input (blocking, echoes)
 F_COUT  equ 2                  ; Console output (E = char)
 F_PSTR  equ 9                  ; Print string (DE = addr, '$' terminated)
 F_RDBUF equ 10                 ; Read console buffer (DE = buf addr)
@@ -235,6 +236,10 @@ parse_cmd:
     ld de, cmd_screen
     call str_match
     jp z, .do_screen
+
+    ld de, cmd_era
+    call str_match
+    jp z, .do_era
 
     ; Not a built-in — try loading as .COM file
     ; HL still points to start of command text (str_match preserves HL)
@@ -680,6 +685,72 @@ parse_cmd:
     ld c, F_PSTR
     call BDOS
     ret
+
+
+; ==========================================================================
+; .do_era — ERA filespec: delete one or more files (F19, wildcards allowed)
+;   An all-wildcard spec (ERA *.*) asks for confirmation, like CP/M.
+; ==========================================================================
+
+.do_era:
+    ; Skip the command word
+.era_skip_cmd:
+    ld a, (hl)
+    cp ' '
+    jr z, .era_skip_sp
+    or a
+    jr z, .era_usage
+    cp 0x0D
+    jr z, .era_usage
+    inc hl
+    jr .era_skip_cmd
+.era_skip_sp:
+    inc hl
+    ld a, (hl)
+    cp ' '
+    jr z, .era_skip_sp
+    or a
+    jr z, .era_usage
+    cp 0x0D
+    jr z, .era_usage
+
+    ; HL = filespec.  parse_filename handles an optional "X:" prefix.
+    call parse_filename
+    jr c, .era_usage
+
+    ; An all-wildcard spec needs an explicit Y, like the DRI CCP.
+    call _era_all
+    jr nz, .era_delete
+    ld de, msg_era_all
+    ld c, F_PSTR
+    call BDOS
+    ld c, F_CIN
+    call BDOS
+    push af
+    ld de, msg_crlf
+    ld c, F_PSTR
+    call BDOS
+    pop af
+    cp 'Y'
+    jr z, .era_delete
+    cp 'y'
+    jr z, .era_delete
+    ret
+
+.era_delete:
+    ld de, type_fcb
+    ld c, 19                   ; F19: Delete File (wildcards allowed)
+    call BDOS
+    inc a                      ; A = 0xFF (nothing matched) -> Z
+    ret nz
+    ld de, msg_era_nf
+    ld c, F_PSTR
+    jp BDOS
+
+.era_usage:
+    ld de, msg_era_usage
+    ld c, F_PSTR
+    jp BDOS
 
 
 ; ==========================================================================
@@ -1276,6 +1347,28 @@ str_match:
     ret
 
 
+; ==========================================================================
+; _era_all — Z if the parsed spec is all wildcards (ERA *.*)
+;   Out: Z set when all 11 name/extension bytes are '?'
+;   Clobbers: AF, B, HL
+; ==========================================================================
+; @proc _era_all
+; @out   zero
+; @clobbers af,b,hl
+; @end
+_era_all:
+    ld hl, type_fcb + 1
+    ld b, 11
+.era_all_loop:
+    ld a, (hl)
+    cp '?'
+    ret nz
+    inc hl
+    djnz .era_all_loop
+    xor a                      ; every byte is '?' — Z set
+    ret
+
+
 ; ------------------------------------------------------------------
 ; to_upper — Convert A to uppercase if lowercase
 ;   In:  A = character
@@ -1495,6 +1588,7 @@ cmd_buf:
 ; Command names (uppercase, null-terminated)
 cmd_dir:    db "DIR", 0
 cmd_type:   db "TYPE", 0
+cmd_era:    db "ERA", 0
 cmd_help:   db "HELP", 0
 cmd_screen: db "SCREEN", 0
 
@@ -1520,10 +1614,20 @@ msg_type_usage:
 msg_type_nf:
     db "File not found", 0x0D, 0x0A, '$'
 
+msg_era_usage:
+    db "ERA filespec", 0x0D, 0x0A, '$'
+
+msg_era_all:
+    db "ALL (Y/N)? $"
+
+msg_era_nf:
+    db "No file", 0x0D, 0x0A, '$'
+
 msg_help:
     db "Built-in commands:", 0x0D, 0x0A
     db "  DIR    - Directory listing (wildcards: * ?)", 0x0D, 0x0A
     db "  TYPE   - Display file", 0x0D, 0x0A
+    db "  ERA    - Erase files (wildcards: * ?)", 0x0D, 0x0A
     db "  SCREEN - Set/query screen width (32, 51 or 64)", 0x0D, 0x0A
     db "  HELP   - This help", 0x0D, 0x0A
     db '$'

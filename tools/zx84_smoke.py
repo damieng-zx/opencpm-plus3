@@ -501,9 +501,11 @@ class Smoke:
         # "SMOKE" -> SUBMIT SMOKE.SUB chain.
         if "SUBMIT   COM" in listing and "SMOKE    SUB" in listing:
             self.command("SUBMIT SMOKE.SUB", 2000)
-            self.expect("SUBMIT file", "Built-in commands:", "CPM3     SYS", "A>")
+            # SMOKE.SUB runs HELP then DIR; check the last help line rather
+            # than the header, which can scroll off above the listing.
+            self.expect("SUBMIT file", "This help", "CPM3     SYS", "A>")
             self.command("SMOKE", 2000)
-            self.expect("SUBMIT chain", "Built-in commands:", "CPM3     SYS", "A>")
+            self.expect("SUBMIT chain", "This help", "CPM3     SYS", "A>")
             self.command("SUBMIT NOPE.SUB", 900)
             self.expect("SUBMIT missing", "No 'SUB' File Found", "A>")
             if "PARAM    SUB" in listing:
@@ -553,6 +555,35 @@ class Smoke:
             self.expect("A: prompt", "A>")
         else:
             self.log("PIP.COM not on the disk; skipping the C: copy check")
+
+    def run_era(self) -> None:
+        """ERA: usage, missing file, the *.* guard and a real delete."""
+        self.command("ERA", 500)
+        self.expect("ERA usage", "ERA filespec")
+
+        self.command("ERA NOSUCH.TXT", 600)
+        self.expect("ERA missing", "No file")
+
+        # An all-wildcard delete must ask first; N leaves the disk alone.
+        self.command("ERA *.*", 600)
+        self.expect("ERA *.* prompt", "ALL (Y/N)?")
+        self.key("n", 100)
+        self.mcp.call("run", {"frames": 500})
+        self.expect("ERA *.* aborted", "A>")
+        self.command("DIR CPM3.SYS", 500)
+        self.expect("ERA *.* deleted nothing", "CPM3     SYS")
+
+        # Real deletion, using PIP to make a copy when it is on the disk.
+        self.command("DIR PIP.COM", 500)
+        if "PIP      COM" not in self.text():
+            self.log("PIP.COM not on the disk; skipping the ERA delete check")
+            return
+        self.command("PIP ERA1.TXT=SMOKE.TXT", 800)
+        self.command("DIR ERA1.TXT", 500)
+        self.expect("ERA copy exists", "ERA1     TXT")
+        self.command("ERA ERA1.TXT", 500)
+        self.command("DIR ERA1.TXT", 500)
+        self.expect("ERA deleted the file", "No files")
 
     def run_screen64(self) -> None:
         """SCREEN 64: 4-pixel font, two characters per attribute cell."""
@@ -648,6 +679,7 @@ class Smoke:
         self.run_disktest()
         self.run_bdostest()
         self.run_ccp()
+        self.run_era()
         self.run_screen64()
         self.run_terminal_escapes()
         self.run_ccp_external()

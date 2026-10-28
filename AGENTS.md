@@ -176,13 +176,13 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/boot/loader.asm` — Stage 2: finds and loads CPM3.SYS from disk
 - `src/bios/bios.asm` — Init + BIOS (PHASE 0000 for bank 4) + common stub (PHASE F600)
 - `src/bios/common.asm` — Common memory stub: BDOS dispatch, bank switching, inter-bank copy
-- `src/bios/screen.asm` — 51×24 display, 5px non-byte-aligned font rendering
+- `src/bios/screen.asm` — 32/51/64-column text display (8px, 5px and 4px fonts)
 - `src/bios/keyboard.asm` — 8×5 matrix scan, ASCII mapping, debounce/repeat
 - `src/bios/fdc765.asm` — uPD765A driver with sector deblocking (512→128 byte)
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
 - `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/compression.ch8` by `tools/mkfont64.py`
 - `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O)
-- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, VER, HELP, DUMP, .COM loading; built as `CCP.COM`
+- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, HELP and SCREEN built in, plus `.COM` loading; built as `CCP.COM`
 - `tools/mkdsk.py` — DSK image builder
 - `tools/zpa.py` — ZPA preprocessor (see **ZPA Preprocessing**)
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)
