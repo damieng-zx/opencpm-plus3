@@ -525,7 +525,7 @@ jump table directly:
 | 29 | XMOVE | B=dst,C=src | — | Set up cross-bank move. |
 | 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions).  See [XBIOS/TE Interface](cpm-plus-xbios.md). |
 | 31 | — | — | — | Reserved (JP 0). |
-| 32 | SCRMODE | A=32 or 51 | — | Set screen column count (clears screen). |
+| 32 | SCRMODE | A=32, 51 or 64 | — | Set screen column count (clears screen). |
 
 ---
 
@@ -537,10 +537,20 @@ jump table directly:
 |------|---------|------|------------|------|
 | 51-col | 51 | 24 | 5px | 5px non-byte-aligned |
 | 32-col | 32 | 24 | 8px | 8px byte-aligned |
+| 64-col | 64 | 24 | 4px | 4px, two characters per attribute cell |
 
-Switch modes: `SCREEN 51` or `SCREEN 32` from the CCP, or BIOS fn 32.
+Switch modes: `SCREEN 51`, `SCREEN 32` or `SCREEN 64` from the CCP, or
+BIOS fn 32.  64 columns is an extension: the +3 manual's `ESC 3` only
+defines 32, 51 and 80, and 80 is still unimplemented.
 
 Default: 51 columns.
+
+64 columns is the widest mode with a full 4-pixel pitch (64 x 4 = 256
+pixels).  Its font is the "Compression" ZX Origins typeface; because a
+4-pixel glyph fits in one nibble, each 8-pixel attribute cell holds
+exactly two characters, so colour and inverse-video boundaries align
+with the text.  Characters outside ASCII are blank in this mode; 51 and
+32 columns keep the full Amstrad graphics set.
 
 The current column count minus 1 is stored in the SCB at offset 0x1A
 (`conwidth`).
@@ -978,7 +988,7 @@ Disk:
   F26 = set DMA  F31 = get DPB       F46 = free space
 
 Screen:
-  51x24 or 32x24 (BIOS fn 32 to switch)
+  51x24, 32x24 or 64x24 (BIOS fn 32 to switch)
   ESC E = clear     ESC H = home
   ESC Y r c = position (+32 offset to both)
   ESC J = erase to end of screen

@@ -53,7 +53,7 @@ class DirectoryScan(unittest.TestCase):
     def test_scan_recognises_ccp_and_finishes(self):
         text = source("src/bios/bios.zpa")
         self.assertIn('_lf_name_ccp: db "CCP     COM"', text)
-        self.assertIn("cp 15", text)      # font51, font32, FID and CCP
+        self.assertIn("cp 31", text)      # font51, font32, font64, CCP and FID
         body = text[text.index(".lf_try_ccp:"):text.index(".lf_try_fid:")]
         self.assertIn("ld de, _ccp_al", body)
         self.assertIn("ld bc, 16", body)

@@ -8,6 +8,7 @@
       "build/CCP.COM",
       "src/bios/font51.bin",
       "src/bios/font32.bin",
+      "src/bios/font64.bin",
       "build/RAMDISK.FID"
     ]
   },

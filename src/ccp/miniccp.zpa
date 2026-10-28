@@ -635,12 +635,22 @@ parse_cmd:
 
 .try_51:
     cp '5'
-    jr nz, .screen_bad
+    jr nz, .try_64
     inc hl
     ld a, (hl)
     cp '1'
     jp nz, .screen_bad
     ld a, 51
+    jr .screen_set
+
+.try_64:
+    cp '6'
+    jr nz, .screen_bad
+    inc hl
+    ld a, (hl)
+    cp '4'
+    jp nz, .screen_bad
+    ld a, 64
 
 .screen_set:
     ld (screen_biospb + 1), a  ; Patch A field in BIOSPB (byte 1 = A param)
@@ -1514,13 +1524,13 @@ msg_help:
     db "Built-in commands:", 0x0D, 0x0A
     db "  DIR    - Directory listing (wildcards: * ?)", 0x0D, 0x0A
     db "  TYPE   - Display file", 0x0D, 0x0A
-    db "  SCREEN - Set/query screen width (32 or 51)", 0x0D, 0x0A
+    db "  SCREEN - Set/query screen width (32, 51 or 64)", 0x0D, 0x0A
     db "  HELP   - This help", 0x0D, 0x0A
     db '$'
 
 str_screen_mode:  db "Mode: $"
 str_cols_crlf:    db " columns", 0x0D, 0x0A, '$'
-str_screen_usage: db "Usage: SCREEN 32|51", 0x0D, 0x0A, '$'
+str_screen_usage: db "Usage: SCREEN 32|51|64", 0x0D, 0x0A, '$'
 
 ; ------------------------------------------------------------------
 ; print_hex16 — Print HL as 4-digit hex

@@ -89,7 +89,7 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     --boot build/bootsect.bin \
     --system build/loader.bin \
     --add build/CPM3.SYS build/CCP.COM \
-    src/bios/font51.bin src/bios/font32.bin \
+    src/bios/font51.bin src/bios/font32.bin src/bios/font64.bin \
     build/bdostest.com build/xtetest.com \
     build/disktest.com build/termtest.com build/systest.com \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \

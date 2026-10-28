@@ -17,7 +17,9 @@ python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3.dsk
 The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, `SCREEN 32`/`SCREEN 51`,
 `DATE`, invalid `D:`, and the C: prompt. They also verify that `CCP.COM` is
 on the disk and staged byte-for-byte at `CCP_STAGE` (bank 6, B000h), and that
-`CPM3.SYS` no longer embeds the CCP image. The runner also runs `SUBMIT SMOKE.SUB`, the
+`CPM3.SYS` no longer embeds the CCP image. `SCREEN 64` is checked against the
+font binary pixel-for-pixel (two 4-pixel glyphs per attribute cell) and `DIR`
+must switch to four entries per line. The runner also runs `SUBMIT SMOKE.SUB`, the
 implicit `SMOKE` -> `SUBMIT SMOKE.SUB` chain, the missing-file path,
 `$1`/`$2` substitution via `SUBMIT PARAM SMOKE.TXT *.TXT`, and the
 missing-parameter error. When the untracked reference binaries are on the

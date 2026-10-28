@@ -65,7 +65,7 @@ boot without `CCP.COM` prints a diagnostic and halts.
 **System mode (mode 3: banks 4,7,6,3)**:
 - **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers
 - **4000-7FFF**: Bank 7 — C: RAM disk (16K, owned by `RAMDISK.FID`)
-- **8000-BFFF**: Bank 6 — fonts at 8000h-8FFFh, optional RAMDISK.FID at 9000h, runtime screen/FDC/BDOS buffers at A000h-A8FFh, staged `CCP.COM` at B000h-BFFFh
+- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, runtime screen/scroll buffers at A000h-A8FFh, staged `CCP.COM` at B000h-BFFFh
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
 
 **Screen access (mode 2: banks 4,5,6,3)**:
@@ -114,11 +114,13 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/bios/keyboard.asm` — 8×5 matrix scan, ASCII mapping, debounce/repeat
 - `src/bios/fdc765.asm` — uPD765A driver with sector deblocking (512→128 byte)
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
+- `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/compression.ch8` by `tools/mkfont64.py`
 - `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O)
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, VER, HELP, DUMP, .COM loading; built as `CCP.COM`
 - `tools/mkdsk.py` — DSK image builder
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)
 - `tools/check_ccp.py` — Fails the build if `CCP.COM` does not fit the bank-6 staging window
+- `tools/mkfont64.py` — Builds `font64.bin` from the Compression `.ch8` (`--check` verifies the committed binary)
 - `tools/z80lint.py` — Z80 linter, all build-gated: stack balance across all return paths, register clobbering after CALL, dead stores, Clobbers/Out annotation verification (declared vs actual effects), DI/EI balance, 1FFD write discipline, duplicate labels. `--suggest-anno` prints computed effects as paste-ready Clobbers: lines
 
 ## Conventions

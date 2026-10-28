@@ -9,9 +9,9 @@
 ;     F600-FFFF   Common memory stub (bank 3, always visible)
 ;
 ;   System (mode 3: banks 4,7,6,3):
-;     0000-3FFF   Bank 4 — BIOS, BDOS, drivers, font, buffers
-;     4000-7FFF   Bank 7 — System data / growth
-;     8000-BFFF   Bank 6 — Reserved for growth
+;     0000-3FFF   Bank 4 — BIOS, BDOS, drivers, font loaders, buffers
+;     4000-7FFF   Bank 7 — C: RAM disk (16K) when RAMDISK.FID is loaded
+;     8000-BFFF   Bank 6 — fonts, RAMDISK.FID, FDC deblock buffer, text buffers
 ;     F600-FFFF   Common memory stub (bank 3, always visible)
 ;
 ;   Screen access (mode 2: banks 4,5,6,3):
@@ -159,7 +159,7 @@ fn_stbnk: jp set_bnk               ; 28: Set DMA bank
 fn_xmov:  jp bios_xmove            ; 29: Set move banks
         jp 0                     ; 30: reserved
         jp 0                     ; 31: reserved
-fn_scrm: jp scr_set_cols          ; 32: SCRMODE — set column count (A=32 or 51)
+fn_scrm: jp scr_set_cols          ; 32: SCRMODE — set column count (A=32, 51 or 64)
 
 
 ; ==========================================================================
@@ -750,12 +750,13 @@ MSG_NO_CCP:
 
 
 ; ==========================================================================
-; load_fonts — Directory scan for FONT51.BIN, FONT32.BIN, CCP.COM, RAMDISK.FID
+; load_fonts — Directory scan for FONT51/FONT32/FONT64/CCP/RAMDISK
 ;   Scans the CP/M directory (track 1, physical sectors 1-4) once, records
-;   the blocks of the files we need, then loads the two fonts into bank 6
+;   the blocks of the files we need, then loads the three fonts into bank 6
 ;   (always visible in system mode):
 ;     FONT51.BIN → 0x8000 (5px-wide, used for 51-col mode)
 ;     FONT32.BIN → 0x8800 (8px-wide, used for 32-col mode)
+;     FONT64.BIN → 0x9400 (4px-wide, used for 64-col mode)
 ;   CCP.COM is only *recorded* here (see load_ccp); load_fonts leaves the
 ;   motor on and drive A: selected for it and for load_fid.
 ;   Called from cold_boot after fdc_init.  fdc_init leaves the motor off,
@@ -776,6 +777,8 @@ load_fonts:
     ld (_font51_blk1), a
     ld (_font32_blk0), a
     ld (_font32_blk1), a
+    ld (_font64_blk0), a
+    ld (_font64_blk1), a
     ld (_ccp_al), a                 ; CCP not found yet
     ld (_fid_block), a              ; FID not yet found; load_fid will check this
 
@@ -811,8 +814,8 @@ load_fonts:
     pop bc
 
     ld a, (_lf_found)
-    cp 15
-    jr z, .lf_dsec_done             ; found font51, font32, CCP, FID — done early
+    cp 31
+    jr z, .lf_dsec_done             ; found all five files — done early
     inc c
     jr .lf_dsec
 
@@ -826,6 +829,11 @@ load_fonts:
     ld de, 0x8800
     ld b, 2
     call _lf_load_n                 ; load font32 → bank 6 at 0x8800
+
+    ld hl, _font64_blk0
+    ld de, 0x9400
+    ld b, 2
+    call _lf_load_n                 ; load font64 → bank 6 at 0x9400
     ret
 
 
@@ -868,7 +876,7 @@ _lf_check_entry:
     ld b, 11
     call _lf_cmp11
     pop hl
-    jr nz, .lf_try_ccp
+    jr nz, .lf_try64
 
     ld bc, 16
     add hl, bc
@@ -879,6 +887,27 @@ _lf_check_entry:
     ld (_font32_blk1), a
     ld a, (_lf_found)
     or 0x02
+    ld (_lf_found), a
+    ret
+
+.lf_try64:
+    push hl
+    inc hl
+    ld de, _lf_name64
+    ld b, 11
+    call _lf_cmp11
+    pop hl
+    jr nz, .lf_try_ccp
+
+    ld bc, 16
+    add hl, bc
+    ld a, (hl)
+    ld (_font64_blk0), a
+    inc hl
+    ld a, (hl)
+    ld (_font64_blk1), a
+    ld a, (_lf_found)
+    or 0x10
     ld (_lf_found), a
     ret
 
@@ -1068,11 +1097,13 @@ _lf_div9:
 
 
 ; --- Font/FID/CCP loader data ---
-_lf_found:    db 0                  ; bit 0=font51, 1=font32, 2=fid, 3=ccp
+_lf_found:    db 0                  ; bit 0=font51, 1=font32, 2=fid, 3=ccp, 4=font64
 _font51_blk0: db 0                  ; first block number of FONT51.BIN
 _font51_blk1: db 0                  ; second block number
 _font32_blk0: db 0                  ; first block number of FONT32.BIN
 _font32_blk1: db 0
+_font64_blk0: db 0                  ; first block number of FONT64.BIN
+_font64_blk1: db 0
 _fid_block:   db 0                  ; first block number of RAMDISK.FID (0 = absent)
 _ccp_al:      ds 16                 ; CCP.COM allocation map (0 = end of file)
 _ccp_len:     dw 0                  ; bytes staged at CCP_STAGE (0 = missing)
@@ -1080,6 +1111,7 @@ _lf_abs_phys: dw 0                  ; scratch: current absolute physical sector
 _lf_sec_id:   db 0                  ; scratch: sector ID saved across fdc_seek
 _lf_name51:   db "FONT51  BIN"      ; 11-char CP/M name (6+2spaces+3ext)
 _lf_name32:   db "FONT32  BIN"
+_lf_name64:   db "FONT64  BIN"
 _lf_name_ccp: db "CCP     COM"
 _lf_name_fid: db "RAMDISK FID"
 _fid_magic:   db "OCFID", 0         ; 6-byte signature inside RAMDISK.FID

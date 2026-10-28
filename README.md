@@ -10,7 +10,7 @@ All code is original Z80 assembly — the BIOS, BDOS, CCP, drivers, and tools ar
 
 ### Features
 
-- **51x24 and 32x24 screen modes**
+- **51x24, 32x24 and 64x24 screen modes** (`SCREEN 32|51|64`)
 - **BDOS** with console I/O, file operations and extended functions (F46 free-space accounting is a stub)
 - **uPD765A FDC driver** with 512->128 byte sector deblocking
 - **Banked memory** - TPA mode (~61K user space) and system mode with bank switching

@@ -200,6 +200,8 @@ class Smoke:
         self.con_mode = label_address("con_mode")
         self.esc_state = label_address("esc_state")
         self.ccp_stage = label_address("CCP_STAGE")
+        self.font_ptr = label_address("font_ptr")
+        self.scb_conwidth = label_address("scb_conwidth")
         self.history: list[str] = []
 
     def log(self, msg: str) -> None:
@@ -217,7 +219,7 @@ class Smoke:
 
     def screen(self) -> list[str]:
         cols = self.memory(4, self.scr_cols, 1)[0]
-        if cols not in (32, 51):
+        if cols not in (32, 51, 64):
             cols = COLS
         data = self.memory(self.cb_bank, self.cb, cols * ROWS)
         if len(data) < cols * ROWS:
@@ -552,6 +554,60 @@ class Smoke:
         else:
             self.log("PIP.COM not on the disk; skipping the C: copy check")
 
+    def run_screen64(self) -> None:
+        """SCREEN 64: 4-pixel font, two characters per attribute cell."""
+        self.command("SCREEN 64", 800)
+        if self.memory(4, self.scr_cols, 1)[0] != 64:
+            raise SmokeError("SCREEN 64 did not set scr_cols=64")
+        font = self.memory(4, self.font_ptr, 2)
+        if int.from_bytes(font, "little") != 0x9400:
+            raise SmokeError(
+                f"SCREEN 64 selected font {font.hex()}, expected 9400")
+        if self.memory(3, self.scb_conwidth, 1)[0] != 63:
+            raise SmokeError("SCREEN 64 did not update SCB conwidth to 63")
+        self.expect("SCREEN 64 prompt", "A>")
+
+        # The prompt sits on the first populated row: two 4-pixel glyphs
+        # packed into one byte.  Bank 5 is not mapped while the CPU idles in
+        # the BDOS, but the last _page_out flushed it, so the cold copy is
+        # current and needs no paging tricks.
+        ccp = (ROOT / "src" / "bios" / "font64.bin").read_bytes()
+        rows = self.screen()
+        row = next(i for i, line in enumerate(rows) if line.startswith("A>"))
+        expect = bytes((ccp[ord("A") * 8 + r] & 0xF0) | (ccp[ord(">") * 8 + r] >> 4)
+                       for r in range(8))
+        base = 0x4000 + (row >> 3) * 0x800 + (row & 7) * 0x20
+        got = bytes(self.memory(5, base + r * 0x100, 1)[0] for r in range(8))
+        if got != expect:
+            raise SmokeError(
+                f"64-col glyphs at row {row}: screen {got.hex()} != font {expect.hex()}")
+
+        # DIR formats from the SCB width: 64 columns means four entries a line.
+        self.command("DIR", 900)
+        listing = self.text()
+        line = next((l for l in listing.splitlines() if "CPM3" in l), "")
+        if "FONT32" not in line:
+            raise SmokeError(
+                f"DIR did not use four columns at 64 -- line: {line!r}\n{listing}")
+        self.log(f"DIR at 64: {line.strip()}")
+
+        # Scrolling at 64: repeated listings must scroll cleanly, not smear.
+        # (The row table and screen-row copy are width-driven; this is the
+        # only place a wrong width would show up as a corrupt screen.)
+        for _ in range(3):
+            self.command("DIR", 900)
+        rows = self.screen()
+        if not rows[0].strip():
+            raise SmokeError("64-col scroll left row 0 blank")
+        last = [i for i, r in enumerate(rows) if r.strip()][-1]
+        if not rows[last].startswith("A>"):
+            raise SmokeError(f"64-col scroll: last line {rows[last]!r}")
+
+        self.command("SCREEN 51", 800)
+        if self.memory(4, self.scr_cols, 1)[0] != 51:
+            raise SmokeError("SCREEN 51 did not restore 51 columns")
+        self.expect("SCREEN 51 prompt", "A>")
+
     def run_ccp_external(self) -> None:
         """CCP.COM lives on the disk and is staged at CCP_STAGE on cold boot."""
         ccp = (ROOT / "build" / "CCP.COM").read_bytes()
@@ -592,6 +648,7 @@ class Smoke:
         self.run_disktest()
         self.run_bdostest()
         self.run_ccp()
+        self.run_screen64()
         self.run_terminal_escapes()
         self.run_ccp_external()
         self.check_fdc()

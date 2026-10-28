@@ -108,7 +108,9 @@ alv_b:      equ 0xA800
 
 ; Sector deblocking buffer (one physical sector = 512 bytes).  Filled before
 ; use by the FDC driver, so it does not need to be stored in CPM3.SYS.
-deblock_buf equ 0xA500
+; It sits between the FONT64 image (9400-9BFF) and the text buffers (A000),
+; clear of the 64-column character buffer.
+deblock_buf equ 0x9C00
 
 ; Deblocking state
 deblock_drv:  db 0xFF          ; Drive of buffered sector (FF=invalid)

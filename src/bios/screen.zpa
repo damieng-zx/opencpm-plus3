@@ -2,12 +2,15 @@
 ; CP/M 3.1 Screen Driver for ZX Spectrum +3
 ; ==========================================================================
 ;
-; 51-column × 24-row text display using 5×8 pixel font.
-;   51 × 5 = 255 pixels (fits 256-pixel width)
-;   24 × 8 = 192 pixels (exact Spectrum height)
+; Three text modes, all 24 rows (24 x 8 = 192 pixels, exact Spectrum height):
 ;
-; Characters are NOT byte-aligned. A 5-pixel-wide character at column C
-; starts at pixel C*5. The character may straddle two screen bytes.
+;   51 x 24   5-pixel font, 255 pixels.  Characters are NOT byte-aligned: a
+;             glyph at column C starts at pixel C*5 and may straddle two
+;             screen bytes, so the renderer has eight shift variants.
+;   32 x 24   8-pixel font, 256 pixels, byte-aligned, one byte per glyph row.
+;   64 x 24   4-pixel font ("Compression"), 64*4 = 256 pixels exactly.  A
+;             glyph lives in one nibble of one byte, so it never spills and
+;             consecutive characters need no shifting - the cheapest path.
 ;
 ; Spectrum screen address:  010 TT SSS RRR CCCCC
 ;   TT    = screen third (0-2)
@@ -31,7 +34,7 @@
 ; ==========================================================================
 
 ; --- Constants ---
-SCR_COLS_MAX equ 51            ; Maximum/buffer column count (always 51)
+SCR_COLS_MAX equ 64            ; Largest mode (64x4 = 256 pixels)
 SCR_ROWS    equ 24
 SCR_BASE    equ 0x4000
 SCR_ATTR    equ 0x5800
@@ -81,14 +84,15 @@ scr_paper_br: db 0             ; Paper bright: 0 or 1
 scr_flash:    db 0             ; Flash: 0x00 or 0x80
 scr_attr:     db DEFAULT_ATTR  ; Computed attribute byte (F B PPP III)
 scr_border_v: db BORDER_COL    ; Current border colour 0-7
-scr_cols:     db 51            ; Runtime column count (32 or 51)
+scr_cols:     db 51            ; Runtime column count (32, 51 or 64)
 scr_wrap:     db 1             ; 1 = wrap at the right edge (ESC v/w)
-font_ptr:     dw 0x8000       ; Active font in bank 6 (0x8000=51col, 0x8800=32col)
+font_ptr:     dw 0x8000       ; Active font in bank 6 (8000=51col, 8800=32col, 9400=64col)
 
 ; The character buffer and row table are runtime-initialised and are not
 ; stored in CPM3.SYS.  Bank 6 is mapped at 8000h in both system mode
-; (4,7,6,3) and screen mode (4,5,6,3).  Fonts occupy 8000h-8FFFh and the
-; optional RAMDISK.FID starts at 9000h, so these buffers live at A000h.
+; (4,7,6,3) and screen mode (4,5,6,3).  Fonts occupy 8000h-8FFFh (51/32) and
+; 9400h-9BFFh (64), the optional RAMDISK.FID starts at 9000h, and the FDC
+; deblock buffer lives at 9C00h, so the text buffers start at A000h.
 char_buffer equ 0xA000
 
 ; Row -> char_buffer offset table. Populated by scr_init from scr_cols.
@@ -899,6 +903,8 @@ _put_attr:
     add hl, hl
     add hl, hl                 ; row * 32
     ld a, (scr_cols)
+    cp 64
+    jr z, .pa_64
     cp 32
     ld a, c
     jr z, .pa_32
@@ -915,6 +921,11 @@ _put_attr:
     srl a
     srl a
     srl a                      ; pixel_x / 8
+    jr .pa_add
+.pa_64:
+    ld a, c
+    srl a                      ; 4-pixel pitch: two characters per 8x8 cell
+.pa_add:
     ld e, a
     ld d, 0
     add hl, de
@@ -1163,6 +1174,8 @@ _render_char:
     ld a, (scr_cols)
     cp 32
     jr z, .render32
+    cp 64
+    jr z, .render64
 
     ; --- 51-col path: pixel_x = col * 5, non-byte-aligned ---
     ld a, c
@@ -1222,6 +1235,56 @@ _render_char:
     inc h                      ; Next scan line
     djnz .scan32
 
+    ret
+
+.render64:
+    ; --- 64-col path: 4-pixel pitch, two phases ---
+    ; pixel_x = col * 4, so byte_col = col >> 1 and the phase is col & 1:
+    ; even columns take the glyph's high nibble, odd columns its low nibble.
+    ; A 4-pixel glyph never spills past its byte (16 bits would be needed to
+    ; straddle), so this is the simplest and fastest of the three renderers.
+    ld a, c
+    ld e, a                    ; E = column (preserved by _calc_row_addr)
+    srl a
+    ld b, a                    ; B = byte_col
+    ld a, (_rnd_row)
+    call _calc_row_addr        ; HL = screen addr for (row, byte_col=0, scan 0)
+    ld a, b
+    or l
+    ld l, a                    ; HL = screen addr for (row, byte_col, scan 0)
+    ld a, e
+    and 1
+    jr nz, .r64_hi
+
+    ; phase 0: glyph in the high nibble, keep the odd column's pixels
+    ld b, 8
+.r64_lo_scan:
+    ld d, (ix + 0)
+    inc ix
+    ld a, (hl)
+    and 0x0F
+    or d
+    ld (hl), a
+    inc h
+    djnz .r64_lo_scan
+    ret
+
+.r64_hi:
+    ; phase 1: glyph >> 4 into the low nibble, keep the even column's pixels
+    ld b, 8
+.r64_hi_scan:
+    ld d, (ix + 0)
+    inc ix
+    srl d
+    srl d
+    srl d
+    srl d
+    ld a, (hl)
+    and 0xF0
+    or d
+    ld (hl), a
+    inc h
+    djnz .r64_hi_scan
     ret
 
 ; --- Shift-specialised 51-col bodies ---
@@ -2143,7 +2206,7 @@ _redraw_all_screenpaged:
 
 ; ==========================================================================
 ; scr_set_cols — Set screen column count and clear screen (BIOS function 32)
-;   In:  A = desired columns (32 or 51)
+;   In:  A = desired columns (32, 51 or 64)
 ;   Out: nothing
 ;   Clobbers: AF, BC, DE, HL
 ; ==========================================================================
@@ -2156,21 +2219,35 @@ scr_set_cols:
     jr z, .valid
     cp 51
     jr z, .valid
-    ret                         ; ignore invalid values silently
+    cp 64
+    jr nz, .invalid
+    ld a, (_lf_found)
+    and 0x10                    ; FONT64.BIN found on the boot disk?
+    jr z, .invalid
+    ld a, 64
+    jr .valid
+.invalid:
+    ret                         ; ignore invalid / unavailable values silently
 .valid:
     ld (scr_cols), a            ; update runtime column count
     dec a
     ld (scb_conwidth), a        ; update SCB offset 0x1A (cols - 1)
-    ld hl, 0x8000               ; default: 51-col font in bank 6
+    ld hl, 0x8000               ; default: 51-col font (5px) in bank 6
     ld a, (scr_cols)
     cp 32
+    jr z, .font32
+    cp 64
     jr nz, .setfont
-    ld hl, 0x8800               ; 32-col uses 8px-wide font in bank 6
+    ld hl, 0x9400               ; 64-col uses the 4px font in bank 6
+    jr .setfont
+.font32:
+    ld hl, 0x8800               ; 32-col uses the 8px font in bank 6
 .setfont:
     ld (font_ptr), hl
     jp scr_init                 ; clear screen, reset cursor (tail call)
 
 
-; Font data is NOT embedded here. Both fonts are loaded from disk at cold_boot
-; into bank 7: font51.bin → 0x4000, font32.bin → 0x4800.
-; font_ptr above tracks the active font; scr_set_cols updates it.
+; Font data is NOT embedded here.  All three fonts are loaded from disk at
+; cold_boot into bank 6: font51.bin -> 8000h, font32.bin -> 8800h,
+; font64.bin -> 9400h.  font_ptr above tracks the active font; scr_set_cols
+; updates it.

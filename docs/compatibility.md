@@ -25,7 +25,7 @@ Tests were run on 2026-10-27 through the zx84 MCP server.
 | **dBASE II** | 2.43 | Starts, date prompt, dot prompt, `QUIT` returns to `A>` | FCB random I/O, overlays |
 | **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | ⚠️ VT-100 escapes such as `ESC[?3h`, `ESC[2J`, `ESC[H` remain visible; the screen layer implements VT52 + ADM-3A, not VT-100 |
 | **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
-| **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE layout wraps on the 51-column screen |
+| **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE layout wraps on the 51-column screen; the default build is unchanged, but TINST can install it for a 64-column terminal and `SCREEN 64` then fits the IDE |
 | **WordStar** | 3.0 | Banner and no-file menu appear; `INSTALL` patches terminals and writes `WS.COM` | 80-column layout wraps on the 51-column screen, so the display is not usable yet (needs an 80-column mode) |
 | **BBC BASIC** | — | Previously exercised from the disk image | Visual/interactive test; see the smoke-test notes |
 | **PIP** | reference binary | `PIP C:=A:DATE.COM`, then `DIR C:` | Covered by the automated smoke test |
@@ -67,6 +67,10 @@ why WordStar needs an 80-column screen mode here: 80 characters at a 3-pixel
 pitch is 240 of the 256 available pixels, so it fits without a horizontal
 scrolling/tab-flip trick. A 64-column mode (4-pixel pitch) would suit Turbo
 Pascal via TINST and leave WordStar unchanged.
+
+That 64-column mode now exists (`SCREEN 64`, 4-pixel "Compression" font):
+it fits Turbo Pascal's IDE once TINST installs the editor for 64 columns.
+It does not help WordStar, whose 80-column layout is unchanged.
 
 ## Not yet tested
 

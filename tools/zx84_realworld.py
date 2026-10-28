@@ -226,7 +226,7 @@ class RealWorld:
 
     def screen(self) -> list[str]:
         cols = self.memory(4, self.scr_cols, 1)[0]
-        if cols not in (32, 51):
+        if cols not in (32, 51, 64):
             cols = 51
         data = self.memory(self.cb_bank, self.cb, cols * 24)
         if len(data) < cols * 24:
