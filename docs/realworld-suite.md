@@ -63,7 +63,7 @@ separate, explicitly triggered workflow.
 | `zsid` | Microsoft ZSID 1.4 | Debugger: load, memory dump, `G0` | Pass |
 | `zork2` | Zork II | Large `.DAT`, save-file write | Pass |
 | `zork3` | Zork III | Paged intro, large `.DAT`, save-file write | Pass |
-| `wordmaster` | MicroPro WordMaster 1.07A | Full-screen editor, BIOS console | Pass |
+| `wordmaster` | MicroPro WordMaster 1.07A | Full-screen edit, BREAK/ESC, save, TYPE | Pass |
 | `supercalc1` | SuperCalc 1.05 | Spreadsheet start, cell entry, quit | Pass |
 
 Known issues are recorded in the manifest and printed by the runner:
@@ -97,10 +97,9 @@ Known issues are recorded in the manifest and printed by the runner:
   fix it; the prototype that did so broke PIP's copy, so the documented
   single-record behaviour stands for now.
 
-- **WordMaster 1.07A** starts, opens a file and renders typed text, but
-  leaving insert mode needs `ESC`, which the +3 keyboard cannot produce
-  (`Caps+Sym` only yields control codes), so the package stops at the
-  editing screen instead of saving.
+- **WordMaster 1.07A** edits and saves.  Leaving its insert mode needs
+  `ESC`, which on the +3 is the BREAK key (`Caps Shift + Space`) per the
+  CP/M Plus manual; the package now runs the full edit-save-`TYPE` cycle.
 - **SuperCalc 1.05** runs its grid and accepts cell entries, but saving a
   `.CAL` aborts with `SuperCalc program diskette MUST remain on disk
   drive` — its media check does not accept the image.  The archive's

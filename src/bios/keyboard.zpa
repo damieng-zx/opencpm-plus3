@@ -21,9 +21,16 @@
 ;
 ; Shift modes:
 ;   None:       lowercase letters, digits, Enter, Space
-;   Caps:       UPPERCASE, Caps+0=BS, Caps+Space=Ctrl-C
-;   Symbol:     punctuation (! @ # $ % etc.)
-;   Caps+Sym:   Ctrl codes (Ctrl-A through Ctrl-Z)
+;   Caps:       UPPERCASE plus the CP/M function codes documented for the
+;               +3 in the CP/M Plus manual, Appendix II.2.2:
+;                 Caps+0 = DEL (BS)        Caps+5 = Control-A
+;                 Caps+1 = Control-W       Caps+6 = Control-^
+;                 Caps+2 = Caps Lock       Caps+7 = Control-_
+;                 Caps+3 = Control-S       Caps+8 = Control-F
+;                 Caps+4 = Control-I (TAB) Caps+9 = Control-G
+;                 Caps+Space = Control-[ (ESC) — the +3 BREAK key
+;   Symbol:     punctuation (! @ # $ % etc.), Space unchanged
+;   Caps+Sym:   Extend Mode: Ctrl codes (Ctrl-A through Ctrl-Z)
 ;
 ; ==========================================================================
 
@@ -447,7 +454,7 @@ _kbd_to_ascii:
     ; CS+SS combos match +3 muscle memory and the emulator's `type` binding
     ; for brackets. Other CS+SS combos fall through to Ctrl-code generation.
     ; We lose Ctrl-Y/U and Ctrl letters for the EXT keys, none of which CP/M
-    ; relies on (Ctrl-C comes from Caps+Space, below).
+    ; relies on (Ctrl-C is Extend+C = Caps+Sym+C).
     ld a, l                    ; A = raw key
     cp 5
     jr c, .ctrl_letter         ; raw < 5 (Row 0 Caps/Z/X/C/V) — try Ctrl
@@ -525,15 +532,15 @@ _key_caps:
     ;       Q     W     E     R     T
     db      'Q',  'W',  'E',  'R',  'T'
     ;       1     2     3     4     5
-    db      0,    0,    0,    0,    0x08    ; Caps+5 = left (BS)
+    db      0x17, 0,    0x13, 0x09, 0x01    ; ^W, Caps Lock, ^S, TAB, ^A
     ;       0     9     8     7     6
-    db      0x08, 0,    0,    0,    0       ; Caps+0 = BS (delete)
+    db      0x08, 0x07, 0x06, 0x1F, 0x1E    ; DEL, ^G, ^F, ^_, ^^
     ;       P     O     I     U     Y
     db      'P',  'O',  'I',  'U',  'Y'
     ;       Ent   L     K     J     H
     db      0x0D, 'L',  'K',  'J',  'H'
     ;       Sp    SS    M     N     B
-    db      ' ',  0,    'M',  'N',  'B'    ; Caps+Space = space (Ctrl-C via Caps+Sym+C)
+    db      0x1B, 0,    'M',  'N',  'B'    ; Caps+Space = BREAK (ESC)
 
 _key_sym:
     ;       CS    Z     X     C     V
@@ -551,4 +558,4 @@ _key_sym:
     ;       Ent   L     K     J     H
     db      0,    '=',  '+',  '-',  '^'
     ;       Sp    SS    M     N     B
-    db      0,    0,    '.',  ',',  '*'
+    db      ' ',  0,    '.',  ',',  '*'    ; Sym+Space stays a space

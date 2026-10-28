@@ -541,9 +541,30 @@
           "expect": [
             "HELLO WORLD"
           ]
+        },
+        {
+          "key": "shift+space",
+          "frames": 1000,
+          "expect": [
+            "*"
+          ]
+        },
+        {
+          "text": "e",
+          "frames": 2500,
+          "expect": [
+            "A>"
+          ]
+        },
+        {
+          "text": "TYPE TEST.TXT",
+          "frames": 1500,
+          "expect": [
+            "HELLO WORLD"
+          ]
         }
       ],
-      "notes": "WordMaster 1.07A: start-up banner and the full-screen editor opening a file; typed text is rendered through the BIOS console. Saving needs ESC, which the +3 keyboard cannot produce (Caps+Sym only gives control codes), so the test stops at the editing screen."
+      "notes": "WordMaster 1.07A: start-up banner, full-screen edit, BREAK (Caps+Space = ESC) to leave insert mode, E to save and quit, then TYPE verifies the file."
     },
     {
       "id": "supercalc1",

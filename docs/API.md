@@ -625,13 +625,27 @@ Row 7:  [Space] [SS] m   n   b
 
 #### Modifier Combinations
 
+The Caps Shift row follows the function-key table in the Spectrum +3
+CP/M Plus manual (Appendix II.2.2):
+
 | Mode | Keys | Characters |
 |------|------|------------|
 | Unshifted | — | lowercase letters, digits, space, enter |
-| Caps Shift | Caps Shift | UPPERCASE letters, BS (with 0 or 5) |
-| Symbol Shift | Symbol Shift | punctuation: `! @ # $ % & * ( ) - = + etc.` |
-| Control | Caps+Symbol | Ctrl-A through Ctrl-Z (0x01-0x1A) |
-| Ctrl-C | Caps+Sym+Space | 0x03 |
+| Caps Shift | Caps Shift | UPPERCASE letters |
+| Caps+0 | Caps Shift + 0 | DEL (0x08) |
+| Caps+1 | Caps Shift + 1 | Control-W (0x17) |
+| Caps+2 | Caps Shift + 2 | Caps Lock (no character) |
+| Caps+3 | Caps Shift + 3 | Control-S (0x13) |
+| Caps+4 | Caps Shift + 4 | Control-I / TAB (0x09) |
+| Caps+5 | Caps Shift + 5 | Control-A (0x01) |
+| Caps+6 | Caps Shift + 6 | Control-^ (0x1E) |
+| Caps+7 | Caps Shift + 7 | Control-_ (0x1F) |
+| Caps+8 | Caps Shift + 8 | Control-F (0x06) |
+| Caps+9 | Caps Shift + 9 | Control-G (0x07) |
+| **BREAK** | **Caps Shift + Space** | **Control-[ / ESC (0x1B)** |
+| Symbol Shift | Symbol Shift | punctuation: `! @ # $ % & * ( ) - = + etc.`; Space stays a space |
+| Control | Caps+Symbol (Extend Mode) | Ctrl-A through Ctrl-Z (0x01-0x1A) |
+| Ctrl-C | Caps+Sym+C | 0x03 |
 
 #### Auto-repeat
 
