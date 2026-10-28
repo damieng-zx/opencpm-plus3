@@ -1530,7 +1530,8 @@ test18:
     or a
     jp nz, .t18_fail
 
-    ; F49 get conwidth (offset 0x1A) -> 50
+    ; F49 get conwidth (offset 0x1A) -> columns-1: 31, 50 or 63.
+    ; DISKTEST must work at any supported screen width, so accept all three.
     ld hl, scb_pb
     ld (hl), 0x1A
     inc hl
@@ -1538,8 +1539,21 @@ test18:
     ld de, scb_pb
     ld c, 49
     call BDOS
+    ld (t18_conwidth), a
     cp 50
-    jp nz, .t18_fail
+    jr z, .t18_width_ok
+    cp 31
+    jr z, .t18_width_ok
+    cp 63
+    jr z, .t18_width_ok
+    ; Report the value we got: it is the only width-dependent check here.
+    ld de, msg_t18_cw
+    ld c, 9
+    call BDOS
+    ld a, (t18_conwidth)
+    call print_hex_a
+    jp .t18_fail
+.t18_width_ok:
 
     ; F49 invalid offset 0x63 -> A=0xFF
     ld hl, scb_pb
@@ -2995,6 +3009,7 @@ save_mode: dw 0x0003
 save_order: db 0
 save_drive: db 0
 t19_step: db 0
+t18_conwidth: db 0
 fill_i: db 0
 fill_count: db 0
 path_save: ds 4
@@ -3057,6 +3072,7 @@ msg_t15:  db "T15 R/O protect+F45$"
 msg_t16:  db "T16 SCB write isolation$"
 msg_t17:  db "T17 F30 user area$"
 msg_t18:  db "T18 Extended BDOS$"
+msg_t18_cw: db " conwidth=0x$"
 msg_t19:  db "T19 Invalid drives$"
 msg_t20:  db "T20 Directory full$"
 msg_t21:  db "T21 C: ramdisk$"
