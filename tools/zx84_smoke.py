@@ -615,6 +615,32 @@ class Smoke:
         self.command("DIR REN2.TXT", 500)
         self.expect("REN cleanup", "No files")
 
+    def run_user(self) -> None:
+        """USER: query, switch user areas, reject out-of-range values."""
+        self.command("USER", 500)
+        self.expect("USER query", "User 0")
+
+        self.command("USER 3", 500)
+        self.command("USER", 500)
+        self.expect("USER set", "User 3")
+        self.command("DIR", 600)
+        self.expect("USER 3 has no files", "No files")
+
+        self.command("USER 10", 500)
+        self.command("USER", 500)
+        self.expect("USER two digits", "User 10")
+
+        self.command("USER 16", 500)
+        self.expect("USER range", "USER n (0-15)")
+        self.command("USER X", 500)
+        self.expect("USER junk", "USER n (0-15)")
+
+        self.command("USER 0", 500)
+        self.command("DIR CPM3.SYS", 500)
+        self.expect("USER 0 restored", "CPM3     SYS")
+        self.command("USER", 500)
+        self.expect("USER back to zero", "User 0")
+
     def run_screen64(self) -> None:
         """SCREEN 64: 4-pixel font, two characters per attribute cell."""
         self.command("SCREEN 64", 800)
@@ -711,6 +737,7 @@ class Smoke:
         self.run_ccp()
         self.run_era()
         self.run_ren()
+        self.run_user()
         self.run_screen64()
         self.run_terminal_escapes()
         self.run_ccp_external()

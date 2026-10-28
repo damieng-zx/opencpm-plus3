@@ -245,6 +245,10 @@ parse_cmd:
     call str_match
     jp z, .do_ren
 
+    ld de, cmd_user
+    call str_match
+    jp z, .do_user
+
     ; Not a built-in — try loading as .COM file
     ; HL still points to start of command text (str_match preserves HL)
     jp .do_load_com
@@ -864,6 +868,99 @@ parse_cmd:
 
 .ren_usage:
     ld de, msg_ren_usage
+    ld c, F_PSTR
+    jp BDOS
+
+
+; ==========================================================================
+; .do_user — USER [n]: show or change the CP/M user area (0-15)
+;   Uses BDOS F32, which also keeps page-zero byte 0004h in sync for
+;   programs that read it.
+; ==========================================================================
+
+.do_user:
+    ; Skip the command word and any spaces
+.user_skip_cmd:
+    ld a, (hl)
+    cp ' '
+    jr z, .user_skip_sp
+    or a
+    jr z, .user_query
+    cp 0x0D
+    jr z, .user_query
+    inc hl
+    jr .user_skip_cmd
+.user_skip_sp:
+    inc hl
+    ld a, (hl)
+    cp ' '
+    jr z, .user_skip_sp
+    or a
+    jr z, .user_query
+    cp 0x0D
+    jr z, .user_query
+
+    ; First digit
+    cp '0'
+    jp c, .user_usage
+    cp '9' + 1
+    jp nc, .user_usage
+    sub '0'
+    ld b, a
+    inc hl
+
+    ; Optional second digit, so USER 10..15 works
+    ld a, (hl)
+    cp '0'
+    jr c, .user_delim
+    cp '9' + 1
+    jr nc, .user_delim
+    sub '0'
+    ld c, a
+    ld a, b
+    add a, a                   ; ×2
+    add a, a                   ; ×4
+    add a, b                   ; ×5
+    add a, a                   ; ×10
+    add a, c
+    ld b, a
+    inc hl
+.user_delim:
+    ; The number must end at a delimiter
+    ld a, (hl)
+    or a
+    jr z, .user_set
+    cp ' '
+    jr z, .user_set
+    cp 0x0D
+    jr z, .user_set
+    jp .user_usage
+
+.user_set:
+    ld a, b
+    cp 16
+    jp nc, .user_usage
+    ld e, a
+    ld c, 32                   ; F32: Set User
+    call BDOS
+    ret
+
+.user_query:
+    ld e, 0xFF
+    ld c, 32                   ; F32: Get User
+    call BDOS
+    push af
+    ld de, str_user
+    ld c, F_PSTR
+    call BDOS
+    pop af
+    call print_decimal_a
+    ld de, msg_crlf
+    ld c, F_PSTR
+    jp BDOS
+
+.user_usage:
+    ld de, msg_user_usage
     ld c, F_PSTR
     jp BDOS
 
@@ -1728,6 +1825,7 @@ cmd_dir:    db "DIR", 0
 cmd_type:   db "TYPE", 0
 cmd_era:    db "ERA", 0
 cmd_ren:    db "REN", 0
+cmd_user:   db "USER", 0
 cmd_help:   db "HELP", 0
 cmd_screen: db "SCREEN", 0
 
@@ -1768,12 +1866,19 @@ msg_ren_usage:
 msg_ren_wild:
     db "No wildcards", 0x0D, 0x0A, '$'
 
+str_user:
+    db "User $"
+
+msg_user_usage:
+    db "USER n (0-15)", 0x0D, 0x0A, '$'
+
 msg_help:
     db "Built-in commands:", 0x0D, 0x0A
     db "  DIR    - Directory listing (wildcards: * ?)", 0x0D, 0x0A
     db "  TYPE   - Display file", 0x0D, 0x0A
     db "  ERA    - Erase files (wildcards: * ?)", 0x0D, 0x0A
     db "  REN    - Rename file (new=old)", 0x0D, 0x0A
+    db "  USER   - Show/set the user area (0-15)", 0x0D, 0x0A
     db "  SCREEN - Set/query screen width (32, 51 or 64)", 0x0D, 0x0A
     db "  HELP   - This help", 0x0D, 0x0A
     db '$'

@@ -24,7 +24,7 @@ for this project.
 - **Banked memory**: 61K TPA, a separate system bank, and a common-memory stub
   that bridges TPA calls into the BIOS/BDOS.
 - **MiniCCP**: `CCP.COM`, loaded from the boot disk at cold boot like real
-  CP/M 3, with DIR, TYPE, ERA, REN, HELP and SCREEN built in, `.COM` loading, SUBMIT
+  CP/M 3, with DIR, TYPE, ERA, REN, USER, HELP and SCREEN built in, `.COM` loading, SUBMIT
   chaining and F47 program chaining.
 - **C: RAM disk**: optional 16K `RAMDISK.FID` in bank 7.
 - **Clock**: tick-driven date/time (F104/F105), maintained by an ISR in common
@@ -43,6 +43,7 @@ SETDEF search path.
 | `TYPE filespec` | display a text file |
 | `ERA filespec` | delete files (wildcards; `*.*` asks `ALL (Y/N)?` first) |
 | `REN new=old` | rename a file (wildcards are refused) |
+| `USER [n]` | show or set the user area (0-15) |
 | `SCREEN [32\|51\|64]` | set or query the screen width |
 | `HELP` | list the built-ins |
 
