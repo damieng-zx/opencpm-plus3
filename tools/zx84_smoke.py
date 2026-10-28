@@ -611,8 +611,17 @@ class Smoke:
         self.command("DIR REN2.TXT", 500)
         self.expect("REN wildcard changed nothing", "REN2     TXT")
 
+        # RENAME.COM argument order, without the '='.
+        self.command("PIP REN3.TXT=SMOKE.TXT", 800)
+        self.command("REN REN4.TXT REN3.TXT", 600)
+        self.command("DIR REN4.TXT", 500)
+        self.expect("REN space form", "REN4     TXT")
+        self.command("DIR REN3.TXT", 500)
+        self.expect("REN space form old gone", "No files")
+
         self.command("ERA REN2.TXT", 500)
-        self.command("DIR REN2.TXT", 500)
+        self.command("ERA REN4.TXT", 500)
+        self.command("DIR REN?.TXT", 500)
         self.expect("REN cleanup", "No files")
 
     def run_user(self) -> None:
@@ -745,6 +754,36 @@ class Smoke:
         self.log("all checks passed")
 
 
+def prepare_test_image(dsk: Path) -> Path:
+    """Add optional third-party test binaries to a scratch copy of the image.
+
+    RENAME.COM is deliberately not bundled into the distribution image - the
+    CCP's built-in REN covers renaming - but the smoke keeps exercising a real
+    third-party F23 caller when references/binaries/ is present.
+    """
+    rename = ROOT / "references" / "binaries" / "RENAME.COM"
+    if not rename.exists():
+        return dsk
+    tools = str(ROOT / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import mkdsk  # noqa: E402
+
+    image = mkdsk.DSKImage().load(dsk)
+    for i in range(mkdsk.DIR_ENTRIES):
+        if image._read_dir_entry(i)[1:12] == b"RENAME  COM":
+            return dsk
+
+    out = ROOT / "build" / "smoke.dsk"
+    shutil.copyfile(dsk, out)
+    image = mkdsk.DSKImage().load(out)
+    if image.add_cpm_file("RENAME.COM", rename.read_bytes()) is False:
+        return dsk
+    image.save(out)
+    print(f"[smoke] RENAME.COM added to {out.name} for the test run")
+    return out
+
+
 def find_zx84(arg: str | None) -> Path:
     candidates = []
     if arg:
@@ -778,6 +817,7 @@ def main() -> int:
         print(f"error: {dsk} does not exist; run build.cmd first",
               file=sys.stderr)
         return 2
+    dsk = prepare_test_image(dsk)
 
     try:
         zx84 = find_zx84(args.zx84)

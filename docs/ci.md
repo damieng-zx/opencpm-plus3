@@ -39,8 +39,8 @@ needs the checkout, `npm ci`, and a writable ROM cache.
 smoke runner always exercises `SMOKE.TXT` (from `src/test/smoke.txt`),
 `SMOKE.SUB` (from `src/test/smoke.sub`), `PARAM.SUB` (from
 `src/test/param.sub`), the source-built `SUBMIT.COM`, `DATE.COM`, and the
-built-in `ERA`/`REN` commands; only the external `RENAME.COM` and `PIP` checks
-depend on the reference programs.
+built-in `ERA`/`REN` commands; only the external `RENAME.COM` (added to a
+scratch copy of the image) and `PIP` checks depend on the reference programs.
 
 The zx84 checkout uses the current repository name,
 `damieng-zx/zx84`. If it is private in a future org, add

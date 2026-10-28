@@ -54,6 +54,32 @@ class DSKImage:
                 f"Boot sector data too large: {len(data)} bytes (max {SECTOR_SIZE})")
         self.tracks[0][0][:len(data)] = data
 
+    def load(self, path):
+        """Load an existing CPCEMU DSK image into self.tracks.
+
+        Used by tests (and `mkdsk.py add`) to modify a built image without
+        rebuilding it from a file list.
+        """
+        with open(path, "rb") as f:
+            data = f.read()
+        if not data.startswith(b"MV - CPCEMU Disk-File"):
+            raise ValueError(f"{path}: not a CPCEMU DSK image")
+        count = data[0x30]
+        self.tracks = []
+        off = 0x100
+        for _ in range(count):
+            header = data[off:off + TRACK_HEADER_SIZE]
+            off += TRACK_HEADER_SIZE
+            sectors = header[0x15] or SECTORS_PER_TRACK
+            if off + sectors * SECTOR_SIZE > len(data):
+                raise ValueError(f"{path}: truncated DSK image")
+            self.tracks.append([
+                bytearray(data[off + s * SECTOR_SIZE:off + (s + 1) * SECTOR_SIZE])
+                for s in range(sectors)
+            ])
+            off += sectors * SECTOR_SIZE
+        return self
+
     def write_raw(self, track, sector, data):
         """Write raw data starting at a specific track and sector (0-based).
         Spans across sectors and tracks as needed."""
@@ -309,6 +335,19 @@ def cmd_create(args):
     print(f"\nWritten: {args.output}")
 
 
+def cmd_add(args):
+    """Add CP/M files to an existing DSK image."""
+    dsk = DSKImage().load(args.image)
+    for filepath in args.files:
+        filename = os.path.basename(filepath)
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        if dsk.add_cpm_file(filename, data) is not False:
+            print(f"Added file: {filename} ({len(data)} bytes)")
+    dsk.save(args.image)
+    print(f"Written: {args.image}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Create Spectrum +3 CP/M 3.1 DSK disk images')
@@ -323,13 +362,18 @@ def main():
     ip = sub.add_parser('info', help='Show info about an existing DSK')
     ip.add_argument('input', help='Input .dsk filename')
 
+    ap = sub.add_parser('add', help='Add CP/M files to an existing DSK')
+    ap.add_argument('image', help='.dsk filename to modify in place')
+    ap.add_argument('files', nargs='+', metavar='FILE', help='CP/M files to add')
+
     args = parser.parse_args()
 
     if args.command == 'create':
         cmd_create(args)
+    elif args.command == 'add':
+        cmd_add(args)
     elif args.command == 'info':
-        # Read existing DSK - basic implementation
-        print(f"(info command not yet implemented for reading existing DSKs)")
+        DSKImage().load(args.input).info()
     else:
         parser.print_help()
         sys.exit(1)

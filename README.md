@@ -42,7 +42,7 @@ SETDEF search path.
 | `DIR [filespec]` | directory listing (wildcards; the column count follows the screen width) |
 | `TYPE filespec` | display a text file |
 | `ERA filespec` | delete files (wildcards; `*.*` asks `ALL (Y/N)?` first) |
-| `REN new=old` | rename a file (wildcards are refused) |
+| `REN new=old` | rename a file (`REN new old` also works; wildcards are refused) |
 | `USER [n]` | show or set the user area (0-15) |
 | `SCREEN [32\|51\|64]` | set or query the screen width |
 | `HELP` | list the built-ins |
@@ -90,11 +90,12 @@ Also supported:
 - +3 and CPC 8-bit-block formats via the extended DPB machinery; `SHOWXDPB`
   displays the detected geometry. PCW 720K disks are detected but their
   16-bit block file I/O is not implemented.
-- Optional third-party CP/M utilities (BBC BASIC, PIP, ED, RENAME, SET, ...)
-  are picked up from `references/binaries/` when present; a source-only
-  checkout ships the project's own tools and the CCP's DIR/TYPE/ERA/REN
-  built-ins, so it can list, display, delete and rename files. PIP and RENAME
-  are also exercised by the smoke runner when those binaries are on the disk.
+- Optional third-party CP/M utilities (BBC BASIC, PIP, ED, SET, ...) are
+  picked up from `references/binaries/` when present; a source-only checkout
+  ships the project's own tools and the CCP's DIR/TYPE/ERA/REN built-ins, so
+  it can list, display, delete and rename files. `RENAME.COM` is deliberately
+  not bundled (REN covers it); the smoke runner adds it to a scratch copy so
+  a real third-party F23 caller is still exercised.
 
 ## Tools
 

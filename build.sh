@@ -78,7 +78,7 @@ print(f'  CPM3.SYS: {__import__(\"os\").path.getsize(\"build/CPM3.SYS\")} bytes'
 REF_FILES=()
 for ref in references/binaries/*.COM references/binaries/*.SUB; do
     case "$ref" in
-        */SUBMIT.COM|*/submit.com) continue ;;
+        */SUBMIT.COM|*/submit.com|*/RENAME.COM|*/rename.com) continue ;;
     esac
     if [ -f "$ref" ]; then
         REF_FILES+=("$ref")

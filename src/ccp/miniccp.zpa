@@ -790,18 +790,33 @@ parse_cmd:
     jp z, .ren_usage
     ld (ren_new), hl           ; start of the new name
 
-    ; Find the '=' that separates new from old
+    ; Find the separator.  "REN new=old" is the documented form; RENAME.COM
+    ; style "REN new old" is accepted too, in the same new-then-old order.
+    ; An '=' anywhere wins, so spaces around it do not confuse the split.
+    ld hl, (ren_new)
 .ren_find_eq:
+    ld a, (hl)
+    or a
+    jr z, .ren_find_sp
+    cp 0x0D
+    jr z, .ren_find_sp
+    cp '='
+    jr z, .ren_got_sep
+    inc hl
+    jr .ren_find_eq
+.ren_find_sp:
+    ld hl, (ren_new)
+.ren_sp_loop:
     ld a, (hl)
     or a
     jp z, .ren_usage
     cp 0x0D
     jp z, .ren_usage
-    cp '='
-    jr z, .ren_got_eq
+    cp ' '
+    jr z, .ren_got_sep
     inc hl
-    jr .ren_find_eq
-.ren_got_eq:
+    jr .ren_sp_loop
+.ren_got_sep:
     ld (hl), 0                 ; terminate the new name here
     inc hl
     ld (ren_old), hl

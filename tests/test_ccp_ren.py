@@ -35,6 +35,14 @@ class Handler(unittest.TestCase):
         # The new name is parsed first, then the old one.
         self.assertLess(body.index("(ren_new)"), body.index("(ren_old)"))
 
+    def test_accepts_a_space_separator(self):
+        body = self.body()
+        # '=' wins if present; otherwise the first space splits the names,
+        # matching RENAME.COM's "REN NEW OLD" order.
+        self.assertIn(".ren_find_sp:", body)
+        self.assertIn("cp ' '", body)
+        self.assertIn("ld hl, (ren_new)", body)
+
     def test_builds_the_f23_fcb(self):
         body = self.body()
         self.assertIn("ld de, ren_fcb + 17", body)     # new name at 17..27

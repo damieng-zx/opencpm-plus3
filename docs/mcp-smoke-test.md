@@ -26,7 +26,8 @@ must switch to four entries per line. The runner also runs `SUBMIT SMOKE.SUB`, t
 implicit `SMOKE` -> `SUBMIT SMOKE.SUB` chain, the missing-file path,
 `$1`/`$2` substitution via `SUBMIT PARAM SMOKE.TXT *.TXT`, and the
 missing-parameter error. When the untracked reference binaries are on the
-image, it checks `RENAME` with wildcard `DIR` and the C: PIP/DATE flow.
+image, it checks a third-party `RENAME` (added to a scratch copy of the DSK)
+with wildcard `DIR`, and the C: PIP/DATE flow.
 
 `tools/zx84_negative.py` builds corrupted copies of the image and requires
 that they do **not** reach `A>`:
@@ -262,9 +263,10 @@ Check:
 
 ### 5. Rename the SUB file
 
-`miniccp` has a built-in `REN` (`REN NEWNAME=OLDNAME`). The untracked
-`RENAME.COM` from the reference binaries uses the opposite convention
-(`RENAME NEWNAME OLDNAME`); the scripted smoke test uses it when present.
+`miniccp` has a built-in `REN`, which takes `NEW=OLD` or `NEW OLD` (both in
+RENAME.COM's new-then-old order). `RENAME.COM` itself is not bundled; the
+scripted smoke test adds it to a scratch copy of the DSK when the reference
+binaries are present.
 
 Run:
 

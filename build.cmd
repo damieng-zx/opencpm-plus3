@@ -85,7 +85,7 @@ echo   Building DSK...
 copy /y build\bios.bin build\CPM3.SYS >nul
 
 set REF_BINS=
-for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" set REF_BINS=!REF_BINS! %%F
+for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" set REF_BINS=!REF_BINS! %%F
 
 set EXTRA_FILES=
 if /I "%~1"=="--add" shift
