@@ -1091,6 +1091,24 @@ start:
     or a
     jp nz, .t18_fail
 
+    ; DE and HL must survive the call.
+    ld de, 0x1234
+    ld hl, 0x5678
+    call userf_trampoline
+    jp c, .t18_fail
+    ld a, d
+    cp 0x12
+    jp nz, .t18_fail
+    ld a, e
+    cp 0x34
+    jp nz, .t18_fail
+    ld a, h
+    cp 0x56
+    jp nz, .t18_fail
+    ld a, l
+    cp 0x78
+    jp nz, .t18_fail
+
     ld de, msg_ok
     jr .t18_print
 .t18_fail:

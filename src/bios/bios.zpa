@@ -1673,6 +1673,9 @@ xbios_handler:
     ; KM_KT_GET (0x00DA): fetch a key token from the queue.
     ;   Out: carry set + B = shift state + C = key number, or
     ;        carry clear + B = lock state + C corrupt
+    ;   A, B, C and flags corrupt; all other registers preserved.
+    push de
+    push hl
     ld a, (kbd_token_count)
     or a
     jr z, .kget_empty
@@ -1695,11 +1698,15 @@ xbios_handler:
     ld a, (kbd_token_count)
     dec a
     ld (kbd_token_count), a
+    pop hl
+    pop de
     scf
     ret
 .kget_empty:
     ld a, (kbd_lock_state)
     ld b, a
+    pop hl
+    pop de
     or a                         ; clear carry
     ret
 

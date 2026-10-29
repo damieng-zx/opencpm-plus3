@@ -265,7 +265,8 @@ stored `kbd_repeat_delay`/`kbd_repeat_rate` values.
 
 Test 17 calls `KM_KT_PUT` twice (shift 08h/key 2Bh, then 00h/1Fh) and
 verifies BC survives.  Test 18 then drains both with `KM_KT_GET`, checks
-the returned shift/key pairs and that an empty queue returns carry clear.
+the returned shift/key pairs, that an empty queue returns carry clear, and
+that DE/HL survive the call.
 The smoke runner checks the queued bytes `08 2B 00 1F`, `kbd_token_count=0`
 and `kbd_token_head=2`.
 

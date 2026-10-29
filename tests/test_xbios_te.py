@@ -619,6 +619,10 @@ class KmKtGet(unittest.TestCase):
         self.assertIn("and 0x78", body)          # lock bits
         self.assertIn("kbd_lock_state", body)
         self.assertIn("and 0x0F", body)
+        self.assertIn("push de", body)           # preserve everything but ABC
+        self.assertIn("push hl", body)
+        self.assertIn("pop hl", body)
+        self.assertIn("pop de", body)
         self.assertIn("scf", body)
         self.assertIn(".kget_empty", body)
 
