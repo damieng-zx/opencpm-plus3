@@ -637,8 +637,10 @@ xbios_handler:
     ret z                          ; TE_STL_ON_OFF — swallow, no status line
     cp 0xCB
     jr z, .te_set_ink
+    cp 0xCE
+    jr z, .te_set_border
     cp 0x98
-    jr z, .dd_drive_status
+    jp z, .dd_drive_status
     ld a, 0xFF                     ; unknown XBIOS ID
     ret
 
@@ -753,6 +755,20 @@ xbios_handler:
 
 .tsi_done:
     call _set_attr
+    ret
+
+.te_set_border:
+    ; TE_SET_BORDER (0x00CE): set the screen border colour.
+    ;   In:  B = colour (0-63), same encoding as TE_SET_INK
+    ;   Out: AF BC DE HL corrupt
+    ; The border has no bright or flash state; only the three colour
+    ; bits are used.  TE_SET_INK ink 0 also changes the border.
+    ld a, b
+    and 0x3F
+    call _decode_te_colour
+    ld a, b
+    ld (scr_border_v), a
+    out (PORT_ULA), a
     ret
 
 .dd_drive_status:

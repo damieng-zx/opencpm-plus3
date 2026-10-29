@@ -115,6 +115,24 @@ class TeSetInk(unittest.TestCase):
         self.assertIn("and 0x15", body)
 
 
+class TeSetBorder(unittest.TestCase):
+    def test_dispatch_uses_jumpblock_entry(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xCE", dispatch)
+        self.assertIn("jr z, .te_set_border", dispatch)
+
+    def test_handler_sets_border_only(self):
+        body = handler_body(".te_set_border:", ".dd_drive_status:")
+        self.assertIn("ld a, b", body)
+        self.assertIn("and 0x3F", body)
+        self.assertIn("call _decode_te_colour", body)
+        self.assertIn("ld (scr_border_v), a", body)
+        self.assertIn("out (PORT_ULA), a", body)
+        self.assertNotIn("scr_paper", body)
+        self.assertNotIn("scr_flash", body)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")
