@@ -420,7 +420,7 @@ class Smoke:
         for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK",
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
-                       "DONE"):
+                       "17.KTPUT..OK", "DONE"):
             if needle not in screen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + screen)
@@ -447,6 +447,13 @@ class Smoke:
             if value != expected:
                 raise SmokeError(
                     f"KM_SET_SPEED {name} {value}, expected {expected}")
+        count = self.memory(4, label_address("kbd_token_count"), 1)[0]
+        if count != 2:
+            raise SmokeError(f"KM_KT_PUT token count {count}, expected 2")
+        tokens = self.memory(4, label_address("kbd_token_buf"), 4)
+        if tokens != bytes((0x08, 0x2B, 0x00, 0x1F)):
+            raise SmokeError(
+                f"KM_KT_PUT tokens {tokens!r}, expected [08, 2B, 00, 1F]")
         self.expect("XTETEST prompt", "A>")
 
     def run_xtetest_format(self) -> None:

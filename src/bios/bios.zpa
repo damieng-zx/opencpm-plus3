@@ -707,6 +707,8 @@ xbios_handler:
     jp z, .dd_format
     cp 0x92
     jp z, .dd_login
+    cp 0xDD
+    jp z, .km_kt_put
     cp 0xE0
     jp z, .km_set_speed
     ld a, 0xFF                     ; unknown XBIOS ID
@@ -1585,6 +1587,42 @@ xbios_handler:
     xor a
     ld (dd_results), a
     ld hl, dd_results
+    ret
+
+.km_kt_put:
+    ; KM_KT_PUT (0x00DD): insert a key token into the queue.
+    ;   In:  B = shift state, C = key number
+    ;   Out: all registers and flags preserved
+    push af
+    push bc
+    push de
+    push hl
+    ld a, (kbd_token_count)
+    cp 16
+    jr nc, .kput_done
+    ld a, (kbd_token_tail)
+    ld l, a
+    ld h, 0
+    add hl, hl
+    ld de, kbd_token_buf
+    add hl, de
+    ld a, b
+    ld (hl), a
+    inc hl
+    ld a, c
+    ld (hl), a
+    ld a, (kbd_token_tail)
+    inc a
+    and 0x0F
+    ld (kbd_token_tail), a
+    ld a, (kbd_token_count)
+    inc a
+    ld (kbd_token_count), a
+.kput_done:
+    pop hl
+    pop de
+    pop bc
+    pop af
     ret
 
 .km_set_speed:

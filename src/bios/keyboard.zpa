@@ -65,6 +65,12 @@ kbd_repeat_rate:  dw REPEAT_RATE
 km_speed_h: db 0
 km_speed_l: db 0
 
+; KM_KT_PUT / KM_KT_GET token queue (16 entries of shift, key)
+kbd_token_buf:   ds 32
+kbd_token_head:  db 0
+kbd_token_tail:  db 0
+kbd_token_count: db 0
+
 ; Inject buffer — write text here, set kbd_inject_len, reset kbd_inject_rd.
 ; kbd_getchar drains this before polling the real keyboard.
 ; Layout: buf[64], len, rd (consecutive so emutil can write in one call).
@@ -93,6 +99,9 @@ kbd_init:
     ld (kbd_tick_changed), a
     ld (kbd_inject_len), a
     ld (kbd_inject_rd), a
+    ld (kbd_token_head), a
+    ld (kbd_token_tail), a
+    ld (kbd_token_count), a
     ld hl, (kbd_repeat_delay)
     ld (kbd_rep_count), hl
     ret

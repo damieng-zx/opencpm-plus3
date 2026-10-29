@@ -66,6 +66,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | `0xCB` | `TE_SET_INK` | A = ink (0 = background/border, 1 = foreground), B = colour, C = flash colour | Sets the colours used by future characters.  Colour is 0-63: bits 0-1 blue, 2-3 red, 4-5 green, each pair `00` off, `01`/`10` normal, `11` high.  The cell is bright only when both inks are high.  If `C & 0x3F` differs from `B & 0x3F` the ink flashes; the hardware FLASH attribute is set only when both inks flash.  Inks above 1 are ignored. |
 | `0xCE` | `TE_SET_BORDER` | B = colour (0-63) | Sets the border colour using the same encoding as `TE_SET_INK`; the bright and flash bits are ignored.  `TE_SET_INK` ink 0 also changes the border. |
 | `0xD1` | `TE_SET_SPEED` | H = main flash time, L = alternate (50ths) | Accepted and ignored: the +3 flashes in hardware with a fixed rate. |
+| `0xDD` | `KM_KT_PUT` | B = shift state, C = key number | Appends a key token to the 16-entry token queue (silently dropped when full).  All registers and flags preserved. |
 | `0xE0` | `KM_SET_SPEED` | H = start-up delay, L = repeat speed (50 Hz scans; 0 = 256) | Sets the keyboard repeat timings.  AF corrupt; all other registers preserved. |
 | `0xE3` | `CD_VERSION` | - | A = 3 (machine type), BC = `0x0100` (version 1.0). |
 | `0xE6` | `CD_INFO` | - | A = 0, B = 8 (16K banks), C = 0 (no serial), D = 0 (no B: drive), E = `0x15` (SS 40-track 3-inch), HL = empty buffer table (`0xFF`). |
@@ -83,8 +84,8 @@ the disc calls above are implemented: phase 1 (`DD_INIT`, `DD_SETUP`,
 `DD_L_READ`, `DD_L_WRITE`).
 
 Still unimplemented: the serial calls (`CD_SA_*`), the remaining keyboard
-calls (`KM_SET_EXPAND`, `KM_SET_KEY`, `KM_KT_GET`, `KM_KT_PUT`) and
-`FIND_FID`.  Unknown IDs return `A = 0xFF`.
+calls (`KM_SET_EXPAND`, `KM_SET_KEY`, `KM_KT_GET`) and `FIND_FID`.
+Unknown IDs return `A = 0xFF`.
 
 `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` currently
 accept only CP/M bank 1 (the TPA); other bank numbers return `A = 9`.

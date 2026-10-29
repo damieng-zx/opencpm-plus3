@@ -16,7 +16,8 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 `DD_CHECK_SECTOR`, `DD_FORMAT`, motor on/off/timeout, `DD_L_SEEK`).  The
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
-`15.LWRITE..OK`, `16.KMSPD..OK`, the `5Ah` marker in the bottom-right screen attribute
+`15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, the `5Ah` marker in the
+bottom-right screen attribute
 (bank 5, `5AFFh`) and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
 `fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
@@ -260,6 +261,10 @@ back unchanged, then re-reads it with `DD_L_READ` and checks the prefix.
 
 Test 16 calls `KM_SET_SPEED` with H=10, L=5; the smoke runner checks the
 stored `kbd_repeat_delay`/`kbd_repeat_rate` values.
+
+Test 17 calls `KM_KT_PUT` twice (shift 08h/key 2Bh, then 00h/1Fh) and
+verifies BC survives.  The smoke runner checks `kbd_token_count=2` and the
+four queued bytes `08 2B 00 1F`.
 
 ### BDOS file regression suite
 

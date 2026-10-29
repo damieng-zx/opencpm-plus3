@@ -17,8 +17,9 @@ for this project.
   the disc calls (`DD_INIT`, `DD_SETUP`, `DD_LOGIN`, `DD_SEL_FORMAT`,
   `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR`,
   `DD_FORMAT`, `DD_L_DPB`, `DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`, motor
-  on/off/timeout and `DD_L_SEEK`), plus `KM_SET_SPEED` for keyboard
-  repeat timing, through BIOS function 30 (`USERF`); see
+  on/off/timeout and `DD_L_SEEK`), plus `KM_SET_SPEED` (keyboard repeat
+  timing) and `KM_KT_PUT` (key token queue), through BIOS function 30
+  (`USERF`); see
   [XBIOS/TE Interface](docs/cpm-plus-xbios.md).
 - **Keyboard**: the +3 CP/M matrix — BREAK (`Caps Shift`+`Space`) sends ESC,
   `Caps Shift`+`Symbol` sends control codes, plus the function-key mappings.

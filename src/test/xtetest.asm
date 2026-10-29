@@ -37,6 +37,7 @@ DD_L_DPB        EQU 0x009E
 DD_L_XDPB       EQU 0x00A1
 DD_L_READ       EQU 0x00AD
 DD_L_WRITE      EQU 0x00B0
+KM_KT_PUT       EQU 0x00DD
 KM_SET_SPEED    EQU 0x00E0
 
 ; ============================================================
@@ -1027,6 +1028,34 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 17: KM_KT_PUT ===
+    ld de, msg_t17
+    ld c, 9
+    call BDOS
+
+    ; Put two tokens and check the registers survive.
+    ld hl, KM_KT_PUT
+    ld (userf_dw), hl
+    ld bc, 0x082B               ; caps-lock shift, key 2Bh
+    call userf_trampoline
+    ld a, b
+    cp 0x08
+    jp nz, .t17_fail
+    ld a, c
+    cp 0x2B
+    jp nz, .t17_fail
+
+    ld bc, 0x001F               ; no shift, key 1Fh
+    call userf_trampoline
+
+    ld de, msg_ok
+    jr .t17_print
+.t17_fail:
+    ld de, msg_fail
+.t17_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1206,6 +1235,7 @@ msg_t13:    db 0x0D, 0x0A, "13.XDPB..", '$'
 msg_t14:    db 0x0D, 0x0A, "14.LREAD..", '$'
 msg_t15:    db 0x0D, 0x0A, "15.LWRITE..", '$'
 msg_t16:    db 0x0D, 0x0A, "16.KMSPD..", '$'
+msg_t17:    db 0x0D, 0x0A, "17.KTPUT..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

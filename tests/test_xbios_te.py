@@ -566,6 +566,44 @@ class KmSetSpeed(unittest.TestCase):
         self.assertIn("kbd_repeat_delay", smoke)
 
 
+class KmKtPut(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xDD", dispatch)
+        self.assertIn("jp z, .km_kt_put", dispatch)
+
+    def test_handler_queues_shift_and_key(self):
+        body = handler_body(".km_kt_put:", ".km_set_speed:")
+        self.assertIn("kbd_token_count", body)
+        self.assertIn("kbd_token_tail", body)
+        self.assertIn("kbd_token_buf", body)
+        self.assertIn("cp 16", body)        # queue depth
+        self.assertIn("and 0x0F", body)     # circular index
+        self.assertIn("push af", body)
+        self.assertIn("push bc", body)
+        self.assertIn("pop af", body)
+        self.assertIn("pop bc", body)
+
+    def test_keyboard_defines_queue(self):
+        text = source("src/bios/keyboard.zpa")
+        self.assertIn("kbd_token_buf:   ds 32", text)
+        self.assertIn("kbd_token_head:  db 0", text)
+        self.assertIn("kbd_token_tail:  db 0", text)
+        self.assertIn("kbd_token_count: db 0", text)
+        # kbd_init empties the queue.
+        reset = text[text.index("kbd_init:"):text.index("kbd_status:")]
+        self.assertIn("(kbd_token_count), a", reset)
+
+    def test_tester_covers_ktput(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("KM_KT_PUT", tester)
+        self.assertIn("17.KTPUT", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("17.KTPUT..OK", smoke)
+        self.assertIn("kbd_token_buf", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

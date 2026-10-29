@@ -325,8 +325,14 @@ set.
   stored values.
   Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
   `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
+- [x] **XBIOS KM_KT_PUT.** Appends a `(shift, key)` token to the 16-entry
+  keyboard token queue (`kbd_token_buf`), dropping it silently when the
+  queue is full as the +3 manual specifies.  `XTETEST` test 17 queues two
+  tokens and the smoke runner checks the queue contents.
+  Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
+  `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
 
-## P3 — Remaining follow-ups
+## P3 - Remaining follow-ups
 
 - `SCR_RUN_ROUTINE` can only run routines in common memory (`C000-F5FF`);
   screen mode pages the rest of the TPA out.
@@ -335,5 +341,5 @@ set.
 - `DD_LOGIN` falls back to the type-0 template if the probe fails; it does
   not yet return the documented 0/2/3/4/5 login errors.
 - `CD_SA_*` (no serial model), the remaining `KM_*` calls
-  (`KM_SET_EXPAND`, `KM_SET_KEY`, `KM_KT_GET`, `KM_KT_PUT`) and
-  `FIND_FID` remain unimplemented.  Unknown IDs return `A = 0xFF`.
+  (`KM_SET_EXPAND`, `KM_SET_KEY`, `KM_KT_GET`) and `FIND_FID` remain
+  unimplemented.  Unknown IDs return `A = 0xFF`.
