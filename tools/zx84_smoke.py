@@ -419,7 +419,8 @@ class Smoke:
             raise SmokeError("XTETEST reported a failure:\n" + screen)
         for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK",
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
-                       "14.LREAD..OK", "15.LWRITE..OK", "DONE"):
+                       "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
+                       "DONE"):
             if needle not in screen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + screen)
@@ -440,6 +441,12 @@ class Smoke:
             if value != expected:
                 raise SmokeError(
                     f"DD_SETUP {name} {value:02X}, expected {expected:02X}")
+        for name, expected in (("kbd_repeat_delay", 10),
+                               ("kbd_repeat_rate", 5)):
+            value = self.memory(4, label_address(name), 1)[0]
+            if value != expected:
+                raise SmokeError(
+                    f"KM_SET_SPEED {name} {value}, expected {expected}")
         self.expect("XTETEST prompt", "A>")
 
     def run_xtetest_format(self) -> None:

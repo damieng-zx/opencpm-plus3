@@ -37,6 +37,7 @@ DD_L_DPB        EQU 0x009E
 DD_L_XDPB       EQU 0x00A1
 DD_L_READ       EQU 0x00AD
 DD_L_WRITE      EQU 0x00B0
+KM_SET_SPEED    EQU 0x00E0
 
 ; ============================================================
 ; Entry
@@ -1012,6 +1013,20 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 16: KM_SET_SPEED ===
+    ld de, msg_t16
+    ld c, 9
+    call BDOS
+
+    ld hl, KM_SET_SPEED
+    ld (userf_dw), hl
+    ld hl, 0x0A05               ; H = 10 scans delay, L = 5 scans rate
+    call userf_trampoline
+
+    ld de, msg_ok
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1190,6 +1205,7 @@ msg_t12:    db 0x0D, 0x0A, "12.DPB..", '$'
 msg_t13:    db 0x0D, 0x0A, "13.XDPB..", '$'
 msg_t14:    db 0x0D, 0x0A, "14.LREAD..", '$'
 msg_t15:    db 0x0D, 0x0A, "15.LWRITE..", '$'
+msg_t16:    db 0x0D, 0x0A, "16.KMSPD..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

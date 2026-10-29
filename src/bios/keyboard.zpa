@@ -59,6 +59,12 @@ kbd_settle:     db 0           ; Debounce: 1 = waiting for settle scan
 kbd_last_tick:  dw 0           ; isr_tick value at last real scan
 kbd_tick_changed: db 0         ; 1 = this scan is on a new ISR tick
 
+; KM_SET_SPEED values (scans at 50Hz; 0 means 256)
+kbd_repeat_delay: dw REPEAT_DELAY
+kbd_repeat_rate:  dw REPEAT_RATE
+km_speed_h: db 0
+km_speed_l: db 0
+
 ; Inject buffer — write text here, set kbd_inject_len, reset kbd_inject_rd.
 ; kbd_getchar drains this before polling the real keyboard.
 ; Layout: buf[64], len, rd (consecutive so emutil can write in one call).
@@ -87,7 +93,7 @@ kbd_init:
     ld (kbd_tick_changed), a
     ld (kbd_inject_len), a
     ld (kbd_inject_rd), a
-    ld hl, REPEAT_DELAY
+    ld hl, (kbd_repeat_delay)
     ld (kbd_rep_count), hl
     ret
 
@@ -336,7 +342,7 @@ _kbd_scan:
     ld a, d
     ld (kbd_mods), a           ; Save modifiers
     push hl
-    ld hl, REPEAT_DELAY
+    ld hl, (kbd_repeat_delay)
     ld (kbd_rep_count), hl
     pop hl
     ; Debounce settle: record key but don't emit yet.
@@ -375,7 +381,7 @@ _kbd_scan:
     ret nz                     ; Still waiting
     ; Repeat fires
     push hl
-    ld hl, REPEAT_RATE
+    ld hl, (kbd_repeat_rate)
     ld (kbd_rep_count), hl
     pop hl
     jr .emit

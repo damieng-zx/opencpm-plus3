@@ -318,6 +318,13 @@ set.
   and re-reads it.
   Files: `src/bios/bios.zpa`, `src/test/xtetest.asm`,
   `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
+- [x] **XBIOS KM_SET_SPEED.** Stores the start-up delay and repeat rate
+  from H/L (0 = 256 scans) in `kbd_repeat_delay`/`kbd_repeat_rate`; the
+  keyboard repeat path now reads those variables instead of the fixed
+  constants.  `XTETEST` test 16 sets 10/5 and the smoke runner checks the
+  stored values.
+  Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
+  `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
 
 ## P3 — Remaining follow-ups
 
@@ -327,5 +334,6 @@ set.
   accept CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
 - `DD_LOGIN` falls back to the type-0 template if the probe fails; it does
   not yet return the documented 0/2/3/4/5 login errors.
-- `CD_SA_*` (no serial model), `KM_*` and `FIND_FID` remain unimplemented.
-  Unknown IDs return `A = 0xFF`.
+- `CD_SA_*` (no serial model), the remaining `KM_*` calls
+  (`KM_SET_EXPAND`, `KM_SET_KEY`, `KM_KT_GET`, `KM_KT_PUT`) and
+  `FIND_FID` remain unimplemented.  Unknown IDs return `A = 0xFF`.

@@ -656,9 +656,9 @@ xbios_handler:
     cp 0xC2
     jp z, .te_reset
     cp 0xE3
-    jr z, .cd_version
+    jp z, .cd_version
     cp 0xE6
-    jr z, .cd_info
+    jp z, .cd_info
     cp 0xC5
     jp z, .te_stl_ask
     cp 0xC8
@@ -707,6 +707,8 @@ xbios_handler:
     jp z, .dd_format
     cp 0x92
     jp z, .dd_login
+    cp 0xE0
+    jp z, .km_set_speed
     ld a, 0xFF                     ; unknown XBIOS ID
     ret
 
@@ -1583,6 +1585,45 @@ xbios_handler:
     xor a
     ld (dd_results), a
     ld hl, dd_results
+    ret
+
+.km_set_speed:
+    ; KM_SET_SPEED (0x00E0): set key start-up delay and repeat speed.
+    ;   In:  H = start-up delay, L = repeat speed (scans; 0 = 256)
+    ;   Out: AF corrupt; all other registers preserved
+    ld a, h
+    ld (km_speed_h), a
+    ld a, l
+    ld (km_speed_l), a
+    push bc
+    push de
+    push hl
+
+    ld a, (km_speed_h)
+    or a
+    jr nz, .kms_delay_nz
+    ld hl, 256
+    jr .kms_delay_store
+.kms_delay_nz:
+    ld l, a
+    ld h, 0
+.kms_delay_store:
+    ld (kbd_repeat_delay), hl
+
+    ld a, (km_speed_l)
+    or a
+    jr nz, .kms_rate_nz
+    ld hl, 256
+    jr .kms_rate_store
+.kms_rate_nz:
+    ld l, a
+    ld h, 0
+.kms_rate_store:
+    ld (kbd_repeat_rate), hl
+
+    pop hl
+    pop de
+    pop bc
     ret
 
 ; --- Phase-2 disc calls ---

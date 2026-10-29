@@ -527,6 +527,45 @@ class DdLWrite(unittest.TestCase):
         self.assertIn("15.LWRITE..OK", smoke)
 
 
+class KmSetSpeed(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xE0", dispatch)
+        self.assertIn("jp z, .km_set_speed", dispatch)
+
+    def test_handler_zero_means_256_and_preserves(self):
+        body = handler_body(".km_set_speed:", "; --- Phase-2 disc calls ---")
+        self.assertIn("km_speed_h", body)
+        self.assertIn("km_speed_l", body)
+        self.assertIn("ld hl, 256", body)
+        self.assertIn("kbd_repeat_delay", body)
+        self.assertIn("kbd_repeat_rate", body)
+        self.assertIn("push bc", body)
+        self.assertIn("push de", body)
+        self.assertIn("push hl", body)
+        self.assertIn("pop hl", body)
+        self.assertIn("pop de", body)
+        self.assertIn("pop bc", body)
+
+    def test_keyboard_uses_variables(self):
+        text = source("src/bios/keyboard.zpa")
+        self.assertIn("kbd_repeat_delay: dw REPEAT_DELAY", text)
+        self.assertIn("kbd_repeat_rate:  dw REPEAT_RATE", text)
+        self.assertIn("ld hl, (kbd_repeat_delay)", text)
+        self.assertIn("ld hl, (kbd_repeat_rate)", text)
+        self.assertNotIn("ld hl, REPEAT_DELAY", text)
+        self.assertNotIn("ld hl, REPEAT_RATE", text)
+
+    def test_tester_covers_speed(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("KM_SET_SPEED", tester)
+        self.assertIn("16.KMSPD", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("16.KMSPD..OK", smoke)
+        self.assertIn("kbd_repeat_delay", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

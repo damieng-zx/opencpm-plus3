@@ -16,7 +16,7 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 `DD_CHECK_SECTOR`, `DD_FORMAT`, motor on/off/timeout, `DD_L_SEEK`).  The
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
-`15.LWRITE..OK`, the `5Ah` marker in the bottom-right screen attribute
+`15.LWRITE..OK`, `16.KMSPD..OK`, the `5Ah` marker in the bottom-right screen attribute
 (bank 5, `5AFFh`) and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
 `fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
@@ -257,6 +257,9 @@ into `D300h` and returns a clean result phase.
 
 Test 15 uses `DD_L_WRITE` with WRITE DATA to write the same boot sector
 back unchanged, then re-reads it with `DD_L_READ` and checks the prefix.
+
+Test 16 calls `KM_SET_SPEED` with H=10, L=5; the smoke runner checks the
+stored `kbd_repeat_delay`/`kbd_repeat_rate` values.
 
 ### BDOS file regression suite
 
