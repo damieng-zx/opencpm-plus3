@@ -16,8 +16,9 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 `DD_CHECK_SECTOR`, `DD_FORMAT`, motor on/off/timeout, `DD_L_SEEK`).  The
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
-`15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`, the `5Ah`
-marker somewhere in the screen attribute plane (bank 5, `5800h`-`5AFFh`)
+`15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`,
+`19.KTAB..OK`, the `5Ah` marker somewhere in the screen attribute plane
+(bank 5, `5800h`-`5AFFh`)
 and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
 `fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
@@ -267,6 +268,12 @@ verifies BC survives.  Test 18 then drains both with `KM_KT_GET`, checks
 the returned shift/key pairs and that an empty queue returns carry clear.
 The smoke runner checks the queued bytes `08 2B 00 1F`, `kbd_token_count=0`
 and `kbd_token_head=2`.
+
+Test 19 remaps the Z key (raw key 1) to `Q` in the normal translation table
+with `KM_SET_KEY`, prints `19.KTAB..` and polls the keyboard without echo
+until a key arrives.  The runner waits for that marker, presses Z and then
+waits for `19.KTAB..OK`; the test restores the built-in mapping afterwards
+and the runner checks `KMTAB[4]` is `FFh`.
 
 ### BDOS file regression suite
 

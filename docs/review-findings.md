@@ -338,6 +338,14 @@ set.
   case; the smoke runner checks the head/count after draining.
   Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
   `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
+- [x] **XBIOS KM_SET_KEY.** Writes a translation into a 40-key x 4-shift
+  override table in bank 6 (`A900h`), validating the key number and table
+  mask.  `_kbd_to_ascii` consults the table first; `FFh` keeps the built-in
+  mapping.  `XTETEST` test 19 remaps Z to `Q`, the smoke runner presses Z
+  and checks the character end to end, then verifies the entry is restored.
+  Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
+  `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`;
+  bank-6 map in `docs/boot.md` and `AGENTS.md`.
 
 ## P3 - Remaining follow-ups
 
@@ -347,9 +355,8 @@ set.
   accept CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
 - `DD_LOGIN` falls back to the type-0 template if the probe fails; it does
   not yet return the documented 0/2/3/4/5 login errors.
-- `CD_SA_*` (no serial model), the remaining `KM_*` calls
-  (`KM_SET_EXPAND`, `KM_SET_KEY`) and `FIND_FID` remain unimplemented.
-  Unknown IDs return `A = 0xFF`.
+- `CD_SA_*` (no serial model), `KM_SET_EXPAND` and `FIND_FID` remain
+  unimplemented.  Unknown IDs return `A = 0xFF`.
 - `KM_KT_PUT`/`KM_KT_GET` maintain the token queue but the ASCII keyboard
   path (`kbd_getchar`) does not consume it, so tokens are only visible to
   programs that poll `KM_KT_GET`.

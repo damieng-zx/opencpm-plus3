@@ -631,6 +631,52 @@ class KmKtGet(unittest.TestCase):
         self.assertIn("kbd_token_head", smoke)
 
 
+class KmSetKey(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xD7", dispatch)
+        self.assertIn("jp z, .km_set_key", dispatch)
+
+    def test_handler_validates_and_rewrites(self):
+        body = handler_body(".km_set_key:", ".km_kt_get:")
+        self.assertIn("cp 40", body)             # key number range
+        self.assertIn("and 0x0F", body)          # table mask
+        self.assertIn("add a, a", body)          # key * 4
+        self.assertIn("KMTAB / 256", body)
+        self.assertIn("rrc e", body)
+        self.assertIn("push bc", body)
+        self.assertIn("pop bc", body)
+        self.assertIn("push de", body)
+        self.assertIn("pop de", body)
+
+    def test_table_in_bank6_and_override(self):
+        text = source("src/bios/keyboard.zpa")
+        self.assertIn("KMTAB       equ 0xA900", text)
+        self.assertIn("KMTAB_SIZE  equ 160", text)
+        self.assertIn("jr nz, .kbd_init_tab", text)
+        # The fill value must be reloaded each iteration (regression: A was
+        # reused as the BC test and the table filled with 9Fh..01h).
+        init = text[text.index(".kbd_init_tab:"):
+                    text.index(".kbd_init_tab:") + 80]
+        self.assertIn("ld a, 0xFF", init)
+        ascii_map = text[text.index("_kbd_to_ascii:"):
+                         text.index(".builtin:")]
+        self.assertIn("and 3", ascii_map)        # shift state
+        self.assertIn("KMTAB", ascii_map)
+        self.assertIn("cp 0xFF", ascii_map)
+
+    def test_tester_and_smoke_cover_setkey(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("KM_SET_KEY", tester)
+        self.assertIn("19.KTAB", tester)
+        self.assertIn("ld c, 6", tester)         # non-echoing read
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("19.KTAB..OK", smoke)
+        self.assertIn('self.key("z")', smoke)
+        self.assertIn("0xA900", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

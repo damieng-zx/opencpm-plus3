@@ -37,6 +37,7 @@ DD_L_DPB        EQU 0x009E
 DD_L_XDPB       EQU 0x00A1
 DD_L_READ       EQU 0x00AD
 DD_L_WRITE      EQU 0x00B0
+KM_SET_KEY      EQU 0x00D7
 KM_KT_GET       EQU 0x00DA
 KM_KT_PUT       EQU 0x00DD
 KM_SET_SPEED    EQU 0x00E0
@@ -1097,6 +1098,52 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 19: KM_SET_KEY ===
+    ; Remap Z (raw key 1) in the normal table to 'Q', then wait for the
+    ; harness to press Z and check the translated character.
+    ld de, msg_t19
+    ld c, 9
+    call BDOS
+
+    ld hl, KM_SET_KEY
+    ld (userf_dw), hl
+    ld bc, 0x5101               ; B = 'Q', C = key 1 (Z)
+    ld de, 0x0100               ; D = normal table, E = unchanged
+    call userf_trampoline
+    ld a, c
+    cp 1
+    jp nz, .t19_fail
+    ld a, b
+    cp 0x51
+    jp nz, .t19_fail
+    ld a, d
+    cp 0x01
+    jp nz, .t19_fail
+
+.t19_wait:
+    ld c, 6                     ; direct console input, no echo
+    ld e, 0xFF
+    call BDOS
+    or a
+    jr z, .t19_wait
+    cp 0x51                     ; 'Q'
+    jp nz, .t19_fail
+
+    ; Restore the built-in translation for key 1.
+    ld hl, KM_SET_KEY
+    ld (userf_dw), hl
+    ld bc, 0xFF01
+    ld de, 0x0100
+    call userf_trampoline
+
+    ld de, msg_ok
+    jr .t19_print
+.t19_fail:
+    ld de, msg_fail
+.t19_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1278,6 +1325,7 @@ msg_t15:    db 0x0D, 0x0A, "15.LWRITE..", '$'
 msg_t16:    db 0x0D, 0x0A, "16.KMSPD..", '$'
 msg_t17:    db 0x0D, 0x0A, "17.KTPUT..", '$'
 msg_t18:    db 0x0D, 0x0A, "18.KTGET..", '$'
+msg_t19:    db 0x0D, 0x0A, "19.KTAB..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

@@ -62,6 +62,12 @@ kbd_tick_changed: db 0         ; 1 = this scan is on a new ISR tick
 ; KM_SET_SPEED values (scans at 50Hz; 0 means 256)
 kbd_repeat_delay: dw REPEAT_DELAY
 kbd_repeat_rate:  dw REPEAT_RATE
+
+; KM_SET_KEY translation table (bank 6): 40 keys x 4 shift states
+; (normal, CAPS, SYMB, EXTEND).  In bank 6 so it costs no image space;
+; FFh means "use the built-in mapping".
+KMTAB       equ 0xA900
+KMTAB_SIZE  equ 160
 km_speed_h: db 0
 km_speed_l: db 0
 
@@ -84,10 +90,10 @@ kbd_inject_rd:  db 0           ; Read offset into buf (0-63)
 ; kbd_init — Initialize keyboard driver
 ;   In:      nothing
 ;   Out:     nothing
-;   Clobbers: AF, HL
+;   Clobbers: AF, BC, HL
 ; ==========================================================================
 ; @proc kbd_init
-; @clobbers af,hl
+; @clobbers af,bc,hl
 ; @end
 kbd_init:
     ld a, 0xFF
@@ -104,6 +110,17 @@ kbd_init:
     ld (kbd_token_tail), a
     ld (kbd_token_count), a
     ld (kbd_lock_state), a
+    ; Clear the KM_SET_KEY translation overrides (FFh = built-in mapping)
+    ld hl, KMTAB
+    ld bc, KMTAB_SIZE
+.kbd_init_tab:
+    ld a, 0xFF
+    ld (hl), a
+    inc hl
+    dec bc
+    ld a, b
+    or c
+    jr nz, .kbd_init_tab
     ld hl, (kbd_repeat_delay)
     ld (kbd_rep_count), hl
     ret
@@ -435,6 +452,30 @@ _kbd_scan:
 ; @clobbers de,hl
 ; @end
 _kbd_to_ascii:
+    ; KM_SET_KEY override: index = key * 4 + shift state.
+    push af                    ; save raw key
+    push de                    ; save modifiers
+    ld l, a
+    ld h, 0
+    add hl, hl
+    add hl, hl
+    ld a, e
+    and 3
+    add a, l
+    ld l, a
+    ld de, KMTAB
+    add hl, de
+    ld a, (hl)
+    cp 0xFF
+    jr nz, .tab_hit
+    pop de                     ; no override: restore modifiers and key
+    pop af
+    jr .builtin
+.tab_hit:
+    pop de                     ; restore modifiers
+    pop hl                     ; discard the saved key, return the override
+    ret
+.builtin:
     ld d, 0
     ld l, a
     ld h, d                    ; HL = raw key as 16-bit index

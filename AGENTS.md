@@ -136,7 +136,8 @@ boot without `CCP.COM` prints a diagnostic and halts.
 **System mode (mode 3: banks 4,7,6,3)**:
 - **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers
 - **4000-7FFF**: Bank 7 — C: RAM disk (16K, owned by `RAMDISK.FID`)
-- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, `DD_CHECK_SECTOR` compare buffer at 9E00h, runtime screen/scroll buffers at A000h-A8FFh, staged `CCP.COM` at B000h-BFFFh
+- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, `DD_CHECK_SECTOR` compare buffer at 9E00h, runtime screen/scroll buffers at A000h-A8FFh, `KM_SET_KEY` translation
+table at A900h-A99Fh, staged `CCP.COM` at B000h-BFFFh
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
 
 **Screen access (mode 2: banks 4,5,6,3)**:

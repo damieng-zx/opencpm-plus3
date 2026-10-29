@@ -169,7 +169,8 @@ and trampolines. `scb_tpa` is patched to `TPA_TOP` too.
 | `0000-3FFF` | Bank 4. BIOS jump table at 0000, then state, drivers, font/CCP/FID loaders, BDOS. Asserted ≤ 16K (`system_end <= 0x4000`). |
 | `0038`      | ISR vector — JP isr_handler (in common memory).           |
 | `4000-7FFF` | Bank 7. C: RAM disk (16K) when RAMDISK.FID is loaded.     |
-| `8000-BFFF` | Bank 6. FONT51 at `8000`, FONT32 at `8800`, RAMDISK.FID at `9000` if loaded, FONT64 at `9400`, FDC deblock buffer at `9C00`, `DD_CHECK_SECTOR` compare buffer at `9E00`; text/scroll buffers at `A000-A8FF`; staged `CCP.COM` at `B000-BFFF`. |
+| `8000-BFFF` | Bank 6. FONT51 at `8000`, FONT32 at `8800`, RAMDISK.FID at `9000` if loaded, FONT64 at `9400`, FDC deblock buffer at `9C00`, `DD_CHECK_SECTOR` compare buffer at `9E00`; text/scroll buffers at `A000-A8FF`; `KM_SET_KEY` translation table at
+`A900-A99F`; staged `CCP.COM` at `B000-BFFF`. |
 | `F600-FFFF` | Common stub (bank 3). Same content as in mode 0 — that's the point. |
 
 ---

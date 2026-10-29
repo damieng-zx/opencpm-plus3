@@ -411,19 +411,27 @@ class Smoke:
     def run_xtetest(self) -> None:
         """Exercise the XBIOS TE calls and their register contracts."""
         self.log("XTETEST")
+        start = len(self.history)
         self.mcp.call("type", {"text": "XTETEST"})
         self.mcp.call("key", {"name": "enter"})
+        # Test 19 remaps Z to Q and blocks for a key press.
+        self.wait_for(["19.KTAB.."], frames=500, attempts=8)
+        self.key("z")
         self.wait_for(["DONE"], frames=500, attempts=8)
         screen = self.text()
-        if "FAIL" in screen:
-            raise SmokeError("XTETEST reported a failure:\n" + screen)
+        # The full run scrolls off the 24-line screen, so check every frame
+        # recorded since the test started.
+        seen = "\n".join(self.history[start:])
+        if "FAIL" in seen:
+            raise SmokeError("XTETEST reported a failure:\n" + seen)
         for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK",
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
-                       "17.KTPUT..OK", "18.KTGET..OK", "DONE"):
-            if needle not in screen:
+                       "17.KTPUT..OK", "18.KTGET..OK", "19.KTAB..OK",
+                       "DONE"):
+            if needle not in seen:
                 raise SmokeError(
-                    f"XTETEST missing {needle!r}:\n" + screen)
+                    f"XTETEST missing {needle!r}:\n" + seen)
         # SCR_RUN_ROUTINE stages its routine at D000h, writes 5Ah to the
         # bottom-right attribute in bank 5 and 1 to the D100h flag.  Later
         # output scrolls the screen, so look for the marker anywhere in the
@@ -458,6 +466,11 @@ class Smoke:
         head = self.memory(4, label_address("kbd_token_head"), 1)[0]
         if head != 2:
             raise SmokeError(f"KM_KT_GET head {head}, expected 2")
+        # Test 19 restored the built-in translation for Z after checking it.
+        kmtab = self.memory(6, 0xA900, 8)
+        if kmtab[4] != 0xFF:
+            raise SmokeError(
+                f"KM_SET_KEY table[4] {kmtab[4]:02X}, expected FF after reset")
         self.expect("XTETEST prompt", "A>")
 
     def run_xtetest_format(self) -> None:
@@ -479,6 +492,9 @@ class Smoke:
             if "E5 E5 E5" not in dump:
                 raise SmokeError(
                     "DD_FORMAT did not fill track 39 with 0xE5:\n" + dump)
+            # Let the run finish (test 19 waits for a key).
+            self.key("z")
+            self.wait_for(["DONE"], frames=500, attempts=10)
         finally:
             self.dsk = old_dsk
             try:
