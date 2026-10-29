@@ -120,7 +120,7 @@ class TeSetBorder(unittest.TestCase):
         text = source("src/bios/bios.zpa")
         dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
         self.assertIn("cp 0xCE", dispatch)
-        self.assertIn("jr z, .te_set_border", dispatch)
+        self.assertRegex(dispatch, r"j[pr] z, \.te_set_border")
 
     def test_handler_sets_border_only(self):
         body = handler_body(".te_set_border:", ".dd_drive_status:")
@@ -131,6 +131,18 @@ class TeSetBorder(unittest.TestCase):
         self.assertIn("out (PORT_ULA), a", body)
         self.assertNotIn("scr_paper", body)
         self.assertNotIn("scr_flash", body)
+
+
+class TeSetSpeed(unittest.TestCase):
+    def test_dispatch_accepts_and_ignores(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertRegex(dispatch, r"cp 0xD1\s*\n\s*ret z")
+
+    def test_tester_calls_it(self):
+        text = source("src/test/xtetest.asm")
+        self.assertIn("TE_SET_SPEED", text)
+        self.assertIn("5b.SPEED", text)
 
 
 class TesterConstants(unittest.TestCase):

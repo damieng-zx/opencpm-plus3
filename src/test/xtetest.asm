@@ -188,6 +188,20 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 5b: TE_SET_SPEED (accepted and ignored on +3) ===
+    ld de, msg_t5b
+    ld c, 9
+    call BDOS
+
+    ld hl, TE_SET_SPEED
+    ld (userf_dw), hl
+    ld hl, 0x0A0A               ; H = main delay, L = alternate delay
+    call userf_trampoline
+
+    ld de, msg_ok
+    ld c, 9
+    call BDOS
+
     ; === Test 6: TE_RESET (restore defaults after colour changes) ===
     ld de, msg_t6
     ld c, 9
@@ -294,6 +308,7 @@ msg_t2:     db "2.TE_ASK:", '$'
 msg_t3:     db "3.INK..", '$'
 msg_t4:     db "4.STL_ASK:", '$'
 msg_t5:     db 0x0D, 0x0A, "5.BORDER blue..", '$'
+msg_t5b:    db "5b.SPEED..", '$'
 msg_t6:     db "6.RESET..", '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

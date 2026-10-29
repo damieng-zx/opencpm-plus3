@@ -638,7 +638,9 @@ xbios_handler:
     cp 0xCB
     jr z, .te_set_ink
     cp 0xCE
-    jr z, .te_set_border
+    jp z, .te_set_border
+    cp 0xD1
+    ret z                          ; TE_SET_SPEED — +3 flash is hardware-only
     cp 0x98
     jp z, .dd_drive_status
     ld a, 0xFF                     ; unknown XBIOS ID
