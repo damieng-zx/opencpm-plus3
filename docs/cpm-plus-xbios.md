@@ -39,6 +39,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 |----|------|-------|--------|
 | `0x98` | `DD_DRIVE_STATUS` | C = unit (bits 1-0), head (bit 2) | A = ST3.  Unit 0 returns `0x30` (Ready + Track 0 + unit 0); other units return `0x01` (not fitted). |
 | `0xBF` | `TE_ASK` | - | B = viewport top row, C = viewport left column, D = height - 1, E = width - 1, H = cursor row, L = cursor column.  The viewport is always the full screen, so B = C = 0, D = 23 and E = current columns - 1. |
+| `0xC2` | `TE_RESET` | - | Re-initialise the terminal emulator: restore the default white-on-blue palette, wrapping and page mode, clear the screen and home the cursor.  The current screen width is kept. |
 | `0xC5` | `TE_STL_ASK` | - | A = 0, Z set.  Status line is always off. |
 | `0xC8` | `TE_STL_ON_OFF` | - | Swallowed; returns with A unchanged and Z set. |
 | `0xE3` | `CD_VERSION` | - | A = 3 (machine type), BC = `0x0100` (version 1.0). |
@@ -49,7 +50,6 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 
 The following +3 TE operations have no handler yet:
 
-- `TE_RESET` (`0x00C2`) - reset the terminal
 - `TE_SET_INK` (`0x00CB`)
 - `TE_SET_BORDER` (`0x00CE`)
 - `TE_SET_SPEED` (`0x00D1`)

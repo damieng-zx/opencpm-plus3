@@ -42,6 +42,37 @@ class TeAsk(unittest.TestCase):
         self.assertIn("ld a, (cursor_col)", body)
         self.assertIn("ld l, a", body)
 
+class TeReset(unittest.TestCase):
+    def test_dispatch_uses_jumpblock_entry(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xC2", dispatch)
+        self.assertIn("jr z, .te_reset", dispatch)
+
+    def test_handler_calls_scr_reset(self):
+        body = handler_body(".te_reset:", ".dd_drive_status:")
+        self.assertIn("call scr_reset", body)
+
+    def test_reset_restores_defaults_then_clears(self):
+        text = source("src/bios/screen.zpa")
+        body = text[text.index("scr_reset:"):text.index("scr_putchar:")]
+        self.assertIn("ld (scr_ink_br), a", body)
+        self.assertIn("ld (scr_paper_br), a", body)
+        self.assertIn("ld (scr_flash), a", body)
+        self.assertIn("ld a, 7", body)             # default ink
+        self.assertIn("ld a, 1", body)             # default paper
+        self.assertIn("ld a, DEFAULT_ATTR", body)
+        self.assertIn("ld (scr_wrap), a", body)
+        self.assertIn("call _cancel_paging", body)
+        self.assertIn("call scr_init", body)
+
+    def test_reset_keeps_screen_width(self):
+        text = source("src/bios/screen.zpa")
+        body = text[text.index("scr_reset:"):text.index("scr_putchar:")]
+        self.assertNotIn("scr_cols", body)
+
+
+class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")
         for name, addr in (

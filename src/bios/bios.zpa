@@ -625,6 +625,8 @@ bios_time:
 xbios_handler:
     cp 0xBF
     jr z, .te_ask
+    cp 0xC2
+    jr z, .te_reset
     cp 0xE3
     jr z, .cd_version
     cp 0xE6
@@ -681,6 +683,13 @@ xbios_handler:
     ld h, a
     ld a, (cursor_col)
     ld l, a
+    ret
+
+.te_reset:
+    ; TE_RESET (0x00C2): re-initialise the terminal emulator.
+    ; Clears the screen, homes the cursor and restores the default
+    ; palette/wrap/page-mode state.  The screen width is left unchanged.
+    call scr_reset
     ret
 
 .dd_drive_status:

@@ -164,6 +164,42 @@ scr_init:
 
 
 ; ==========================================================================
+; scr_reset — Re-initialise the terminal emulator
+;   Restores the default palette and wrap/page state, then clears the
+;   screen and homes the cursor.  The screen width (scr_cols) is a mode
+;   choice, not terminal state, so it is left alone.
+;   In:      nothing
+;   Out:     nothing
+;   Clobbers: AF, BC, DE, HL
+; ==========================================================================
+; @proc scr_reset
+; @clobbers af,bc,de,hl
+; @end
+scr_reset:
+    xor a
+    ld (scr_ink_br), a
+    ld (scr_paper_br), a
+    ld (scr_flash), a
+    ld (saved_row), a
+    ld (saved_col), a
+
+    ld a, 7
+    ld (scr_ink), a
+    ld a, 1
+    ld (scr_paper), a
+    ld a, DEFAULT_ATTR
+    ld (scr_attr), a
+    ld a, BORDER_COL
+    ld (scr_border_v), a
+    ld a, 1
+    ld (scr_wrap), a
+
+    call _cancel_paging
+    call scr_init
+    ret
+
+
+; ==========================================================================
 ; scr_putchar — Output character at cursor, advance cursor
 ;   In:      A = character
 ;   Out:     nothing
