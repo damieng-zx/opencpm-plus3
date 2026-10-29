@@ -189,7 +189,11 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O)
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
-- `tools/mkdsk.py` — DSK image builder
+- `src/tools/b16test.asm` — `B16TEST.COM`, the 16-bit block-number file test
+  (create/write/size/free-space/truncate/delete on B:)
+- `tools/mkdsk.py` — DSK image builder (`--format 180k` or `720k`); the
+  720K layout uses 2K blocks, 128 directory entries and 16-bit block
+  numbers, and the build writes it as `build/cpm3_720.dsk`
 - `tools/zpa.py` — ZPA preprocessor (see **ZPA Preprocessing**)
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)
 - `tools/check_ccp.py` — Fails the build if `CCP.COM` does not fit the bank-6 staging window

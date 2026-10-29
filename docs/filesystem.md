@@ -427,7 +427,8 @@ CP/M 3's BIOS specification includes a notion of **write types** to optimise deb
 The size of block numbers in the allocation map depends on DSM:
 
 - **DSM ≤ 255**: Block numbers are 1 byte. 16 entries per extent.
-- **DSM > 255**: Block numbers are 2 bytes (little-endian). 8 entries per extent.
+- **DSM > 255**: Block numbers are 2 bytes, high byte first (big-endian).
+  8 entries per extent.
 
 This means a single extent can track:
 
@@ -602,7 +603,8 @@ EX:    Extent low byte. (EX & EXM) = sub-extent, (EX >> log2(EXM+1)) = extent gr
 S1:    Bytes in last record (CP/M 3, 1-128, 0 = full record). Always 0 in CP/M 2.2.
 S2:    Extent high byte (bits 0-5). Logical extent = S2 × 32 + EX.
 RC:    Records used in last logical extent (0-128).
-AL:    Block numbers. 1 byte each if DSM ≤ 255, 2 bytes (LE) if DSM > 255.
+AL:    Block numbers. 1 byte each if DSM ≤ 255, 2 bytes (high byte
+       first) if DSM > 255.
        Zero = no block allocated.
 ```
 
@@ -612,6 +614,7 @@ AL:    Block numbers. 1 byte each if DSM ≤ 255, 2 bytes (LE) if DSM > 255.
 |--------|-----|-----|-----|-----|-----|-----|-----|-----|-----|
 | 8" SSSD | 26 | 3 | 7 | 0 | 242 | 63 | C0 | 00 | 2 |
 | Amstrad PCW/+3 | 36 | 3 | 7 | 0 | 174 | 63 | C0 | 00 | 1 |
+| PCW DS/DD 720K | 36 | 4 | 15 | 0 | 351 | 127 | C0 | 00 | 1 |
 | Kaypro II | 40 | 3 | 7 | 0 | 194 | 63 | C0 | 00 | 1 |
 | Osborne 1 | 20 | 4 | 15 | 1 | 45 | 63 | 80 | 00 | 3 |
 | Amstrad CPC System | 36 | 3 | 7 | 0 | 170 | 63 | C0 | 00 | 2 |

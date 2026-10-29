@@ -110,7 +110,7 @@ f46_byte:   db 0               ; current ALV byte
 ; --- F40 zero-fill scratch ---
 f40_zfill:  db 0               ; 1 = the next allocation must be zeroed
 f40_pending: db 0              ; request consumed by bf_f21_core
-f40_block:  db 0               ; block being filled
+f40_block:  dw 0               ; block being filled
 f40_left:   db 0               ; records still to write
 f40_rec:    dw 0               ; next absolute record in that block
 
@@ -156,6 +156,13 @@ cached_drive: db 0xFF          ; Drive the cached_* above refer to (0xFF = none)
                                ; select_drive short-circuits when called for the
                                ; same drive, avoiding a full directory scan per
                                ; F20/F21/F33/F40 record. F13 invalidates it.
+cached_blk16: db 0             ; 1 = DSM > 255: eight 16-bit block numbers per
+                               ; extent, high byte first, instead of sixteen
+                               ; 8-bit ones (CP/M 3 16-bit block format).
+
+; Scratch for the allocation-map loops (build_alv, F19, F99).
+map_base:   dw 0               ; 32-byte FCB or directory entry being scanned
+map_idx:    db 0               ; current block slot
 
 
 ; ==========================================================================
@@ -1338,6 +1345,14 @@ select_drive:
     ld d, (hl)
     inc hl
     ld (cached_dsm), de        ; DSM
+    ; 16-bit block numbers when DSM > 255 (CP/M 3 16-bit block format).
+    ld a, d
+    or a
+    ld a, 0
+    jr z, .dsm_is_8bit
+    ld a, 1
+.dsm_is_8bit:
+    ld (cached_blk16), a
     ld e, (hl)
     inc hl
     ld d, (hl)
@@ -1372,7 +1387,7 @@ select_drive:
 ; @end
 ; select_fcb_drive — Select the drive named by IX+0 (0 = current drive).
 ;   In:  IX = FCB (fcb_buf)
-;   Out: CF=0 success, CF=1 invalid drive or 16-bit (DSM>255) format
+;   Out: CF=0 success, CF=1 invalid drive
 ;   Clobbers: AF, BC, DE, HL (IX preserved by select_drive)
 select_fcb_drive:
     ld a, (ix + 0)
@@ -1383,14 +1398,6 @@ select_fcb_drive:
 .has_drive:
     dec a                      ; A = 0-based drive
     call select_drive
-    ret c                      ; invalid drive
-    ; DSM > 255 uses 16-bit directory block pointers, which this BDOS
-    ; does not implement yet.  Treat the drive as unusable for file I/O
-    ; instead of misreading the 8-bit allocation map.
-    ld a, (cached_dsm + 1)
-    or a
-    ret z
-    scf
     ret
 
 
@@ -1498,26 +1505,11 @@ build_alv:
     inc hl
     ld b, l
     ld hl, (cached_alv)
-    ld a, (cached_dsm + 1)
-    or a
-    jr nz, .all_used
     xor a
 .clr:
     ld (hl), a
     inc hl
     djnz .clr
-    jr .mark_dir
-
-.all_used:
-    ; 16-bit block pointers are not implemented yet.  Mark every block
-    ; used so the BDOS cannot allocate over existing data; file I/O on
-    ; this drive is rejected by select_fcb_drive.
-    ld a, 0xFF
-.clr_used:
-    ld (hl), a
-    inc hl
-    djnz .clr_used
-    ret
 
 .mark_dir:
     ; Mark directory blocks as used (AL0/AL1 from DPB)
@@ -1535,7 +1527,8 @@ build_alv:
 .al_loop:
     rlc b                      ; Rotate AL0 left, bit 7 → carry
     jp nc, .al_skip0
-    ld a, d
+    ld h, 0
+    ld l, d
     call set_alloc_bit
 .al_skip0:
     inc d
@@ -1546,7 +1539,8 @@ build_alv:
 .al1_loop:
     rlc c
     jp nc, .al_skip1
-    ld a, d
+    ld h, 0
+    ld l, d
     call set_alloc_bit
 .al_skip1:
     inc d
@@ -1567,21 +1561,28 @@ build_alv:
     cp 0xE5
     jp z, .dir_next
 
-    ; Mark allocation blocks as used
+    ; Mark allocation blocks as used (8 or 16 slots, 8- or 16-bit each).
     push de
-    push hl
-    ld de, 16                  ; Offset to allocation map in entry
-    add hl, de
-    ld b, 16                   ; 16 block numbers (single byte for DSM<256)
+    ld (map_base), hl
+    xor a
+    ld (map_idx), a
 .mark_blk:
-    ld a, (hl)
-    or a
-    jp z, .skip_blk            ; Block 0 in the map means unused slot
+    ld a, (map_idx)
+    ld hl, (map_base)
+    call get_dir_block         ; HL = block, 0 = unused slot
+    ld a, h
+    or l
+    jr z, .skip_blk
     call set_alloc_bit
 .skip_blk:
-    inc hl
-    djnz .mark_blk
-    pop hl
+    ld a, (map_idx)
+    inc a
+    ld (map_idx), a
+    call map_count
+    ld b, a
+    ld a, (map_idx)
+    cp b
+    jr c, .mark_blk
     pop de
 
 .dir_next:
@@ -1600,37 +1601,155 @@ build_alv:
 ; Internal: Allocation vector operations
 ; ==========================================================================
 
-; @proc set_alloc_bit
-; @param %block:u8 a
+; --------------------------------------------------------------------------
+; Allocation-map access (8-bit or 16-bit block numbers)
+;
+; CP/M 3 uses sixteen 8-bit block numbers per extent when DSM <= 255, and
+; eight 16-bit block numbers (high byte first) when DSM > 255.  The FCB map
+; (bytes 16-31) and the directory entry map use the same encoding, so the
+; accessors below work on either 32-byte block.
+; --------------------------------------------------------------------------
+
+; @proc map_count
+; @out   a
 ; @clobbers af
 ; @end
-; set_alloc_bit — Mark block A as used in ALV
-;   In: A = block number
-;   Clobbers: AF
+; map_count — A = number of allocation-map slots in an extent (16 or 8).
+map_count:
+    ld a, (cached_blk16)
+    or a
+    ld a, 16
+    ret z
+    ld a, 8
+    ret
+
+
+; @proc map_block_addr
+; @param %base:u16  hl             ; FCB or directory entry
+; @param %index:u8  a              ; slot number
+; @out   hl                        ; address of the slot
+; @clobbers af,bc,hl
+; @end
+map_block_addr:
+    push de
+    ld e, a
+    ld d, 0
+    ex de, hl                      ; DE = base, HL = index
+    ld a, (cached_blk16)
+    or a
+    jr z, .add
+    add hl, hl                     ; two bytes per slot
+.add:
+    ld bc, 16
+    add hl, bc
+    add hl, de                     ; HL = base + 16 + index*width
+    pop de
+    ret
+
+
+; @proc get_fcb_block
+; @param %index:u8  a
+; @out   hl                        ; block number, 0 = unallocated
+; @clobbers af,bc,hl
+; @end
+get_fcb_block:
+    push ix
+    pop hl
+    call map_block_addr
+    ld a, (cached_blk16)
+    or a
+    jr z, .byte
+    ld a, (hl)                     ; high byte first
+    inc hl
+    ld l, (hl)                     ; low byte
+    ld h, a
+    ret
+.byte:
+    ld a, (hl)
+    ld l, a
+    ld h, 0
+    ret
+
+
+; @proc put_fcb_block
+; @param %index:u8  a
+; @param %block:u16 hl
+; @clobbers af,bc,de,hl
+; @end
+put_fcb_block:
+    push af
+    push hl
+    push ix
+    pop hl
+    pop de                         ; DE = block
+    pop af                         ; A = index
+    call map_block_addr
+    ld a, (cached_blk16)
+    or a
+    jr z, .byte
+    ld a, d
+    ld (hl), a                     ; high byte first
+    inc hl
+    ld a, e
+    ld (hl), a
+    ret
+.byte:
+    ld (hl), e
+    ret
+
+
+; @proc get_dir_block
+; @param %entry:u16 hl             ; 32-byte directory entry
+; @param %index:u8  a
+; @out   hl                        ; block number, 0 = unused slot
+; @clobbers af,bc,hl
+; @end
+get_dir_block:
+    call map_block_addr
+    ld a, (cached_blk16)
+    or a
+    jr z, .byte
+    ld a, (hl)                     ; high byte first
+    inc hl
+    ld l, (hl)                     ; low byte
+    ld h, a
+    ret
+.byte:
+    ld a, (hl)
+    ld l, a
+    ld h, 0
+    ret
+
+
+; @proc set_alloc_bit
+; @param %block:u16 hl
+; @clobbers af
+; @end
+; set_alloc_bit — Mark block HL as used in the ALV
 set_alloc_bit:
     push bc
     push de
     push hl
-    ld c, a                    ; C = block number
-    ; Byte index = block / 8
-    srl a
-    srl a
-    srl a
-    ld e, a
-    ld d, 0
-    ld hl, (cached_alv)
-    add hl, de                 ; HL = &ALV[block/8]
-    ; Bit mask: bit 7 - (block & 7)  (MSB first in CP/M ALV)
-    ld a, c
+    ld a, l
     and 0x07
-    ld b, a
+    ld b, a                    ; bit within the ALV byte
+    srl h
+    rr l
+    srl h
+    rr l
+    srl h
+    rr l                       ; HL = block / 8
+    ld de, (cached_alv)
+    add hl, de
+    ld a, b
+    or a
     ld a, 0x80
-    jr z, .done
-.shr:
+    jr z, .apply
+.shift:
     srl a
-    djnz .shr
-.done:
-    or (hl)                    ; Set the bit
+    djnz .shift
+.apply:
+    or (hl)
     ld (hl), a
     pop hl
     pop de
@@ -1639,102 +1758,91 @@ set_alloc_bit:
 
 
 ; @proc clear_alloc_bit
-; @param %block:u8 a
-; @clobbers af,hl
+; @param %block:u16 hl
+; @clobbers af
 ; @end
-; clear_alloc_bit — Mark block A as free in ALV
-;   In: A = block number
-;   Clobbers: AF, HL
+; clear_alloc_bit — Mark block HL as free in the ALV
 clear_alloc_bit:
     push bc
     push de
-    ld c, a
-    srl a
-    srl a
-    srl a
-    ld e, a
-    ld d, 0
-    ld hl, (cached_alv)
-    add hl, de
-    ld a, c
+    push hl
+    ld a, l
     and 0x07
     ld b, a
+    srl h
+    rr l
+    srl h
+    rr l
+    srl h
+    rr l
+    ld de, (cached_alv)
+    add hl, de
+    ld a, b
+    or a
     ld a, 0x80
-    jp z, .done
-.shr:
+    jr z, .apply
+.shift:
     srl a
-    djnz .shr
-.done:
-    cpl                        ; Invert: 0 bit to clear, 1s to keep
+    djnz .shift
+.apply:
+    cpl
     and (hl)
     ld (hl), a
+    pop hl
     pop de
     pop bc
     ret
 
 
 ; @proc find_free_block
-; @out   a
-; @clobbers bc,de,hl
+; @out   hl                        ; first free block, 0 if none
+; @out   carry                     ; set when the disk is full
+; @clobbers af,bc,de,hl
 ; @end
-; find_free_block — Find first free block in ALV
-;   Out: A = block number (0 if none free), carry set if disk full
-;   Clobbers: BC, DE, HL
 find_free_block:
     ld hl, (cached_alv)
-    ld de, (cached_dsm)
-    inc de                     ; DE = total blocks
-    ld bc, 0                   ; BC = current block number
+    ld bc, 0                   ; BC = block number
 .byte_loop:
     ld a, (hl)
-    cp 0xFF                    ; All 8 blocks used?
-    jp nz, .check_bits
-    ; Skip 8 blocks
-    ld a, c
-    add a, 8
-    ld c, a
-    jp nc, .no_carry
-    inc b
-.no_carry:
-    inc hl
-    ; Check if past DSM
-    push hl
-    ld h, b
-    ld l, c
-    or a
-    sbc hl, de
-    pop hl
-    jp c, .byte_loop
-    scf                        ; Disk full
-    ret
-
-.check_bits:
-    ; A = ALV byte, some bits are 0 (free)
-    ld e, a
-    ld d, 0x80                 ; Bit mask
+    cp 0xFF
+    jr z, .skip_byte
+    ld d, 0x80
 .bit_loop:
-    ld a, e
+    ld a, (hl)
     and d
-    jp z, .found               ; Bit is 0 = block is free
-    srl d
+    jr z, .found               ; bit clear = block free
     inc bc
-    ; Check if past DSM
     push hl
     ld hl, (cached_dsm)
-    inc hl
     or a
     sbc hl, bc
     pop hl
-    jp z, .full
-    jp .bit_loop
-
-.found:
-    ld a, c                    ; A = free block number
-    or a                       ; Clear carry
-    ret
-
+    jp c, .full                ; past DSM
+    srl d
+    jr nz, .bit_loop
+    inc hl
+    jr .byte_loop
+.skip_byte:
+    ld a, c
+    add a, 8
+    ld c, a
+    jr nc, .skip_nc
+    inc b
+.skip_nc:
+    inc hl
+    push hl
+    ld hl, (cached_dsm)
+    or a
+    sbc hl, bc
+    pop hl
+    jp nc, .byte_loop
 .full:
     scf
+    ret
+.found:
+    ld h, b
+    ld l, c
+    or a                       ; clear carry
     ret
 
 
@@ -2319,21 +2427,27 @@ bf_f19:
     ; Match — free all blocks and mark entry as deleted
     push de
     push bc
-    push hl
-    ld de, 16
-    add hl, de                 ; HL = &entry[16] (allocation map)
-    ld b, 16
+    ld (map_base), hl
+    xor a
+    ld (map_idx), a
 .del_free:
-    ld a, (hl)
-    or a
-    jp z, .del_skip_blk
-    push hl
+    ld a, (map_idx)
+    ld hl, (map_base)
+    call get_dir_block         ; HL = block, 0 = unused slot
+    ld a, h
+    or l
+    jr z, .del_skip_blk
     call clear_alloc_bit
-    pop hl
 .del_skip_blk:
-    inc hl
-    djnz .del_free
-    pop hl                     ; HL = entry base
+    ld a, (map_idx)
+    inc a
+    ld (map_idx), a
+    call map_count
+    ld b, a
+    ld a, (map_idx)
+    cp b
+    jr c, .del_free
+    ld hl, (map_base)
     ld (hl), 0xE5              ; Mark entry as deleted
     call write_dir_entry
     pop bc
@@ -2426,32 +2540,24 @@ f20_body:
     djnz .shr_cr               ; A = CR >> BSH = block index in extent
 .shr_cr_done:
 
-    ; Get block number from allocation map (FCB bytes 16-31)
-    ld e, a
-    ld d, 0
-    push ix
-    pop hl
-    ld bc, 16
-    add hl, bc
-    add hl, de                 ; HL = &FCB[16 + block_index]
-    ld a, (hl)                 ; A = block number
-    or a
+    ; Get block number from the allocation map (8- or 16-bit slots)
+    call get_fcb_block         ; HL = block number
+    ld a, h
+    or l
     jp z, .eof                 ; Block 0 = no more data
 
     ; Calculate absolute track/sector for this record
     ; record_in_block = CR & BLM
-    push af                    ; Save block number
+    push hl                    ; Save block number
     ld a, (ix + 32)            ; CR
     ld b, a
     ld a, (cached_blm)
     and b                      ; A = record within block
     ld c, a                    ; C = record in block
-    pop af                     ; A = block number
+    pop hl                     ; HL = block number
 
     ; Absolute record = block * records_per_block + record_in_block
     ; = block << BSH + record_in_block
-    ld l, a
-    ld h, 0                    ; HL = block number
     ld a, (cached_bsh)
     ld b, a
     or a
@@ -2668,32 +2774,25 @@ bf_f21_core:
     djnz .wseq_shr             ; A = CR >> BSH = block_index in alloc map
 .wseq_shr_done:
 
-    ; Get block number from FCB: FCB[16 + block_index]
-    ld e, a
-    ld d, 0
-    push ix
-    pop hl
-    ld bc, 16
-    add hl, bc
-    add hl, de                 ; HL = &FCB[16 + block_index]
-    ld a, (hl)
-    or a
+    ; Get block number from the allocation map (8- or 16-bit slots)
+    ld (map_idx), a            ; slot index, used by .wseq_alloc
+    call get_fcb_block         ; HL = block number
+    ld a, h
+    or l
     jp z, .wseq_alloc          ; Zero = unallocated, need a new block
 
 .wseq_have_block:
-    ; A = block number
-    push af                    ; Save block number
+    ; HL = block number
+    push hl                    ; Save block number
     ; record_in_block = CR & BLM
     ld a, (ix + 32)            ; CR
     ld b, a
     ld a, (cached_blm)
     and b                      ; A = record_in_block
     ld c, a
-    pop af                     ; A = block number
+    pop hl                     ; HL = block number
 
     ; abs_record = (block << BSH) + record_in_block
-    ld l, a
-    ld h, 0
     ld a, (cached_bsh)
     ld b, a
     or a
@@ -2742,32 +2841,29 @@ bf_f21_core:
     jp bdos_eok_x
 
 .wseq_alloc:
-    ; HL = &FCB[16 + block_index] — need to allocate a block here
-    push hl                    ; Save alloc slot pointer
-    call find_free_block       ; A = free block number, carry = disk full
-    pop hl
+    ; Slot map_idx is unallocated — allocate a block here.
+    call find_free_block       ; HL = free block, carry = disk full
     jp c, .wseq_diskfull
     push hl
-    push af
     call set_alloc_bit         ; Mark block as used in ALV
-    pop af
     pop hl
-    ld (hl), a                 ; Store block number in FCB alloc map
+    push hl
+    ld a, (map_idx)
+    call put_fcb_block         ; Store block number in the FCB map
+    pop hl                     ; HL = block number
 
     ; F40 zero fill: a newly allocated block is filled with zeros before
     ; the record is written, so unwritten records read back as zeros.
     ld a, (f40_pending)
     or a
     jr z, .wseq_alloc_nofill
-    push hl                    ; save the alloc slot pointer
-    ld a, (hl)                 ; block number just allocated
-    call zero_fill_block
-    pop hl
+    push hl                    ; zero_fill_block clobbers HL
+    call zero_fill_block       ; HL = block
+    pop hl                     ; HL = block again
     or a
     jp nz, .wseq_error         ; A = BIOS WRITE error code
 .wseq_alloc_nofill:
-    ld a, (hl)                 ; A = block number for .wseq_have_block
-    jp .wseq_have_block
+    jp .wseq_have_block        ; HL = block
 
 .wseq_full:
     ld a, 1                    ; Directory full
@@ -2895,16 +2991,16 @@ wseq_close_cur:
 ;   Writes every record in the block from the common zero buffer, so the
 ;   user's DMA area is never touched.  The caller must have the drive's
 ;   DPB cached (select_fcb_drive) before calling.
-;   In:  A = block number
+;   In:  HL = block number
 ;   Out: A = 0 on success, or the BIOS WRITE code (1 = error, 2 = read-only)
 ;   Clobbers: AF, BC, DE, HL
 ; @proc zero_fill_block
-; @param %block:u8 a
+; @param %block:u16 hl
 ; @out   a
 ; @clobbers af,bc,de,hl
 ; @end
 zero_fill_block:
-    ld (f40_block), a
+    ld (f40_block), hl
 
     ; Clear the common zero buffer (a stray write cannot poison the fill).
     ld hl, f40_zero
@@ -2915,9 +3011,7 @@ zero_fill_block:
     djnz .zf_clear
 
     ; First absolute record: block << BSH
-    ld a, (f40_block)
-    ld l, a
-    ld h, 0
+    ld hl, (f40_block)
     ld a, (cached_bsh)
     ld b, a
     or a
@@ -3329,26 +3423,18 @@ bf_f33:
     srl a
     djnz .rdrand_shr
 .rdrand_shr_done:
-    ld e, a
-    ld d, 0
-    push ix
-    pop hl
-    ld bc, 16
-    add hl, bc
-    add hl, de
-    ld a, (hl)
-    or a
+    call get_fcb_block         ; HL = block (8- or 16-bit slot)
+    ld a, h
+    or l
     jp z, .rdrand_unwritten2
 
-    push af
+    push hl
     ld a, (ix + 32)
     ld b, a
     ld a, (cached_blm)
     and b
     ld c, a
-    pop af
-    ld l, a
-    ld h, 0
+    pop hl
     ld a, (cached_bsh)
     ld b, a
     or a
@@ -5144,24 +5230,30 @@ f99_base_of:
 ; (f99_entry), clearing them in the directory entry.
 f99_free_from:
 .loop:
+    call map_count
+    ld b, a
     ld a, (f99_blocks)
-    cp 16
+    cp b
     ret nc
-    ld hl, (f99_entry)
-    ld de, 16
-    add hl, de
     ld a, (f99_blocks)
-    ld e, a
-    ld d, 0
-    add hl, de
-    ld a, (hl)
-    or a
+    ld hl, (f99_entry)
+    call get_dir_block         ; HL = block, 0 = unused slot
+    ld a, h
+    or l
     jr z, .next
-    push hl
     call clear_alloc_bit
-    pop hl
-    ld (hl), 0
 .next:
+    ; Clear the slot itself (one byte, or two in 16-bit block format).
+    ld a, (f99_blocks)
+    ld hl, (f99_entry)
+    call map_block_addr
+    ld (hl), 0
+    ld a, (cached_blk16)
+    or a
+    jr z, .advance
+    inc hl
+    ld (hl), 0
+.advance:
     ld a, (f99_blocks)
     inc a
     ld (f99_blocks), a

@@ -173,17 +173,20 @@ class Issue08AlvSize(unittest.TestCase):
         body = text[text.index("build_alv:"):text.index(".mark_dir:")]
         self.assertIn("srl h", body)
         self.assertIn("rr l", body)
-        self.assertIn("(cached_dsm + 1)", body)
+        # The old "mark every block used" fallback is gone.
+        self.assertNotIn("all_used", body)
 
-    def test_16bit_drive_is_rejected(self):
+    def test_16bit_drives_are_supported(self):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index("select_fcb_drive:"):text.index("; @proc drive_ro_status")]
-        self.assertIn("(cached_dsm + 1)", body)
-        self.assertIn("scf", body)
+        self.assertIn("call select_drive", body)
+        # DSM > 255 no longer rejects the drive; the map width is cached.
+        self.assertNotIn("scf", body)
+        self.assertIn("cached_blk16", text)
 
     def test_readme_qualifies_pcw(self):
         text = source("README.md")
-        self.assertIn("16-bit block file I/O is not implemented", text)
+        self.assertIn("16-bit block", text)
 
 
 class Issue09BiosMove(unittest.TestCase):

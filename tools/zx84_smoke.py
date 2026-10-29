@@ -763,6 +763,31 @@ class Smoke:
 
         self.command("SETDEF [PAGE]", 700)
 
+    def run_block16(self) -> None:
+        """B: 720K PCW image: 2K blocks and 16-bit block numbers."""
+        image = ROOT / "build" / "cpm3_720.dsk"
+        if not image.exists():
+            raise SmokeError(
+                "build/cpm3_720.dsk is missing; run build.cmd first")
+        self.log("mount 720K image on B:")
+        self.mcp.call("load", {"file": str(image), "drive": "B"})
+
+        self.command("DIR B:", 1200)
+        self.expect("720K DIR", "HELLO16  TXT")
+        self.command("TYPE B:HELLO16.TXT", 1200)
+        self.expect("720K TYPE", "720K block test", "Line three.")
+
+        # B16TEST creates/writes/sizes/truncates/deletes a file on B: and
+        # checks the free-space deltas, which only add up with 16-bit
+        # block numbers and 2K blocks.
+        self.command("B16TEST", 4500)
+        for _ in range(12):
+            if "B16 " in self.text():
+                break
+            self.mcp.call("run", {"frames": 600})
+            self.record()
+        self.expect("16-bit block test", "B16 PASS")
+
     def run_ccp_external(self) -> None:
         """CCP.COM lives on the disk and is staged at CCP_STAGE on cold boot."""
         ccp = (ROOT / "build" / "CCP.COM").read_bytes()
@@ -809,6 +834,7 @@ class Smoke:
         self.run_screen64()
         self.run_terminal_escapes()
         self.run_pagination()
+        self.run_block16()
         self.run_ccp_external()
         self.check_fdc()
         self.log("all checks passed")

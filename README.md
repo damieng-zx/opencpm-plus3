@@ -84,11 +84,15 @@ columns:
 
 Also supported:
 
-- A: and B: are selectable (there is one physical drive; B: reads as empty
-  rather than hanging, so software that probes it keeps working).
-- +3 and CPC 8-bit-block formats via the extended DPB machinery; `SHOWXDPB`
-  displays the detected geometry. PCW 720K disks are detected but their
-  16-bit block file I/O is not implemented.
+- A: and B: are selectable (a stock +3 has one single-sided drive; B:
+  reads as empty rather than hanging, so software that probes it keeps
+  working).  In an emulator a PCW DS/DD 720K image can be mounted on B:
+  and used normally; the 720K format needs a double-sided drive, which
+  real +3 hardware does not have.
+- +3 and CPC 8-bit-block formats, plus the CP/M 3 16-bit block format
+  (DSM > 255: eight 16-bit block numbers per extent, high byte first).
+  `SHOWXDPB` displays the detected geometry; PCW DS/DD 720K disks (2K
+  blocks, DSM=351) support full file I/O.
 - Optional third-party CP/M utilities (BBC BASIC, PIP, ED, SET, ...) are
   picked up from `references/binaries/` when present; a source-only checkout
   ships the project's own tools and the CCP's DIR/TYPE/ERA/REN built-ins, so
@@ -114,6 +118,7 @@ Also supported:
 - `SYSTEST` — stack/MOVE/clock, page-zero, TAB and delimiter checks.
 - `TERMTEST` — terminal escape-sequence walkthrough.
 - `XTETEST` — XBIOS/TE probe.
+- `B16TEST` — 16-bit block-number file I/O on B: (720K PCW image).
 
 ## Wishlist / TODO
 
@@ -124,7 +129,6 @@ Also supported:
 - **Full multi-sector F20 transfers**, which would fix Z80ASM. A prototype
   broke PIP's copy, so the single-record behaviour stands until that is
   understood.
-- **16-bit block formats** (PCW 720K file I/O).
 - **Richer command-line file specs** (wildcards for `TYPE`, and the like).
 
 ## Out of scope

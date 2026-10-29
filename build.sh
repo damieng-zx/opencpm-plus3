@@ -55,6 +55,7 @@ echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/setdef.com src/tools/setdef.asm
 "$SJASMPLUS" --raw=build/submit.com src/tools/submit.asm
 "$SJASMPLUS" --raw=build/screen.com src/tools/screen.asm
+"$SJASMPLUS" --raw=build/b16test.com src/tools/b16test.asm
 
 echo "  Assembling FID modules..."
 "$SJASMPLUS" --raw=build/RAMDISK.FID src/fid/ramdisk.asm
@@ -94,11 +95,14 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     build/bdostest.com build/xtetest.com \
     build/disktest.com build/termtest.com build/systest.com \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
-    build/submit.com build/screen.com build/RAMDISK.FID \
+    build/submit.com build/screen.com build/b16test.com build/RAMDISK.FID \
     src/test/smoke.txt src/test/page.txt src/test/smoke.sub \
     src/test/param.sub \
     "${REF_FILES[@]}" \
     $EXTRAFILES
+
+python3 tools/mkdsk.py create build/cpm3_720.dsk --format 720k \
+    --add src/test/hello16.txt
 
 echo "  Loader: $(wc -c < build/loader.bin) bytes"
 echo "  CPM3.SYS: $(wc -c < build/bios.bin) bytes"

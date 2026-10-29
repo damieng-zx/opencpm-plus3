@@ -59,9 +59,8 @@ Status: `[ ]` open, `[x]` fixed.
 
 - [x] **8. `build_alv` size uses the low byte of DSM; block numbers are
   8-bit.**  The ALV size is now computed in 16 bits (44 bytes for DSM=351).
-  Full 16-bit block I/O is not implemented yet, so `select_fcb_drive`
-  rejects DSM>255 with CF=1 and the ALV marks all blocks used; the drive is
-  detection/SHOWXDPB-only.  README no longer claims 720K file I/O.
+  Full 16-bit block I/O followed separately (see the P2 list); the drive
+  was detection/SHOWXDPB-only until then.
   Files: `src/bdos/bdos.zpa`, `src/bios/fdc765.zpa`, `README.md`.
 
 - [x] **9. BIOS MOVE (fn 25) is reversed** relative to
@@ -232,8 +231,18 @@ set.
   `SETDEF [NOPAGE]` the whole file must print without a prompt or a key.
   Files: `tools/zx84_smoke.py`, `src/test/page.txt`, `src/bdos/bdos.zpa`
   (the prompt now ends in a plain period instead of a stray 0x80 byte).
+- [x] **16-bit block formats.**  When DSM > 255 the allocation maps hold
+  eight 16-bit block numbers (high byte first) instead of sixteen 8-bit
+  ones.  `select_drive` caches `cached_blk16` from DSM, and the FCB/directory
+  accessors (`get_fcb_block`/`put_fcb_block`/`get_dir_block`), the ALV
+  operations, `find_free_block`, F19/F20/F33/F99 and the F40 fill all take
+  16-bit blocks.  `tools/mkdsk.py --format 720k` builds a PCW DS/DD image
+  (80 cylinders x 2 sides, 2K blocks, 128 directory entries, DSM=351) and
+  `B16TEST.COM` exercises create/write/size/free-space/truncate/delete on
+  B:, where the free-space deltas only add up with 16-bit blocks.
+  Files: `src/bdos/bdos.zpa`, `tools/mkdsk.py`, `src/tools/b16test.asm`,
+  `tools/zx84_smoke.py`.
 
 ## P3 — Remaining follow-ups
 
 - Full `TE_*` / `SCR_RUN_ROUTINE` XBIOS functions.
-- 16-bit block formats (PCW 720K file I/O).

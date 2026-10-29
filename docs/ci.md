@@ -38,10 +38,13 @@ needs the checkout, `npm ci`, and a writable ROM cache.
 `references/binaries/` is untracked, so CI builds a source-only disk. The
 smoke runner always exercises `SMOKE.TXT` (from `src/test/smoke.txt`),
 `PAGE.TXT` (from `src/test/page.txt`, the pagination fixture),
+`HELLO16.TXT` on the 720K image (from `src/test/hello16.txt`),
 `SMOKE.SUB` (from `src/test/smoke.sub`), `PARAM.SUB` (from
-`src/test/param.sub`), the source-built `SUBMIT.COM`, `DATE.COM`, and the
-built-in `ERA`/`REN` commands; only the external `RENAME.COM` (added to a
-scratch copy of the image) and `PIP` checks depend on the reference programs.
+`src/test/param.sub`), the source-built `SUBMIT.COM`, `DATE.COM`,
+`B16TEST.COM`, and the built-in `ERA`/`REN` commands; only the external
+`RENAME.COM` (added to a scratch copy of the image) and `PIP` checks depend
+on the reference programs.  The build also produces `build/cpm3_720.dsk`
+with `mkdsk.py --format 720k` for the 16-bit block test.
 
 The zx84 checkout uses the current repository name,
 `damieng-zx/zx84`. If it is private in a future org, add
