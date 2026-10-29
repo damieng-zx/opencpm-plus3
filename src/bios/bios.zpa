@@ -51,6 +51,8 @@ CCP_ADDR    equ 0x0100            ; CCP loads here in TPA
 ; the fonts, FID and screen/FDC/BDOS buffers, so B000-BFFF is the only free
 ; 4K window that nothing touches at run time.
 CCP_STAGE   equ 0xB000            ; Staged CCP image (bank 6)
+LF_FLAGS    equ 0xA860            ; loader: which files it staged (bank 6)
+LF_CCP_LEN  equ 0xA861            ; loader: staged CCP length word (bank 6)
 CCP_MAX_BLK equ 4                 ; 1K blocks staged (the whole B000-BFFF window)
 JMP_OPCODE  equ 0xC3              ; JP instruction
 COMMON_BASE equ 0xF600            ; Start of bank-3 common memory
@@ -209,7 +211,6 @@ dd_cmd_left:  equ 0xA629
 dd_xfer_ptr:  equ 0xA62A
 dd_xfer_left: equ 0xA62C
 dd_res_idx:   equ 0xA62E
-_ccp_al:      equ 0xA62F          ; 16-byte CCP.COM allocation map
 
 
 ; ==========================================================================
@@ -236,10 +237,7 @@ cold_boot:
     call scr_init                  ; Screen: clear, set attributes
     call kbd_init                  ; Keyboard: reset state
     call fdc_init                  ; FDC: recalibrate drive
-    call load_fonts                ; Directory scan: fonts, CCP.COM, RAMDISK.FID
-    call load_ccp                  ; Stage CCP.COM in bank 6
-    call load_fid                  ; Optional: register C: ramdisk if RAMDISK.FID present
-    call motor_off                 ; Spin drive down before CCP takes over
+    call load_fid                  ; Optional: register C: ramdisk if the loader staged one
 
     ; Print signon
     ld hl, signon_msg
@@ -254,7 +252,7 @@ cold_boot:
 
     ; Without a CCP there is nothing to run: say so instead of jumping into
     ; whatever happens to be at 0100h.
-    ld hl, (_ccp_len)
+    ld hl, (LF_CCP_LEN)
     ld a, h
     or l
     jr nz, .ccp_ok
@@ -311,7 +309,7 @@ warm_boot:
     ; CCP.COM) still gets a clean CCP.
     ld hl, CCP_STAGE               ; Source: bank 6 (system mode)
     ld de, CCP_ADDR                ; Dest: 0100h in bank 0
-    ld bc, (_ccp_len)
+    ld bc, (LF_CCP_LEN)
     call copy_block_to_tpa(hl, de, bc)
 
     ; Set default DMA to 0080h
@@ -2196,376 +2194,19 @@ MSG_NO_CCP:
 
 
 ; ==========================================================================
-; load_fonts — Directory scan for FONT51/FONT32/FONT64/CCP/RAMDISK
-;   Scans the CP/M directory (track 1, physical sectors 1-4) once, records
-;   the blocks of the files we need, then loads the three fonts into bank 6
-;   (always visible in system mode):
-;     FONT51.BIN → 0x8000 (5px-wide, used for 51-col mode)
-;     FONT32.BIN → 0x8800 (8px-wide, used for 32-col mode)
-;     FONT64.BIN → 0x9400 (4px-wide, used for 64-col mode)
-;   CCP.COM is only *recorded* here (see load_ccp); load_fonts leaves the
-;   motor on and drive A: selected for it and for load_fid.
-;   Called from cold_boot after fdc_init.  fdc_init leaves the motor off,
-;   so spin it up here and leave it on for the other loaders (cold_boot
-;   spins it down after them).
-;   In:  nothing
-;   Out: nothing
-;   Clobbers: AF, BC, DE, HL
+; Font/CCP/FID hand-off from the stage-2 loader
+;   The loader finds and loads FONT51/32/64 into bank 6 (8000/8800/9400),
+;   CCP.COM to B000 and RAMDISK.FID's first block to 9000, then records
+;   what it found in LF_FLAGS/LF_CCP_LEN (bank 6, outside the image).
+;   The OS only has to validate the FID and stage hand-off values.
 ; ==========================================================================
-; @proc load_fonts
-; @clobbers af,bc,de,hl,ix
-; @end
-load_fonts:
-    xor a
-    ld (disk_drive), a              ; drive A:
-    ld (_lf_found), a
-    ld (_font51_blk0), a
-    ld (_font51_blk1), a
-    ld (_font32_blk0), a
-    ld (_font32_blk1), a
-    ld (_font64_blk0), a
-    ld (_font64_blk1), a
-    ld (_ccp_al), a                 ; CCP not found yet
-    ld (_fid_block), a              ; FID not yet found; load_fid will check this
-
-    call motor_on                   ; fdc_init left the motor off
-
-    ; Seek to track 1 (first data track: OFF=1)
-    ld a, 1
-    call fdc_seek
-
-    ; Scan 4 physical sectors (sectors 1-4) = 64 directory entries
-    ld bc, 1                        ; B=0 (only C used; B initialized so push bc below is defined)
-.lf_dsec:
-    ld a, c
-    cp 5
-    jr nc, .lf_dsec_done
-    push bc
-    call fdc_read_sector            ; → deblock_buf
-    pop bc
-    jr nz, .lf_dsec_done            ; I/O error — abort
-
-    push bc
-    ld hl, deblock_buf
-    ld b, 16                        ; 16 entries per sector
-.lf_dent:
-    push bc
-    push hl
-    call _lf_check_entry
-    pop hl
-    pop bc
-    ld de, 32
-    add hl, de
-    djnz .lf_dent
-    pop bc
-
-    ld a, (_lf_found)
-    cp 31
-    jr z, .lf_dsec_done             ; found all five files — done early
-    inc c
-    jr .lf_dsec
-
-.lf_dsec_done:
-    ld hl, _font51_blk0
-    ld de, 0x8000
-    ld b, 2
-    call _lf_load_n                 ; load font51 → bank 6 at 0x8000
-
-    ld hl, _font32_blk0
-    ld de, 0x8800
-    ld b, 2
-    call _lf_load_n                 ; load font32 → bank 6 at 0x8800
-
-    ld hl, _font64_blk0
-    ld de, 0x9400
-    ld b, 2
-    call _lf_load_n                 ; load font64 → bank 6 at 0x9400
-    ret
-
-
-; _lf_check_entry — Record blocks for FONT51/FONT32/CCP/RAMDISK dir entries
-;   In:  HL = 32-byte directory entry
-;   Out:  _lf_found bit set for a recognised file
-;   Clobbers: AF, BC, DE, HL
-; @proc _lf_check_entry
-; @clobbers af,bc,de,hl
-; @end
-_lf_check_entry:
-    ld a, (hl)
-    or a
-    ret nz                          ; user != 0 — skip
-
-    push hl
-    inc hl                          ; HL = entry[1..11] (name+ext)
-    ld de, _lf_name51
-    ld b, 11
-    call _lf_cmp11                  ; Z if match
-    pop hl
-    jr nz, .lf_try32
-
-    ld bc, 16
-    add hl, bc                      ; HL = &entry[16] = AL[0]
-    ld a, (hl)
-    ld (_font51_blk0), a
-    inc hl
-    ld a, (hl)
-    ld (_font51_blk1), a
-    ld a, (_lf_found)
-    or 0x01
-    ld (_lf_found), a
-    ret
-
-.lf_try32:
-    push hl
-    inc hl
-    ld de, _lf_name32
-    ld b, 11
-    call _lf_cmp11
-    pop hl
-    jr nz, .lf_try64
-
-    ld bc, 16
-    add hl, bc
-    ld a, (hl)
-    ld (_font32_blk0), a
-    inc hl
-    ld a, (hl)
-    ld (_font32_blk1), a
-    ld a, (_lf_found)
-    or 0x02
-    ld (_lf_found), a
-    ret
-
-.lf_try64:
-    push hl
-    inc hl
-    ld de, _lf_name64
-    ld b, 11
-    call _lf_cmp11
-    pop hl
-    jr nz, .lf_try_ccp
-
-    ld bc, 16
-    add hl, bc
-    ld a, (hl)
-    ld (_font64_blk0), a
-    inc hl
-    ld a, (hl)
-    ld (_font64_blk1), a
-    ld a, (_lf_found)
-    or 0x10
-    ld (_lf_found), a
-    ret
-
-.lf_try_ccp:
-    ; The CCP is loaded later (load_ccp) so keep the whole allocation map:
-    ; a future CCP may use every block of its extent.
-    push hl
-    inc hl
-    ld de, _lf_name_ccp
-    ld b, 11
-    call _lf_cmp11
-    pop hl
-    jr nz, .lf_try_fid
-
-    ld bc, 16
-    add hl, bc                      ; HL = &entry[16] = AL[0]
-    ld de, _ccp_al
-    ld bc, 16
-    ldir
-    ld a, (_lf_found)
-    or 0x08
-    ld (_lf_found), a
-    ret
-
-.lf_try_fid:
-    push hl
-    inc hl
-    ld de, _lf_name_fid
-    ld b, 11
-    call _lf_cmp11
-    pop hl
-    ret nz
-    ld bc, 16
-    add hl, bc
-    ld a, (hl)
-    ld (_fid_block), a              ; AL[0] = first 1K block of RAMDISK.FID
-    ld a, (_lf_found)
-    or 0x04
-    ld (_lf_found), a
-    ret
-
-
-; _lf_cmp11 — Compare 11 bytes (HL) vs (DE), masking attribute bits
-;   In:  HL = source, DE = reference, B = 11
-;   Out: Z if all 11 bytes match, NZ on first mismatch
-;   Clobbers: AF, BC, DE, HL
-; @proc _lf_cmp11
-; @out   zero
-; @clobbers af,bc,de,hl
-; @end
-_lf_cmp11:
-    ld a, (hl)
-    and 0x7F                        ; strip attribute bit
-    ld c, a
-    ld a, (de)
-    cp c
-    ret nz
-    inc hl
-    inc de
-    djnz _lf_cmp11
-    ret                             ; Z set from last cp (all matched)
-
-
-; _lf_load_n — Load up to B × 1K blocks from disk to destination DE
-;   In:  HL = pointer to a 16-byte allocation map (0 = not allocated / end)
-;        DE = destination address (system memory)
-;        B  = maximum blocks to load
-;   Out: DE = first byte after the loaded image
-;   Clobbers: AF, BC, DE, HL
-; @proc _lf_load_n
-; @out   de
-; @clobbers af,bc,hl,ix
-; @end
-_lf_load_n:
-.lf_blk:
-    push bc
-    push hl
-    ld a, (hl)
-    or a
-    jr z, .lf_blk_skip              ; block 0 = not allocated (file not found)
-    call _lf_load_block             ; reads 1K to DE, advances DE by 1024
-.lf_blk_skip:
-    pop hl
-    inc hl
-    pop bc
-    djnz .lf_blk
-    ret
-
-
-; ==========================================================================
-; load_ccp — Stage CCP.COM from the boot disk into bank 6
-;   load_fonts has already scanned the directory and copied the file's
-;   allocation map into _ccp_al, so no second directory pass is needed.
-;   Keeping the CCP out of CPM3.SYS makes the system image ~3K smaller;
-;   the staging window is otherwise unused RAM, so it costs no file bytes.
-;   In:  _ccp_al populated by load_fonts; motor on, drive A: selected
-;   Out: _ccp_len = bytes staged (0 = CCP.COM is not on the disk)
-;   Clobbers: AF, BC, DE, HL
-; ==========================================================================
-; @proc load_ccp
-; @clobbers af,bc,de,hl,ix
-; @end
-load_ccp:
-    ld hl, 0
-    ld (_ccp_len), hl
-    ld a, (_ccp_al)
-    or a
-    ret z                           ; not on the disk — cold_boot reports it
-    ld hl, _ccp_al
-    ld de, CCP_STAGE
-    ld b, CCP_MAX_BLK
-    call _lf_load_n                 ; DE = first byte past the staged image
-    ex de, hl                       ; HL = end of image
-    ld bc, 0 - CCP_STAGE
-    add hl, bc                      ; HL = bytes staged
-    ld (_ccp_len), hl
-    ret
-
-
-; _lf_load_block — Read one 1K block (2 physical sectors) to DE
-;   In:  A = CP/M block number (2..174), DE = destination
-;   Out: DE advanced by 1024
-;   Clobbers: AF, BC, HL
-; @proc _lf_load_block
-; @clobbers af,bc,de,hl,ix
-; @end
-_lf_load_block:
-    ld l, a
-    ld h, 0
-    add hl, hl                      ; HL = block * 2 = first abs physical sector
-    ld (_lf_abs_phys), hl
-
-    ld b, 2                         ; 2 physical sectors per 1K block
-.lf_phys:
-    push bc
-    push de
-    ld hl, (_lf_abs_phys)
-    call _lf_div9                   ; B = HL/9 (quotient), A = HL%9 (remainder)
-    inc a                           ; sector ID = remainder + 1
-    ld (_lf_sec_id), a              ; save across fdc_seek (avoids push/pop)
-    ld a, b
-    inc a                           ; track = quotient + OFF (OFF=1)
-    call fdc_seek                   ; clobbers AF, BC, DE, HL
-    ld a, (_lf_sec_id)
-    call fdc_read_sector            ; → deblock_buf; clobbers AF, BC, DE, HL
-    pop de                          ; DE = destination
-    ld hl, deblock_buf
-    ld bc, 512
-    ldir                            ; copy 512B; DE += 512 automatically
-    ld hl, (_lf_abs_phys)
-    inc hl
-    ld (_lf_abs_phys), hl
-    pop bc
-    djnz .lf_phys
-    ret
-
-
-; _lf_div9 — Divide HL by 9 via repeated subtraction
-;   In:  HL = dividend (0..349 for our block range)
-;   Out: B = quotient, A = remainder
-;   Clobbers: AF, BC, HL
-; @proc _lf_div9
-; @out   b,a
-; @clobbers af,bc,hl
-; @end
-_lf_div9:
-    ld b, 0
-.lf_d9:
-    ld a, h
-    or a
-    jr nz, .lf_d9_sub               ; HL >= 256 → definitely >= 9
-    ld a, l
-    cp 9
-    jr c, .lf_d9_done               ; HL < 9 → done
-.lf_d9_sub:
-    ld a, l
-    sub 9
-    ld l, a
-    jr nc, .lf_d9_nb
-    dec h
-.lf_d9_nb:
-    inc b
-    jr .lf_d9
-.lf_d9_done:
-    ld a, l                         ; A = remainder
-    ret
-
-
-; --- Font/FID/CCP loader data ---
-_lf_found:    db 0                  ; bit 0=font51, 1=font32, 2=fid, 3=ccp, 4=font64
-_font51_blk0: db 0                  ; first block number of FONT51.BIN
-_font51_blk1: db 0                  ; second block number
-_font32_blk0: db 0                  ; first block number of FONT32.BIN
-_font32_blk1: db 0
-_font64_blk0: db 0                  ; first block number of FONT64.BIN
-_font64_blk1: db 0
-_fid_block:   db 0                  ; first block number of RAMDISK.FID (0 = absent)
-_ccp_len:     dw 0                  ; bytes staged at CCP_STAGE (0 = missing)
-_lf_abs_phys: dw 0                  ; scratch: current absolute physical sector
-_lf_sec_id:   db 0                  ; scratch: sector ID saved across fdc_seek
-_lf_name51:   db "FONT51  BIN"      ; 11-char CP/M name (6+2spaces+3ext)
-_lf_name32:   db "FONT32  BIN"
-_lf_name64:   db "FONT64  BIN"
-_lf_name_ccp: db "CCP     COM"
-_lf_name_fid: db "RAMDISK FID"
 _fid_magic:   db "OCFID", 0         ; 6-byte signature inside RAMDISK.FID
 
 
 ; ==========================================================================
-; load_fid — Register C: if the RAMDISK.FID dir scan during load_fonts
-; found one.  Loads its first 1K block to 0x9000 in bank 6, verifies the
-; OCFID magic, copies the XDPB template into xdpb_c, fills xdph_c's
+; load_fid - Register C: if the stage-2 loader staged RAMDISK.FID's
+; first 1K block at 0x9000 in bank 6.  Verifies the OCFID magic, copies
+; the XDPB template into xdpb_c, fills xdph_c's
 ; prefix slots from the header's entry-point fields, points drive_table[2]
 ; at xdph_c, and tail-calls the FID's init routine.
 ;
@@ -2573,8 +2214,7 @@ _fid_magic:   db "OCFID", 0         ; 6-byte signature inside RAMDISK.FID
 ; copy_record_to_tpa / copy_record_from_tpa addresses (asserts in
 ; common.zpa pin them).
 ;
-;   In:  _fid_block populated by load_fonts (0 = no FID found),
-;        motor on, drive 0 selected
+;   In:  LF_FLAGS bit 2 set by the loader, FID image at 9000h
 ;   Out: nothing
 ;   Clobbers: AF, BC, DE, HL, IY
 ; ==========================================================================
@@ -2582,13 +2222,9 @@ _fid_magic:   db "OCFID", 0         ; 6-byte signature inside RAMDISK.FID
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 load_fid:
-    ld a, (_fid_block)
-    or a
-    ret z                           ; no FID found in dir scan
-
-    ; Load the FID's first 1K block to 0x9000 in bank 6
-    ld de, 0x9000
-    call _lf_load_block             ; A = block #, DE = dest
+    ld a, (LF_FLAGS)
+    and 0x04
+    ret z                           ; no FID staged by the loader
 
     ; Validate "OCFID\0" magic at 0x9000
     ld hl, 0x9000
@@ -2637,7 +2273,7 @@ alv_c:          equ 0xA840
 ; CCP
 ; ==========================================================================
 ; The CCP is not part of CPM3.SYS.  It is CCP.COM on the boot disk, staged
-; into the top of bank 6 by load_ccp and copied to 0100h on every boot.
+; into the top of bank 6 by the stage-2 loader and copied to 0100h on every boot.
 ; CCP_STAGE must hold one full 4K window inside bank 6.
     assert CCP_STAGE + CCP_MAX_BLK * 1024 <= 0xC000, "CCP staging area exceeds bank 6!"
     assert CCP_STAGE >= 0xB000, "CCP staging area collides with the RAMDISK.FID / screen buffers"

@@ -50,12 +50,17 @@ DI not yet asserted.
 
 ### Stage 2 — loader (`src/boot/loader.asm`)
 
-- `org 0x0000`. Still in mode 2. Stack moved to `BIOS_ADDR = 0xC000` so a
-  16K system image padded to FE00 doesn't trample the loader's stack.
-- Seeks track 1 (OFF=1), scans the directory (sectors 1-4) for `CPM3    SYS`.
-- Walks the matched directory entry's allocation map (16 block pointers, 1K
-  each = 2 physical sectors), loading each block to `BIOS_ADDR` and bumping.
-- `jp BIOS_ADDR` (= `0xC000`).
+- `org 0x0000`. Still in mode 2. Stack moved to `0x0800` (free bank-4 RAM)
+  so neither the 16K system image (`C000-FFFF`) nor the bank-6 font/CCP
+  staging (`8000-BFFF`) can trample it.
+- Scans the directory (track 1, sectors 1-4) for each file in turn:
+  `FONT51.BIN` to `8000`, `FONT32.BIN` to `8800`, `FONT64.BIN` to `9400`,
+  `CCP.COM` to `B000` (max 4K) and `RAMDISK.FID`'s first block to `9000`.
+  Missing optional files are skipped.
+- Records what it staged in `LF_FLAGS`/`LF_CCP_LEN` in bank 6 (`A860h`),
+  which survive the system-image copy into bank 4.
+- Finally finds `CPM3    SYS`, walks its allocation map (16 block pointers,
+  1K each = 2 physical sectors) to `BIOS_ADDR`, and jumps there.
 
 The system image lands in **bank 3** at `C000-FFFF` because that's what mode 2
 maps there.
@@ -85,7 +90,7 @@ LDIR with an assert that `system_image >= 0x0000 + size` — i.e. source is abov
 destination.
 
 After init, **bank 3 still holds the rest of the loaded CPM3.SYS image from
-C000 up to the image end (~F28x for a 12.9K image), but nothing references it
+C000 up to the image end (FC99h for the current 15.5K image), but nothing references it
 again** — it's just whatever the loader deposited there. Common memory at
 F600+ is the live copy.
 
@@ -96,11 +101,8 @@ di
 ld sp, bdos_stack       ; common-memory stack (F600+ region)
 call scr_init           ; clear screen, set attrs
 call kbd_init           ; reset keyboard state
-call fdc_init           ; recalibrate FDC
-call load_fonts         ; scan directory; pull FONT51/FONT32 into bank 6
-call load_ccp           ; read CCP.COM into bank 6 at B000 (staged)
-call load_fid           ; optional: register C: ramdisk if RAMDISK.FID present
-call motor_off          ; spin down before CCP
+call fdc_init           ; recalibrate FDC (motor off)
+call load_fid           ; optional: validate the loader-staged RAMDISK.FID
 print signon
 halt with a diagnostic if CCP.COM was not found
 patch SCB:              scb_common = scb_base; scb_tpa = bdos_stub
@@ -113,9 +115,9 @@ fall through ──> warm_boot
 ```
 di
 ld sp, bdos_stack
-copy_block_to_tpa(CCP_STAGE ──> 0x0100, _ccp_len)
+copy_block_to_tpa(CCP_STAGE -> 0x0100, LF_CCP_LEN)
                                 ; cross-bank copy: bank 6 → bank 0
-                                ; (staged by load_ccp; no disk access here)
+                                ; (staged by the loader; no disk access here)
 ld (disk_dma), 0x0080
 clear xmove_active, dma_bank, multi_count
 jp start_tpa            ; in common memory — never returns
@@ -170,7 +172,7 @@ and trampolines. `scb_tpa` is patched to `TPA_TOP` too.
 | `0038`      | ISR vector — JP isr_handler (in common memory).           |
 | `4000-7FFF` | Bank 7. C: RAM disk (16K) when RAMDISK.FID is loaded.     |
 | `8000-BFFF` | Bank 6. FONT51 at `8000`, FONT32 at `8800`, RAMDISK.FID at `9000` if loaded, FONT64 at `9400`, FDC deblock buffer at `9C00`, `DD_CHECK_SECTOR` compare buffer at `9E00`; text/scroll buffers at `A000-A5FF`; BIOS/BDOS scratch at `A600-A6FF` and `A82D-A83C`; screen cursor/ESC scratch at `A730-A739`; row table at `A700`, CSV/ALV at `A740-A82C`; `KM_SET_KEY` translation table at
-`A900-A99F`, `KM_SET_EXPAND` slots at `A9A0-AD7F`, FCB shadow at `AD80-ADA3`; staged `CCP.COM` at
+`A900-A99F`, `KM_SET_EXPAND` slots at `A9A0-AD7F`, FCB shadow at `AD80-ADA3`, loader hand-off at `A860-A862`; staged `CCP.COM` at
 `B000-BFFF`. |
 | `F600-FFFF` | Common stub (bank 3). Same content as in mode 0 — that's the point. |
 

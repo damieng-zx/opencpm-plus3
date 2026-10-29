@@ -15,7 +15,7 @@ build.cmd --add FILE ...     # Build with extra CP/M files on disk
 
 Requires: `sjasmplus` (Z80 assembler at C:\Apps\sjasmplus.exe), `python3`.
 
-Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) → loader → boot sector → DSK image. The BIOS is stored as `CPM3.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0. The CCP is a separate file, `CCP.COM`, read from the boot disk during cold boot (see Boot Chain).
+Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) → loader → boot sector → DSK image. The BIOS is stored as `CPM3.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0. The CCP is a separate file, `CCP.COM`, staged by the stage-2 loader during cold boot (see Boot Chain).
 
 `references/binaries/` is optional third-party software: `SUBMIT.COM` and
 `RENAME.COM` are excluded from the image (we build SUBMIT, and the CCP has a
@@ -116,14 +116,14 @@ OCR does not work with our custom 5px font.
 
 ### Boot Chain
 1. Boot sector (512B at FE00h) → loads loader from track 0
-2. Loader (~935B) → finds CPM3.SYS in directory, loads to C000h
+2. Loader (~1.1K) → stages fonts + `CCP.COM` + FID in bank 6, then loads CPM3.SYS to C000h
 3. Init code at C000h → copies system to bank 4, common stub to F600h
-4. Cold boot in bank 4 → init screen/kbd/FDC, load fonts + `CCP.COM` + FID from disk
+4. Cold boot in bank 4 → init screen/kbd/FDC, validate the staged FID
 5. `warm_boot` → copy the staged CCP (bank 6, B000h) to 0100h
 6. start_tpa (common) → switch to TPA mode, set page zero, JP 0100h
 
 The CCP is **not** part of CPM3.SYS: `CCP.COM` (the MiniCCP PRL) is read from
-the boot disk into bank 6 at B000h on cold boot (`load_ccp`) and copied to
+the boot disk into bank 6 at B000h by the stage-2 loader and copied to
 0100h on every warm boot, so a normal exit never touches the disk. A cold
 boot without `CCP.COM` prints a diagnostic and halts.
 
@@ -178,7 +178,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 ## Source Structure
 
 - `src/boot/bootsect.asm` — Boot sector (checksum must be 3 mod 256)
-- `src/boot/loader.asm` — Stage 2: finds and loads CPM3.SYS from disk
+- `src/boot/loader.asm` — Stage 2: stages fonts/CCP/FID in bank 6, then loads CPM3.SYS
 - `src/bios/bios.asm` — Init + BIOS (PHASE 0000 for bank 4) + common stub (PHASE F600)
 - `src/bios/common.asm` — Common memory stub: BDOS dispatch, bank switching, inter-bank copy
 - `src/bios/screen.asm` — 32/51/64-column text display (8px, 5px and 4px fonts)

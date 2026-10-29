@@ -2308,7 +2308,7 @@ scr_set_cols:
     jr z, .valid
     cp 64
     jr nz, .invalid
-    ld a, (_lf_found)
+    ld a, (LF_FLAGS)
     and 0x10                    ; FONT64.BIN found on the boot disk?
     jr z, .invalid
     ld a, 64

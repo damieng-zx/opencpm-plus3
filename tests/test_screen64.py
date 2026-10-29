@@ -33,7 +33,7 @@ class ScreenDriver(unittest.TestCase):
         self.assertIn("ld (scb_conwidth), a", body)
         # Without FONT64.BIN on the boot disk the mode is refused rather
         # than drawing from uninitialised bank-6 RAM.
-        self.assertIn("ld a, (_lf_found)", body)
+        self.assertIn("ld a, (LF_FLAGS)", body)
         self.assertIn("and 0x10", body)
 
     def test_renderer_has_two_phases_and_no_spill(self):
@@ -66,13 +66,15 @@ class ScreenDriver(unittest.TestCase):
 
 class Loader(unittest.TestCase):
     def test_font64_is_loaded_from_the_boot_disk(self):
-        text = source("src/bios/bios.zpa")
-        self.assertIn('_lf_name64:   db "FONT64  BIN"', text)
-        body = text[text.index(".lf_try64:"):text.index(".lf_try_ccp:")]
-        self.assertIn("ld (_font64_blk0), a", body)
-        self.assertIn("or 0x10", body)
-        self.assertIn("ld de, 0x9400", text)
-        self.assertIn("cp 31", text)          # all five scanned files found
+        loader = source("src/boot/loader.asm")
+        self.assertIn('NAME_64:    db "FONT64  BIN"', loader)
+        self.assertIn("dw NAME_64, 0x9400", loader)
+        self.assertIn("db 0x10", loader)
+        # The loader reports what it staged; the OS reads that byte.
+        self.assertIn("LF_FLAGS    equ 0xA860", loader)
+        os_text = source("src/bios/screen.zpa")
+        self.assertIn("ld a, (LF_FLAGS)", os_text)
+        self.assertIn("and 0x10", os_text)
 
 
 class Command(unittest.TestCase):

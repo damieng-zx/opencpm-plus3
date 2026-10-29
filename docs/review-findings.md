@@ -369,6 +369,19 @@ set.
   `src/ccp/miniccp.zpa`, `tools/check_layout.py`, `tools/zx84_smoke.py`,
   `tests/test_xbios_te.py`, `tests/test_review_fixes.py`,
   `docs/boot.md`, `AGENTS.md`.
+- [x] **Move font/CCP loading into the stage-2 loader.** The loader now
+  generalizes its directory walk (`find_file`/`load_file`) and stages
+  FONT51/32/64 (`8000/8800/9400`), `CCP.COM` (`B000`, max 4K) and
+  `RAMDISK.FID`'s first block (`9000`) in bank 6 before loading CPM3.SYS.
+  It records the result in `LF_FLAGS`/`LF_CCP_LEN` (`A860h`), which survive
+  the system-image copy; `cold_boot` keeps only `load_fid`'s validation.
+  The loader stack moved to `0800h` so it cannot trample the bank-6
+  staging.  Net: **504 bytes** freed (`CPM3.SYS` 16,017 ? 15,513), plus
+  the earlier 282 ? headroom is now 871 bytes.  Loader: 935 ? 1,137 bytes
+  (track 0/1 capacity is 8,704).
+  Files: `src/boot/loader.asm`, `src/bios/bios.zpa`, `src/bios/screen.zpa`,
+  `tests/test_ccp_external.py`, `tests/test_review_fixes.py`,
+  `tests/test_screen64.py`, `docs/boot.md`, `AGENTS.md`.
 
 ## P3 - Remaining follow-ups
 

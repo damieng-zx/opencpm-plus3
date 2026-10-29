@@ -30,15 +30,17 @@ class ImageSplit(unittest.TestCase):
         text = source("src/bios/bios.zpa")
         body = text[text.index("warm_boot:"):text.index("; Console I/O")]
         self.assertIn("ld hl, CCP_STAGE", body)
-        self.assertIn("ld bc, (_ccp_len)", body)
+        self.assertIn("ld bc, (LF_CCP_LEN)", body)
         self.assertIn("call copy_block_to_tpa", body)
 
-    def test_cold_boot_loads_the_ccp_and_reports_a_missing_one(self):
+    def test_cold_boot_reports_a_missing_ccp(self):
         text = source("src/bios/bios.zpa")
         body = text[text.index("cold_boot:"):text.index("warm_boot:")]
-        self.assertIn("call load_ccp", body)
         self.assertIn("MSG_NO_CCP", body)
         self.assertIn('db "CCP.COM missing', text)
+        # The stage-2 loader does the disk work now.
+        loader = source("src/boot/loader.asm")
+        self.assertIn("NAME_CCP", loader)
 
     def test_build_scripts_ship_ccp_com(self):
         cmd = source("build.cmd")
@@ -49,23 +51,32 @@ class ImageSplit(unittest.TestCase):
         self.assertIn("build/CCP.COM", sh.split("mkdsk.py", 1)[1])
 
 
-class DirectoryScan(unittest.TestCase):
-    def test_scan_recognises_ccp_and_finishes(self):
-        text = source("src/bios/bios.zpa")
-        self.assertIn('_lf_name_ccp: db "CCP     COM"', text)
-        self.assertIn("cp 31", text)      # font51, font32, font64, CCP and FID
-        body = text[text.index(".lf_try_ccp:"):text.index(".lf_try_fid:")]
-        self.assertIn("ld de, _ccp_al", body)
-        self.assertIn("ld bc, 16", body)
-        self.assertIn("ldir", body)
+class LoaderStaging(unittest.TestCase):
+    def test_loader_recognises_ccp(self):
+        loader = source("src/boot/loader.asm")
+        self.assertIn('NAME_CCP:   db "CCP     COM"', loader)
+        self.assertIn("find_file", loader)
+        self.assertIn("load_file", loader)
 
-    def test_load_ccp_stages_blocks_and_records_length(self):
-        text = source("src/bios/bios.zpa")
-        body = text[text.index("load_ccp:"):text.index("_lf_load_block:")]
-        self.assertIn("ld de, CCP_STAGE", body)
-        self.assertIn("ld b, CCP_MAX_BLK", body)
-        self.assertIn("call _lf_load_n", body)
-        self.assertIn("ld (_ccp_len), hl", body)
+    def test_loader_stages_ccp_and_records_length(self):
+        loader = source("src/boot/loader.asm")
+        body = loader[loader.index("    ld hl, NAME_CCP"):
+                      loader.index(".no_ccp:")]
+        self.assertIn("ld de, 0xB000", body)
+        self.assertIn("ld b, 4", body)
+        self.assertIn("call load_file", body)
+        self.assertIn("ld (LF_CCP_LEN), hl", body)
+        self.assertIn("or 0x08", body)
+
+    def test_loader_stages_fonts_and_fid(self):
+        loader = source("src/boot/loader.asm")
+        self.assertIn('NAME_51:    db "FONT51  BIN"', loader)
+        self.assertIn('NAME_32:    db "FONT32  BIN"', loader)
+        self.assertIn('NAME_64:    db "FONT64  BIN"', loader)
+        self.assertIn("dw NAME_51, 0x8000", loader)
+        self.assertIn("dw NAME_32, 0x8800", loader)
+        self.assertIn("dw NAME_64, 0x9400", loader)
+        self.assertIn("ld de, 0x9000", loader)
 
 
 class BuiltImage(unittest.TestCase):

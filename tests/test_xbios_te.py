@@ -727,7 +727,6 @@ class Bank6Scratch(unittest.TestCase):
         for token in ("dd_spec:      equ 0xA600",
                       "dd_xdpb_buf:  equ 0xA60A",
                       "dd_param_ptr: equ 0xA625",
-                      "_ccp_al:      equ 0xA62F",
                       "dd_bank:      equ 0xA82D",
                       "dd_copy_len:  equ 0xA839"):
             self.assertIn(token, bios)
