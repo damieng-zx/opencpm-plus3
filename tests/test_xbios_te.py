@@ -463,6 +463,43 @@ class DdLDpb(unittest.TestCase):
         self.assertIn("12.DPB..OK", smoke)
 
 
+class DdLRead(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xAD", dispatch)
+        self.assertIn("jp z, .dd_l_read", dispatch)
+
+    def test_handler_parses_and_reads(self):
+        body = handler_body(".dd_l_read:", ".dd_send_cmd:")
+        self.assertIn("dd_param_ptr", body)
+        self.assertIn("dd_xfer_ptr", body)
+        self.assertIn("dd_xfer_left", body)
+        self.assertIn("call .dd_send_cmd", body)
+        self.assertIn("call fdc_read_byte", body)
+        self.assertIn("call write_user_byte", body)
+        self.assertIn("call .dd_drain_results", body)
+        self.assertIn(".ddlr_no_xfer", body)
+
+    def test_command_and_result_helpers(self):
+        body = handler_body(".dd_send_cmd:", ".dd_drain_results:")
+        self.assertIn("dd_cmd_ptr", body)
+        self.assertIn("dd_cmd_left", body)
+        self.assertIn("call fdc_send_byte", body)
+        body = handler_body(".dd_drain_results:", ".dd_login:")
+        self.assertIn("dd_results", body)
+        self.assertIn("dd_res_idx", body)
+        self.assertIn("cp 7", body)
+        self.assertIn("fdc_read_byte", body)
+
+    def test_tester_covers_lread(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("DD_L_READ", tester)
+        self.assertIn("14.LREAD", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("14.LREAD..OK", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

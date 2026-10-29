@@ -35,6 +35,7 @@ DD_FORMAT       EQU 0x008F
 DD_LOGIN        EQU 0x0092
 DD_L_DPB        EQU 0x009E
 DD_L_XDPB       EQU 0x00A1
+DD_L_READ       EQU 0x00AD
 
 ; ============================================================
 ; Entry
@@ -801,6 +802,117 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 14: DD_L_READ ===
+    ld de, msg_t14
+    ld c, 9
+    call BDOS
+
+    xor a
+    ld (t14_ok), a
+
+    ; Motor on and seek track 0.
+    ld hl, DD_L_ON_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+    ld hl, DD_L_SEEK
+    ld (userf_dw), hl
+    ld bc, 0
+    ld d, 0
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t14_motor_off
+
+    ; READ ID via DD_L_READ: command 4Ah, unit/head 00h, count 0.
+    ld hl, lread_id_pb
+    ld de, 0xD900
+    ld bc, 8
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)                  ; result count
+    cp 7
+    jp nz, .t14_motor_off
+    inc hl
+    ld a, (hl)                  ; ST0
+    and 0xC0
+    cp 0x80
+    jp nc, .t14_motor_off
+    inc hl
+    ld a, (hl)                  ; ST1
+    and 0x3B
+    jp nz, .t14_motor_off
+    ld de, 4                    ; HL + 4 = R (ST0 ST1 ST2 C H R)
+    add hl, de
+    ld a, (hl)
+    cp 1
+    jp c, .t14_motor_off
+    cp 10
+    jp nc, .t14_motor_off
+
+    ; READ DATA sector 1: command 46h, unit/head 0, C=0, H=0, R=1,
+    ; N=2, EOT=1, GPL=2Ah, DTL=FFh, count=512, buffer=D300h.
+    ld hl, lread_data_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t14_motor_off
+    inc hl
+    inc hl
+    ld a, (hl)                  ; ST1
+    and 0x3B
+    jp nz, .t14_motor_off
+
+    ; Boot-sector disc spec: 00 00 28 09 02 01 03 02 2A 52
+    ld a, (0xD300)
+    or a
+    jp nz, .t14_motor_off
+    ld a, (0xD301)
+    or a
+    jp nz, .t14_motor_off
+    ld a, (0xD302)
+    cp 0x28
+    jp nz, .t14_motor_off
+    ld a, (0xD303)
+    cp 9
+    jp nz, .t14_motor_off
+    ld a, (0xD304)
+    cp 2
+    jp nz, .t14_motor_off
+    ld a, (0xD308)
+    cp 0x2A
+    jp nz, .t14_motor_off
+    ld a, (0xD309)
+    cp 0x52
+    jp nz, .t14_motor_off
+
+    ld a, 1
+    ld (t14_ok), a
+
+.t14_motor_off:
+    ld hl, DD_L_T_OFF_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+    ld hl, DD_OFF_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+
+    ld a, (t14_ok)
+    or a
+    ld de, msg_fail
+    jr z, .t14_print
+    ld de, msg_ok
+.t14_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -934,8 +1046,22 @@ res_r: db 0
 res_c: db 0
 t8_ok: db 0
 t9_ok: db 0
+t14_ok: db 0
 dd_setup_defaults: db 10, 50, 175, 30, 12, 15, 3
 dd_l_spec: db 0, 0, 40, 9, 2, 1, 3, 2, 42, 82
+
+lread_id_pb:
+    db 1
+    dw 0xD300
+    dw 0
+    db 2
+    db 0x4A, 0x00
+lread_data_pb:
+    db 1
+    dw 0xD300
+    dw 512
+    db 9
+    db 0x46, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x2A, 0xFF
 
 
 ; ============================================================
@@ -956,6 +1082,7 @@ msg_t10:    db 0x0D, 0x0A, "10.FMT..", '$'
 msg_t11:    db 0x0D, 0x0A, "11.SETUP..", '$'
 msg_t12:    db 0x0D, 0x0A, "12.DPB..", '$'
 msg_t13:    db 0x0D, 0x0A, "13.XDPB..", '$'
+msg_t14:    db 0x0D, 0x0A, "14.LREAD..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

@@ -196,6 +196,14 @@ dd_type:      db 0
 dd_psh:       db 0
 dd_bsh:       db 0
 
+; DD_L_READ / DD_L_WRITE parameter-block state
+dd_param_ptr: dw 0
+dd_cmd_ptr:   dw 0
+dd_cmd_left:  db 0
+dd_xfer_ptr:  dw 0
+dd_xfer_left: dw 0
+dd_res_idx:   db 0
+
 
 ; ==========================================================================
 ; COLD BOOT — System startup
@@ -683,6 +691,8 @@ xbios_handler:
     jp z, .dd_l_t_off_motor
     cp 0xAA
     jp z, .dd_off_motor
+    cp 0xAD
+    jp z, .dd_l_read
     cp 0xB3
     jp z, .dd_l_seek
     cp 0x86
@@ -1394,6 +1404,127 @@ xbios_handler:
     ret
 .dls_not_ready:
     xor a                         ; A = 0, carry clear
+    ret
+
+.dd_l_read:
+    ; DD_L_READ (0x00AD): raw uPD765A read-type command driver.
+    ;   In:  HL = parameter block in common memory:
+    ;          +0 CP/M bank, +1 buffer, +3 byte count,
+    ;          +5 command-byte count, +6 command bytes
+    ;   Out: HL = dd_results (count + result bytes)
+    ; Only CP/M bank 1 (TPA) is supported; other banks return no data.
+    ld (dd_param_ptr), hl
+    ld a, (hl)
+    cp 1
+    jp nz, .ddlr_no_xfer
+    inc hl
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    ld (dd_xfer_ptr), de
+    inc hl
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    ld (dd_xfer_left), de
+
+    ld hl, (dd_param_ptr)
+    call .dd_send_cmd
+
+    ld hl, (dd_xfer_left)
+    ld a, h
+    or l
+    jr z, .ddlr_results
+.ddlr_loop:
+    call fdc_read_byte
+    ld de, (dd_xfer_ptr)
+    call write_user_byte
+    ld hl, (dd_xfer_ptr)
+    inc hl
+    ld (dd_xfer_ptr), hl
+    ld hl, (dd_xfer_left)
+    dec hl
+    ld (dd_xfer_left), hl
+    ld a, h
+    or l
+    jr nz, .ddlr_loop
+.ddlr_results:
+    call .dd_drain_results
+    ld hl, dd_results
+    ret
+.ddlr_no_xfer:
+    xor a
+    ld (dd_results), a
+    ld hl, dd_results
+    ret
+
+.dd_send_cmd:
+    ; Send the command bytes from the parameter block at HL.
+    ld de, 6
+    add hl, de
+    ld (dd_cmd_ptr), hl
+    ld de, 5
+    ld hl, (dd_param_ptr)
+    add hl, de
+    ld a, (hl)
+    ld (dd_cmd_left), a
+.dsc_loop:
+    ld a, (dd_cmd_left)
+    or a
+    ret z
+    ld hl, (dd_cmd_ptr)
+    ld a, (hl)
+    inc hl
+    ld (dd_cmd_ptr), hl
+    call fdc_send_byte
+    ld a, (dd_cmd_left)
+    dec a
+    ld (dd_cmd_left), a
+    jr .dsc_loop
+
+.dd_drain_results:
+    ; Drain up to 7 result bytes into dd_results.
+    xor a
+    ld (dd_results), a
+    ld (dd_res_idx), a
+    ld bc, PORT_FDC_ST
+    ld de, 0xFFFF
+.ddr_wait:
+    in a, (c)
+    and 0xC0
+    cp 0xC0
+    jr z, .ddr_drain
+    dec de
+    ld a, d
+    or e
+    jr nz, .ddr_wait
+    ret
+.ddr_drain:
+    ld a, (dd_res_idx)
+    cp 7
+    jr nc, .ddr_done
+    in a, (c)
+    and 0xC0
+    cp 0xC0
+    jr nz, .ddr_done
+    push bc
+    call fdc_read_byte
+    pop bc
+    push af
+    ld hl, dd_results + 1
+    ld a, (dd_res_idx)
+    ld e, a
+    ld d, 0
+    add hl, de
+    pop af
+    ld (hl), a
+    ld a, (dd_res_idx)
+    inc a
+    ld (dd_res_idx), a
+    jr .ddr_drain
+.ddr_done:
+    ld a, (dd_res_idx)
+    ld (dd_results), a
     ret
 
 ; --- Phase-2 disc calls ---

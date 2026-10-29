@@ -15,7 +15,8 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`,
 `DD_CHECK_SECTOR`, `DD_FORMAT`, motor on/off/timeout, `DD_L_SEEK`).  The
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
-`11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, the `5Ah` marker in the bottom-right screen attribute
+`11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`, the `5Ah`
+marker in the bottom-right screen attribute
 (bank 5, `5AFFh`) and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
 `fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
@@ -249,6 +250,10 @@ EXM=0, DSM=174, DRM=63, AL0=C0h, AL1=00h, CKS=16, OFF=1, PSH=2, PHM=3.
 Test 13 runs `DD_L_XDPB` with the same spec and checks the 27-byte XDPB at
 `D820h`, including the extension: sides=0, tracks=40, sectors=9, first
 sector=1, sector size=512, gap1=42, gap2=82, flags=40h, freeze=FFh.
+
+Test 14 drives `DD_L_READ` directly: a READ ID command returns seven
+result bytes with a valid R, and a READ DATA command reads the boot sector
+into `D300h` and returns a clean result phase.
 
 ### BDOS file regression suite
 
