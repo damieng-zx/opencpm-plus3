@@ -70,6 +70,7 @@ kbd_token_buf:   ds 32
 kbd_token_head:  db 0
 kbd_token_tail:  db 0
 kbd_token_count: db 0
+kbd_lock_state:  db 0           ; lock bits last reported by KM_KT_GET
 
 ; Inject buffer — write text here, set kbd_inject_len, reset kbd_inject_rd.
 ; kbd_getchar drains this before polling the real keyboard.
@@ -102,6 +103,7 @@ kbd_init:
     ld (kbd_token_head), a
     ld (kbd_token_tail), a
     ld (kbd_token_count), a
+    ld (kbd_lock_state), a
     ld hl, (kbd_repeat_delay)
     ld (kbd_rep_count), hl
     ret

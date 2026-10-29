@@ -16,9 +16,9 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 `DD_CHECK_SECTOR`, `DD_FORMAT`, motor on/off/timeout, `DD_L_SEEK`).  The
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
-`15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, the `5Ah` marker in the
-bottom-right screen attribute
-(bank 5, `5AFFh`) and the `D100h` input-pass-through flag.  It also checks
+`15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`, the `5Ah`
+marker somewhere in the screen attribute plane (bank 5, `5800h`-`5AFFh`)
+and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
 `fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
 byte, runs `XTETEST` again, requires `10.FMT..OK` and checks the formatted
@@ -218,8 +218,8 @@ palette, and `TE_SET_SPEED` is accepted.  Test 7 stages a routine at
 `D000h`, runs it via `SCR_RUN_ROUTINE`, checks DE/HL/IX/IY pass-through
 and leaves:
 
-- `5Ah` in the bottom-right screen attribute (bank 5, offset `1AFFh` for
-  flat address `5AFFh`)
+- `5Ah` in the screen attribute plane (bank 5, `5800h`-`5AFFh`); it is
+  written to the bottom-right cell (`1AFFh`/`5AFFh`) and may scroll
 - `01h` in the common-memory flag at `D100h`
 
 Test 8 runs the phase-1 disc calls: it loads the standard XDPB template to
@@ -263,8 +263,10 @@ Test 16 calls `KM_SET_SPEED` with H=10, L=5; the smoke runner checks the
 stored `kbd_repeat_delay`/`kbd_repeat_rate` values.
 
 Test 17 calls `KM_KT_PUT` twice (shift 08h/key 2Bh, then 00h/1Fh) and
-verifies BC survives.  The smoke runner checks `kbd_token_count=2` and the
-four queued bytes `08 2B 00 1F`.
+verifies BC survives.  Test 18 then drains both with `KM_KT_GET`, checks
+the returned shift/key pairs and that an empty queue returns carry clear.
+The smoke runner checks the queued bytes `08 2B 00 1F`, `kbd_token_count=0`
+and `kbd_token_head=2`.
 
 ### BDOS file regression suite
 

@@ -707,6 +707,8 @@ xbios_handler:
     jp z, .dd_format
     cp 0x92
     jp z, .dd_login
+    cp 0xDA
+    jp z, .km_kt_get
     cp 0xDD
     jp z, .km_kt_put
     cp 0xE0
@@ -1587,6 +1589,40 @@ xbios_handler:
     xor a
     ld (dd_results), a
     ld hl, dd_results
+    ret
+
+.km_kt_get:
+    ; KM_KT_GET (0x00DA): fetch a key token from the queue.
+    ;   Out: carry set + B = shift state + C = key number, or
+    ;        carry clear + B = lock state + C corrupt
+    ld a, (kbd_token_count)
+    or a
+    jr z, .kget_empty
+    ld a, (kbd_token_head)
+    ld l, a
+    ld h, 0
+    add hl, hl
+    ld de, kbd_token_buf
+    add hl, de
+    ld b, (hl)
+    inc hl
+    ld c, (hl)
+    ld a, b
+    and 0x78                     ; keep the lock bits
+    ld (kbd_lock_state), a
+    ld a, (kbd_token_head)
+    inc a
+    and 0x0F
+    ld (kbd_token_head), a
+    ld a, (kbd_token_count)
+    dec a
+    ld (kbd_token_count), a
+    scf
+    ret
+.kget_empty:
+    ld a, (kbd_lock_state)
+    ld b, a
+    or a                         ; clear carry
     ret
 
 .km_kt_put:

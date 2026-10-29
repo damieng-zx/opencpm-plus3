@@ -331,6 +331,13 @@ set.
   tokens and the smoke runner checks the queue contents.
   Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
   `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
+- [x] **XBIOS KM_KT_GET.** Removes the oldest `(shift, key)` token and
+  returns it in B/C with carry set, updating the reported lock state from
+  bits 3-6.  An empty queue returns carry clear with B = the current lock
+  state.  `XTETEST` test 18 drains both queued tokens and checks the empty
+  case; the smoke runner checks the head/count after draining.
+  Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
+  `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
 
 ## P3 - Remaining follow-ups
 
@@ -341,5 +348,8 @@ set.
 - `DD_LOGIN` falls back to the type-0 template if the probe fails; it does
   not yet return the documented 0/2/3/4/5 login errors.
 - `CD_SA_*` (no serial model), the remaining `KM_*` calls
-  (`KM_SET_EXPAND`, `KM_SET_KEY`, `KM_KT_GET`) and `FIND_FID` remain
-  unimplemented.  Unknown IDs return `A = 0xFF`.
+  (`KM_SET_EXPAND`, `KM_SET_KEY`) and `FIND_FID` remain unimplemented.
+  Unknown IDs return `A = 0xFF`.
+- `KM_KT_PUT`/`KM_KT_GET` maintain the token queue but the ASCII keyboard
+  path (`kbd_getchar`) does not consume it, so tokens are only visible to
+  programs that poll `KM_KT_GET`.

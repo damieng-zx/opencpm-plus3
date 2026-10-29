@@ -604,6 +604,33 @@ class KmKtPut(unittest.TestCase):
         self.assertIn("kbd_token_buf", smoke)
 
 
+class KmKtGet(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xDA", dispatch)
+        self.assertIn("jp z, .km_kt_get", dispatch)
+
+    def test_handler_pops_and_updates_lock_state(self):
+        body = handler_body(".km_kt_get:", ".km_kt_put:")
+        self.assertIn("kbd_token_count", body)
+        self.assertIn("kbd_token_head", body)
+        self.assertIn("kbd_token_buf", body)
+        self.assertIn("and 0x78", body)          # lock bits
+        self.assertIn("kbd_lock_state", body)
+        self.assertIn("and 0x0F", body)
+        self.assertIn("scf", body)
+        self.assertIn(".kget_empty", body)
+
+    def test_tester_covers_ktget(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("KM_KT_GET", tester)
+        self.assertIn("18.KTGET", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("18.KTGET..OK", smoke)
+        self.assertIn("kbd_token_head", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

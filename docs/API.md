@@ -526,7 +526,7 @@ jump table directly:
 | 27 | BNKSEL | A=bank | — | Select bank (0=TPA, else system). |
 | 28 | SETBNK | A=bank | — | Set DMA bank for next I/O. |
 | 29 | XMOVE | B=dst,C=src | — | Set up cross-bank move. |
-| 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions).  Implements the TE calls plus the disc calls (`DD_INIT`, `DD_SETUP`, `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_L_DPB`, `DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`, motor on/off/timeout, `DD_L_SEEK`, `KM_SET_SPEED` and `KM_KT_PUT`).  See [XBIOS/TE Interface](cpm-plus-xbios.md). |
+| 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions).  Implements the TE calls plus the disc calls (`DD_INIT`, `DD_SETUP`, `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_L_DPB`, `DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`, motor on/off/timeout, `DD_L_SEEK`, `KM_SET_SPEED`, `KM_KT_PUT` and `KM_KT_GET`).  See [XBIOS/TE Interface](cpm-plus-xbios.md). |
 | 31 | — | — | — | Reserved (JP 0). |
 | 32 | SCRMODE | A=32, 51 or 64 | — | Set screen column count (clears screen). |
 
@@ -758,7 +758,8 @@ Implemented TE entries: `TE_ASK` (`0x00BF`), `TE_RESET` (`0x00C2`),
 CP/M bank 1 (the TPA).  See [XBIOS/TE Interface](cpm-plus-xbios.md) for
 the register contracts, colour encoding and the `SCR_RUN_ROUTINE`
 common-memory limitation.  `KM_SET_SPEED` (`0x00E0`) sets the keyboard
-repeat delays and `KM_KT_PUT` (`0x00DD`) queues a key token.
+repeat delays, and `KM_KT_PUT` (`0x00DD`)/`KM_KT_GET` (`0x00DA`) queue and
+dequeue key tokens.
 
 ---
 

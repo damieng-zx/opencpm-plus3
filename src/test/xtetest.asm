@@ -37,6 +37,7 @@ DD_L_DPB        EQU 0x009E
 DD_L_XDPB       EQU 0x00A1
 DD_L_READ       EQU 0x00AD
 DD_L_WRITE      EQU 0x00B0
+KM_KT_GET       EQU 0x00DA
 KM_KT_PUT       EQU 0x00DD
 KM_SET_SPEED    EQU 0x00E0
 
@@ -1056,6 +1057,46 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 18: KM_KT_GET ===
+    ld de, msg_t18
+    ld c, 9
+    call BDOS
+
+    ld hl, KM_KT_GET
+    ld (userf_dw), hl
+    call userf_trampoline
+    jp nc, .t18_fail
+    ld a, b
+    cp 0x08                     ; caps-lock shift state
+    jp nz, .t18_fail
+    ld a, c
+    cp 0x2B
+    jp nz, .t18_fail
+
+    call userf_trampoline
+    jp nc, .t18_fail
+    ld a, b
+    or a
+    jp nz, .t18_fail
+    ld a, c
+    cp 0x1F
+    jp nz, .t18_fail
+
+    ; Empty queue: carry clear, B = last lock state (0), C undefined.
+    call userf_trampoline
+    jp c, .t18_fail
+    ld a, b
+    or a
+    jp nz, .t18_fail
+
+    ld de, msg_ok
+    jr .t18_print
+.t18_fail:
+    ld de, msg_fail
+.t18_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1236,6 +1277,7 @@ msg_t14:    db 0x0D, 0x0A, "14.LREAD..", '$'
 msg_t15:    db 0x0D, 0x0A, "15.LWRITE..", '$'
 msg_t16:    db 0x0D, 0x0A, "16.KMSPD..", '$'
 msg_t17:    db 0x0D, 0x0A, "17.KTPUT..", '$'
+msg_t18:    db 0x0D, 0x0A, "18.KTGET..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

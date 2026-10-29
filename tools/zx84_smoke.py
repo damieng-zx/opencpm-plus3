@@ -420,16 +420,17 @@ class Smoke:
         for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK",
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
-                       "17.KTPUT..OK", "DONE"):
+                       "17.KTPUT..OK", "18.KTGET..OK", "DONE"):
             if needle not in screen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + screen)
         # SCR_RUN_ROUTINE stages its routine at D000h, writes 5Ah to the
-        # bottom-right attribute in bank 5 and 1 to the D100h flag.
-        marker = self.memory(5, 0x5AFF, 1)[0]
-        if marker != 0x5A:
-            raise SmokeError(
-                f"SCR_RUN_ROUTINE screen marker {marker:02X}, expected 5A")
+        # bottom-right attribute in bank 5 and 1 to the D100h flag.  Later
+        # output scrolls the screen, so look for the marker anywhere in the
+        # attribute plane rather than at a fixed cell.
+        attrs = self.memory(5, 0x5800, 768)
+        if 0x5A not in attrs:
+            raise SmokeError("SCR_RUN_ROUTINE screen marker 5A not found")
         flag = self.memory(3, 0xD100, 1)[0]
         if flag != 1:
             raise SmokeError(
@@ -447,13 +448,16 @@ class Smoke:
             if value != expected:
                 raise SmokeError(
                     f"KM_SET_SPEED {name} {value}, expected {expected}")
-        count = self.memory(4, label_address("kbd_token_count"), 1)[0]
-        if count != 2:
-            raise SmokeError(f"KM_KT_PUT token count {count}, expected 2")
         tokens = self.memory(4, label_address("kbd_token_buf"), 4)
         if tokens != bytes((0x08, 0x2B, 0x00, 0x1F)):
             raise SmokeError(
                 f"KM_KT_PUT tokens {tokens!r}, expected [08, 2B, 00, 1F]")
+        count = self.memory(4, label_address("kbd_token_count"), 1)[0]
+        if count != 0:
+            raise SmokeError(f"KM_KT_GET token count {count}, expected 0")
+        head = self.memory(4, label_address("kbd_token_head"), 1)[0]
+        if head != 2:
+            raise SmokeError(f"KM_KT_GET head {head}, expected 2")
         self.expect("XTETEST prompt", "A>")
 
     def run_xtetest_format(self) -> None:
