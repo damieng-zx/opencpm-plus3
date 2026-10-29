@@ -15,7 +15,7 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`,
 `DD_CHECK_SECTOR`, `DD_FORMAT`, motor on/off/timeout, `DD_L_SEEK`).  The
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
-`11.SETUP..OK`, the `5Ah` marker in the bottom-right screen attribute
+`11.SETUP..OK`, `12.DPB..OK`, the `5Ah` marker in the bottom-right screen attribute
 (bank 5, `5AFFh`) and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
 `fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
@@ -241,6 +241,10 @@ Test 11 applies the default `DD_SETUP` parameter block at `D600h`.  The
 smoke runner then checks the translated fields: `motor_off_ticks=250`
 (50 × 100 ms in 50 Hz frames), `fdc_spec1=4Fh` (SRT 4 = 12 ms step, HUT
 15) and `fdc_spec2=05h` (HLT 2 = 4 ms head load, non-DMA).
+
+Test 12 builds a standard +3 10-byte disc specification at `D700h`, calls
+`DD_L_DPB` and checks the 17-byte DPB at `D800h`: SPT=36, BSH=3, BLM=7,
+EXM=0, DSM=174, DRM=63, AL0=C0h, AL1=00h, CKS=16, OFF=1, PSH=2, PHM=3.
 
 ### BDOS file regression suite
 

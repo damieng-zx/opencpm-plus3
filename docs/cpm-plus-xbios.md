@@ -51,6 +51,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | `0x95` | `DD_SEL_FORMAT` | A = format 0-3, IX = destination XDPB in common memory | Carry set + A = format, or carry clear + A = 6 (bad format).  Loads one of the four standard XDPB templates. |
 | `0x98` | `DD_DRIVE_STATUS` | C = unit (bits 1-0), head (bit 2) | A = ST3.  Unit 0 returns `0x30` (Ready + Track 0 + unit 0); other units return `0x01` (not fitted). |
 | `0x9B` | `DD_READ_ID` | C = unit, D = logical track, IX = XDPB | Carry set + A = sector number, or carry clear + A = error (0 not ready, 2 seek, 3 data, 5 missing address mark); HL = `dd_results` (count + ST0 ST1 ST2 C H R N). |
+| `0x9E` | `DD_L_DPB` | HL = 10-byte disc spec in common memory, IX = destination 17-byte DPB | Builds a standard DPB from the spec.  Carry set + A = disc type, or carry clear + A = 6 (bad format). |
 | `0xA4` | `DD_L_ON_MOTOR` | - | Turn the motor on and wait for spin-up.  All registers and flags preserved. |
 | `0xA7` | `DD_L_T_OFF_MOTOR` | - | Arm the motor-off timeout (about one second).  All registers and flags preserved. |
 | `0xAA` | `DD_OFF_MOTOR` | - | Turn the motor off immediately. |
@@ -74,11 +75,11 @@ All six documented TE operations (`TE_ASK`, `TE_RESET`, `TE_SET_INK`,
 the disc calls above are implemented: phase 1 (`DD_INIT`, `DD_SETUP`,
 `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_L_ON_MOTOR`, `DD_L_T_OFF_MOTOR`,
 `DD_OFF_MOTOR`, `DD_L_SEEK`) and phase 2 (`DD_LOGIN`, `DD_READ_SECTOR`,
-`DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`).
+`DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_L_DPB`).
 
-Still unimplemented: the low-level disc calls (`DD_L_DPB`, `DD_L_XDPB`,
-`DD_L_READ`, `DD_L_WRITE`), the serial calls (`CD_SA_*`), the keyboard
-calls (`KM_*`) and `FIND_FID`.  Unknown IDs return `A = 0xFF`.
+Still unimplemented: the low-level disc calls (`DD_L_XDPB`, `DD_L_READ`,
+`DD_L_WRITE`), the serial calls (`CD_SA_*`), the keyboard calls (`KM_*`)
+and `FIND_FID`.  Unknown IDs return `A = 0xFF`.
 
 `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` currently
 accept only CP/M bank 1 (the TPA); other bank numbers return `A = 9`.

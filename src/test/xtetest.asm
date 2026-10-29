@@ -33,6 +33,8 @@ DD_WRITE        EQU 0x0089
 DD_CHECK_SECTOR EQU 0x008C
 DD_FORMAT       EQU 0x008F
 DD_LOGIN        EQU 0x0092
+DD_L_DPB        EQU 0x009E
+DD_L_XDPB       EQU 0x00A1
 
 ; ============================================================
 ; Entry
@@ -651,6 +653,86 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 12: DD_L_DPB ===
+    ld de, msg_t12
+    ld c, 9
+    call BDOS
+
+    ld hl, dd_l_spec
+    ld de, 0xD700
+    ld bc, 10
+    ldir
+
+    ld hl, DD_L_DPB
+    ld (userf_dw), hl
+    ld hl, 0xD700
+    ld ix, 0xD800
+    call userf_trampoline
+    jp nc, .t12_fail
+    cp 0
+    jp nz, .t12_fail
+
+    ; Standard +3 DPB: SPT=36 BSH=3 BLM=7 EXM=0 DSM=174 DRM=63
+    ; AL0=C0 AL1=00 CKS=16 OFF=1 PSH=2 PHM=3
+    ld a, (0xD800)
+    cp 36
+    jp nz, .t12_fail
+    ld a, (0xD801)
+    or a
+    jp nz, .t12_fail
+    ld a, (0xD802)
+    cp 3
+    jp nz, .t12_fail
+    ld a, (0xD803)
+    cp 7
+    jp nz, .t12_fail
+    ld a, (0xD804)
+    or a
+    jp nz, .t12_fail
+    ld a, (0xD805)
+    cp 174
+    jp nz, .t12_fail
+    ld a, (0xD806)
+    or a
+    jp nz, .t12_fail
+    ld a, (0xD807)
+    cp 63
+    jp nz, .t12_fail
+    ld a, (0xD808)
+    or a
+    jp nz, .t12_fail
+    ld a, (0xD809)
+    cp 0xC0
+    jp nz, .t12_fail
+    ld a, (0xD80A)
+    or a
+    jp nz, .t12_fail
+    ld a, (0xD80B)
+    cp 16
+    jp nz, .t12_fail
+    ld a, (0xD80C)
+    or a
+    jp nz, .t12_fail
+    ld a, (0xD80D)
+    cp 1
+    jp nz, .t12_fail
+    ld a, (0xD80E)
+    or a
+    jp nz, .t12_fail
+    ld a, (0xD80F)
+    cp 2
+    jp nz, .t12_fail
+    ld a, (0xD810)
+    cp 3
+    jp nz, .t12_fail
+    ld de, msg_ok
+    jr .t12_print
+.t12_fail:
+    ld de, msg_fail
+.t12_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -785,6 +867,7 @@ res_c: db 0
 t8_ok: db 0
 t9_ok: db 0
 dd_setup_defaults: db 10, 50, 175, 30, 12, 15, 3
+dd_l_spec: db 0, 0, 40, 9, 2, 1, 3, 2, 42, 82
 
 
 ; ============================================================
@@ -803,6 +886,7 @@ msg_t8:     db 0x0D, 0x0A, "8.DISK..", '$'
 msg_t9:     db 0x0D, 0x0A, "9.RW..", '$'
 msg_t10:    db 0x0D, 0x0A, "10.FMT..", '$'
 msg_t11:    db 0x0D, 0x0A, "11.SETUP..", '$'
+msg_t12:    db 0x0D, 0x0A, "12.DPB..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

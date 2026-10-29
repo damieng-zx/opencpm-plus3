@@ -188,6 +188,14 @@ dd_cylinder:  db 0                 ; mapped physical cylinder
 dd_filler:    db 0                 ; DD_FORMAT filler byte
 dd_format_sc: db 0                 ; DD_FORMAT sectors per track
 
+; DD_L_DPB / DD_L_XDPB spec -> XDPB builder
+dd_spec:      ds 10                ; copied disc specification
+dd_xdpb_buf:  ds 27                ; built XDPB/DPB image
+dd_copy_len:  db 0                 ; 17 = DPB, 27 = XDPB
+dd_type:      db 0
+dd_psh:       db 0
+dd_bsh:       db 0
+
 
 ; ==========================================================================
 ; COLD BOOT — System startup
@@ -665,6 +673,8 @@ xbios_handler:
     jp z, .dd_sel_format
     cp 0x9B
     jp z, .dd_read_id
+    cp 0x9E
+    jp z, .dd_l_dpb
     cp 0xA4
     jp z, .dd_l_on_motor
     cp 0xA7
@@ -1010,6 +1020,303 @@ xbios_handler:
 .dri_not_ready:
     xor a                         ; A = 0, carry clear
     ld hl, dd_results
+    ret
+
+.dd_l_dpb:
+    ; DD_L_DPB (0x009E): build a standard 17-byte DPB from a disc spec.
+    ;   In: HL = 10-byte spec in common memory, IX = destination DPB
+    ;   Out: carry set + A = disc type, or carry clear + A = 6
+    ld a, 17
+    jr .dd_l_build
+
+.dd_l_build:
+    ld (dd_copy_len), a
+    call .dd_build_xdpb
+    ret nc
+    ld ix, (xbios_ret_ix)
+    ld hl, dd_xdpb_buf
+    push ix
+    pop de
+    ld a, (dd_copy_len)
+    ld c, a
+    ld b, 0
+    ldir
+    ld a, (dd_type)
+    scf
+    ret
+
+; Build a 27-byte XDPB in dd_xdpb_buf from the 10-byte spec at HL.
+;   Out: A = disc type + carry set, or A = 6 + carry clear
+;   Clobbers: AF, BC, DE, HL
+.dd_build_xdpb:
+    ld de, dd_spec
+    ld bc, 10
+    ldir
+
+    ld a, (dd_spec + 0)            ; disc type 0-3
+    cp 4
+    jp nc, .ddb_bad
+    ld (dd_type), a
+
+    ld a, (dd_spec + 1)            ; arrangement 0-2
+    and 0x7F
+    cp 3
+    jp nc, .ddb_bad
+    ld (dd_xdpb_buf + 17), a
+
+    ld a, (dd_spec + 2)            ; tracks per side
+    or a
+    jp z, .ddb_bad
+    ld (dd_xdpb_buf + 18), a
+    ld a, (dd_spec + 3)            ; sectors per track
+    or a
+    jp z, .ddb_bad
+    ld (dd_xdpb_buf + 19), a
+
+    ld a, (dd_spec + 4)            ; sector-size code (max 512)
+    cp 3
+    jp nc, .ddb_bad
+    ld (dd_psh), a
+    ld a, (dd_spec + 6)            ; block-size code (max 16K)
+    cp 8
+    jp nc, .ddb_bad
+    ld (dd_bsh), a
+
+    ld a, (dd_spec + 7)            ; directory blocks 1-16
+    or a
+    jp z, .ddb_bad
+    cp 17
+    jp nc, .ddb_bad
+
+    ; SPT = sectors << PSH
+    ld a, (dd_spec + 3)
+    ld b, a
+    ld a, (dd_psh)
+    ld c, a
+    or a
+    jr z, .ddb_spt_store
+.ddb_spt_sh:
+    sla b
+    dec c
+    jr nz, .ddb_spt_sh
+.ddb_spt_store:
+    ld a, b
+    ld (dd_xdpb_buf + 0), a
+    xor a
+    ld (dd_xdpb_buf + 1), a
+
+    ; BSH / BLM
+    ld a, (dd_bsh)
+    ld (dd_xdpb_buf + 2), a
+    ld b, a
+    ld a, 1
+    inc b
+.ddb_blm_loop:
+    dec b
+    jr z, .ddb_blm_done
+    add a, a
+    jr .ddb_blm_loop
+.ddb_blm_done:
+    dec a
+    ld (dd_xdpb_buf + 3), a
+
+    ; Data tracks = tracks * sides - reserved
+    ld a, (dd_spec + 1)
+    and 0x7F
+    ld b, 1
+    or a
+    jr z, .ddb_sides_ok
+    ld b, 2
+.ddb_sides_ok:
+    ld a, (dd_spec + 2)
+    ld l, a
+    ld h, 0
+    dec b
+    jr z, .ddb_tracks_ok
+    add hl, hl
+.ddb_tracks_ok:
+    ld a, (dd_spec + 5)
+    ld e, a
+    ld d, 0
+    or a
+    sbc hl, de
+    jp c, .ddb_bad
+    jp z, .ddb_bad
+
+    ; HL = tracks * sectors
+    ex de, hl
+    ld a, (dd_spec + 3)
+    ld hl, 0
+    ld b, 8
+.ddb_mul:
+    srl a
+    jr nc, .ddb_mul_skip
+    add hl, de
+.ddb_mul_skip:
+    sla e
+    rl d
+    djnz .ddb_mul
+
+    ; blocks = (tracks * sectors) << PSH >> BSH
+    ld a, (dd_bsh)
+    ld b, a
+    ld a, (dd_psh)
+    sub b
+    jr z, .ddb_blocks_ready
+    jp m, .ddb_blocks_right
+    ld b, a                       ; PSH > BSH: shift left
+.ddb_blocks_left_loop:
+    add hl, hl
+    djnz .ddb_blocks_left_loop
+    jr .ddb_blocks_ready
+.ddb_blocks_right:
+    neg                           ; BSH > PSH: shift right
+    ld b, a
+.ddb_blocks_right_loop:
+    srl h
+    rr l
+    djnz .ddb_blocks_right_loop
+.ddb_blocks_ready:
+    ld a, h
+    or l
+    jp z, .ddb_bad
+    dec hl
+    ld a, l
+    ld (dd_xdpb_buf + 5), a
+    ld a, h
+    ld (dd_xdpb_buf + 6), a
+
+    ; EXM = (1 << (BSH - 3)) - 1, halved for 16-bit block numbers
+    ld a, (dd_bsh)
+    cp 4
+    jr c, .ddb_exm_zero
+    sub 3
+    ld b, a
+    ld a, 1
+.ddb_exm_shift:
+    add a, a
+    dec b
+    jr nz, .ddb_exm_shift
+    dec a
+    ld b, a
+    ld a, (dd_xdpb_buf + 6)
+    ld a, b
+    jr z, .ddb_exm_store
+    srl a
+    jr .ddb_exm_store
+.ddb_exm_zero:
+    xor a
+.ddb_exm_store:
+    ld (dd_xdpb_buf + 4), a
+
+    ; DRM + 1 = dir_blocks << (BSH + 2)
+    ld a, (dd_spec + 7)
+    ld l, a
+    ld h, 0
+    ld a, (dd_bsh)
+    add a, 2
+    ld b, a
+.ddb_drm_shift:
+    add hl, hl
+    djnz .ddb_drm_shift
+    ; CKS = (DRM + 1) / 4
+    ld b, h
+    ld c, l
+    srl b
+    rr c
+    srl b
+    rr c
+    ld a, c
+    ld (dd_xdpb_buf + 11), a
+    ld a, b
+    ld (dd_xdpb_buf + 12), a
+    ; DRM = (DRM + 1) - 1
+    dec hl
+    ld a, l
+    ld (dd_xdpb_buf + 7), a
+    ld a, h
+    ld (dd_xdpb_buf + 8), a
+
+    ; AL0/AL1 = top dir_blocks bits
+    ld a, (dd_spec + 7)
+    ld b, a
+    ld hl, 0
+.ddb_alv:
+    scf
+    rr h
+    rr l
+    djnz .ddb_alv
+    ld a, h
+    ld (dd_xdpb_buf + 9), a
+    ld a, l
+    ld (dd_xdpb_buf + 10), a
+
+    ; OFF
+    ld a, (dd_spec + 5)
+    ld (dd_xdpb_buf + 13), a
+    xor a
+    ld (dd_xdpb_buf + 14), a
+
+    ; PSH / PHM
+    ld a, (dd_psh)
+    ld (dd_xdpb_buf + 15), a
+    ld b, a
+    ld a, 1
+    inc b
+.ddb_phm_loop:
+    dec b
+    jr z, .ddb_phm_done
+    add a, a
+    jr .ddb_phm_loop
+.ddb_phm_done:
+    dec a
+    ld (dd_xdpb_buf + 16), a
+
+    ; First sector ID from the disc type
+    ld a, (dd_type)
+    ld b, 1
+    cp 1
+    jr nz, .ddb_first2
+    ld b, 0x41
+    jr .ddb_first_store
+.ddb_first2:
+    cp 2
+    jr nz, .ddb_first_store
+    ld b, 0xC1
+.ddb_first_store:
+    ld a, b
+    ld (dd_xdpb_buf + 20), a
+
+    ; Physical sector size = 128 << PSH
+    ld a, (dd_psh)
+    ld hl, 128
+    or a
+    jr z, .ddb_ssize_store
+    ld b, a
+.ddb_ssize_loop:
+    add hl, hl
+    djnz .ddb_ssize_loop
+.ddb_ssize_store:
+    ld a, l
+    ld (dd_xdpb_buf + 21), a
+    ld a, h
+    ld (dd_xdpb_buf + 22), a
+
+    ld a, (dd_spec + 8)            ; gap 1
+    ld (dd_xdpb_buf + 23), a
+    ld a, (dd_spec + 9)            ; gap 2
+    ld (dd_xdpb_buf + 24), a
+    ld a, 0x40                     ; MFM
+    ld (dd_xdpb_buf + 25), a
+    ld a, 0xFF                     ; fixed/detected
+    ld (dd_xdpb_buf + 26), a
+
+    ld a, (dd_type)
+    scf
+    ret
+.ddb_bad:
+    ld a, 6
+    or a
     ret
 
 .dd_l_on_motor:

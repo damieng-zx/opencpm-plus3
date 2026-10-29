@@ -87,9 +87,10 @@ class BuiltImage(unittest.TestCase):
         if not bios.exists() or not ccp.exists():
             self.skipTest("building the image is required")
         self.assertNotIn(ccp.read_bytes(), bios.read_bytes())
-        # The CCP used to be almost 3K of the ~15.5K image; leaving it out
-        # must keep CPM3.SYS well clear of the 16K window.
-        self.assertLess(bios.stat().st_size, 15 * 1024)
+        # The CCP used to be almost 3K of the image.  The hard limit is the
+        # 16K bank-4 window (check_layout.py enforces the system image);
+        # embedding the CCP again would push the whole file past 16K.
+        self.assertLess(bios.stat().st_size, 16 * 1024)
 
 
 class CheckTool(unittest.TestCase):

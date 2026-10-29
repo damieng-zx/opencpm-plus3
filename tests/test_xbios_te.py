@@ -404,6 +404,49 @@ class DdSetup(unittest.TestCase):
         self.assertIn("fdc_spec1", smoke)
 
 
+class DdLDpb(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0x9E", dispatch)
+        self.assertIn("jp z, .dd_l_dpb", dispatch)
+
+    def test_handler_selects_17_or_27_bytes(self):
+        body = handler_body(".dd_l_dpb:", ".dd_l_on_motor:")
+        self.assertIn("ld a, 17", body)
+        self.assertIn("call .dd_build_xdpb", body)
+        self.assertIn("ld (dd_copy_len), a", body)
+        self.assertIn("ld a, (dd_type)", body)
+
+    def test_builder_computes_standard_dpb(self):
+        body = handler_body(".dd_build_xdpb:", ".dd_l_on_motor:")
+        for token in ("dd_spec + 0", "dd_spec + 1", "dd_spec + 2",
+                      "dd_spec + 3", "dd_spec + 4", "dd_spec + 5",
+                      "dd_spec + 6", "dd_spec + 7", "dd_spec + 8",
+                      "dd_spec + 9"):
+            self.assertIn(token, body)
+        self.assertIn("dd_xdpb_buf + 0", body)    # SPT
+        self.assertIn("dd_xdpb_buf + 2", body)    # BSH
+        self.assertIn("dd_xdpb_buf + 4", body)    # EXM
+        self.assertIn("dd_xdpb_buf + 5", body)    # DSM
+        self.assertIn("dd_xdpb_buf + 7", body)    # DRM
+        self.assertIn("dd_xdpb_buf + 9", body)    # AL0
+        self.assertIn("dd_xdpb_buf + 11", body)   # CKS
+        self.assertIn("dd_xdpb_buf + 13", body)   # OFF
+        self.assertIn("dd_xdpb_buf + 15", body)   # PSH
+        self.assertIn("dd_xdpb_buf + 20", body)   # first sector
+        self.assertIn("dd_xdpb_buf + 21", body)   # sector size
+        self.assertIn("dd_xdpb_buf + 23", body)   # gap 1
+        self.assertIn("dd_xdpb_buf + 24", body)   # gap 2
+
+    def test_tester_covers_dpb(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("DD_L_DPB", tester)
+        self.assertIn("12.DPB", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("12.DPB..OK", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")
