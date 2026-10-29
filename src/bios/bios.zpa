@@ -623,6 +623,8 @@ bios_time:
 ; @clobbers
 ; @end
 xbios_handler:
+    cp 0xBF
+    jr z, .te_ask
     cp 0xE3
     jr z, .cd_version
     cp 0xE6
@@ -660,6 +662,25 @@ xbios_handler:
     ; TE_STL_ASK (0x00C5): status line always off on our driver.
     ;   A = 0x00 (disabled), Zero flag set
     xor a
+    ret
+
+.te_ask:
+    ; TE_ASK (0x00BF): viewport position/size and cursor position.
+    ;   Out: B = viewport top row, C = viewport left column,
+    ;        D = viewport height - 1, E = viewport width - 1,
+    ;        H = cursor row, L = cursor column.
+    ; Our viewport is always the whole screen, so the top-left corner is
+    ; (0,0) and the cursor coordinates are already viewport-relative.
+    ld b, 0
+    ld c, 0
+    ld d, SCR_ROWS - 1
+    ld a, (scr_cols)
+    dec a
+    ld e, a
+    ld a, (cursor_row)
+    ld h, a
+    ld a, (cursor_col)
+    ld l, a
     ret
 
 .dd_drive_status:

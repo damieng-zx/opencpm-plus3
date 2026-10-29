@@ -15,23 +15,30 @@ placed immediately after the `CALL`:
 after the inline word, then dispatches to `xbios_handler` in bank 4.  The
 caller's `HL` is preserved as an input/output register.
 
-## Important: function IDs are bytes, not +3 addresses
+## Important: the inline word is a jumpblock entry address
 
-The current stub reads only the **low byte** of the inline word.  The
-identifier is therefore `0x00..0xFF`; the high byte is ignored.
+The real +3 extended BIOS jumpblock lives in bank 0 at `0x0080-0x00EC`.
+`USERF` takes the address of one of those entries as its inline parameter:
 
-The real +3 XBIOS jump table lives at bank 0 `0x0080-0x00EC`, and the
-`TE_*` symbols used by `XTETEST.COM` (`0x0883`, `0x0894`, `0x08B5`,
-`0x08B7`, `0x08B8`, `0x08F9`, `0x0905`, `0x0906`) are **addresses in that
-table**, not inline IDs.  This implementation does not provide that jump
-table, so `XTETEST` currently exercises the low-byte/unknown-ID path for
-most of those calls.  Use the IDs below for new code.
+```asm
+        ld   hl, argument       ; not the function address
+        call userf_entry
+        dw   0x00BF             ; extended jumpblock entry "TE ASK"
+```
+
+The current stub reads only the **low byte** of that inline word, so the
+dispatch key is `0x00..0xFF`; the high byte is ignored.  The documented
+TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
+(`TE_STL_ASK`), `0x00C8` (`TE_STL_ON_OFF`), `0x00CB` (`TE_SET_INK`),
+`0x00CE` (`TE_SET_BORDER`), `0x00D1` (`TE_SET_SPEED`) and `0x00E9`
+(`SCR_RUN_ROUTINE`).  `XTETEST.COM` uses those values.
 
 ## Supported function IDs
 
 | ID | Name | Input | Output |
 |----|------|-------|--------|
 | `0x98` | `DD_DRIVE_STATUS` | C = unit (bits 1-0), head (bit 2) | A = ST3.  Unit 0 returns `0x30` (Ready + Track 0 + unit 0); other units return `0x01` (not fitted). |
+| `0xBF` | `TE_ASK` | - | B = viewport top row, C = viewport left column, D = height - 1, E = width - 1, H = cursor row, L = cursor column.  The viewport is always the full screen, so B = C = 0, D = 23 and E = current columns - 1. |
 | `0xC5` | `TE_STL_ASK` | - | A = 0, Z set.  Status line is always off. |
 | `0xC8` | `TE_STL_ON_OFF` | - | Swallowed; returns with A unchanged and Z set. |
 | `0xE3` | `CD_VERSION` | - | A = 3 (machine type), BC = `0x0100` (version 1.0). |
@@ -42,12 +49,11 @@ most of those calls.  Use the IDs below for new code.
 
 The following +3 TE operations have no handler yet:
 
-- `TE_ASK` (`0x0883`) - query the text window
-- `TE_RESET` (`0x0894`) - reset the terminal
-- `TE_SET_INK` (`0x08B8`)
-- `TE_SET_BORDER` (`0x08F9`)
-- `TE_SET_SPEED` (`0x0905`)
-- `SCR_RUN_ROUTINE` (`0x0906`)
+- `TE_RESET` (`0x00C2`) - reset the terminal
+- `TE_SET_INK` (`0x00CB`)
+- `TE_SET_BORDER` (`0x00CE`)
+- `TE_SET_SPEED` (`0x00D1`)
+- `SCR_RUN_ROUTINE` (`0x00E9`)
 
 Screen control is available through the normal BIOS console/scroll
 functions and the VT52-style escape sequences documented in

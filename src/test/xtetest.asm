@@ -8,15 +8,16 @@
 
 BDOS        EQU 0005h
 
-; XBIOS function addresses in bank 4 (from bios.lst)
-TE_ASK          EQU 0x0883
-TE_RESET        EQU 0x0894
-TE_STL_ASK      EQU 0x08B5
-TE_STL_ON_OFF   EQU 0x08B7
-TE_SET_INK      EQU 0x08B8
-TE_SET_BORDER   EQU 0x08F9
-TE_SET_SPEED    EQU 0x0905
-SCR_RUN_ROUTINE EQU 0x0906
+; XBIOS extended jumpblock entries (bank 0, per the +3 CP/M Plus manual).
+; USERF takes the entry address inline; our dispatcher uses its low byte.
+TE_ASK          EQU 0x00BF
+TE_RESET        EQU 0x00C2
+TE_STL_ASK      EQU 0x00C5
+TE_STL_ON_OFF   EQU 0x00C8
+TE_SET_INK      EQU 0x00CB
+TE_SET_BORDER   EQU 0x00CE
+TE_SET_SPEED    EQU 0x00D1
+SCR_RUN_ROUTINE EQU 0x00E9
 
 ; ============================================================
 ; Entry
