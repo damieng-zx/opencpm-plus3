@@ -81,7 +81,9 @@ scr_ink:      db 7             ; Ink colour 0-7 (Spectrum GRB)
 scr_paper:    db 1             ; Paper colour 0-7
 scr_ink_br:   db 0             ; Ink bright: 0 or 1
 scr_paper_br: db 0             ; Paper bright: 0 or 1
-scr_flash:    db 0             ; Flash: 0x00 or 0x80
+scr_ink_fl:   db 0             ; Ink flashing: 0 = steady, 1 = flash
+scr_paper_fl: db 0             ; Paper flashing: 0 = steady, 1 = flash
+scr_flash:    db 0             ; Computed FLASH attribute bit: 0x00 or 0x80
 scr_attr:     db DEFAULT_ATTR  ; Computed attribute byte (F B PPP III)
 scr_border_v: db BORDER_COL    ; Current border colour 0-7
 scr_cols:     db 51            ; Runtime column count (32, 51 or 64)
@@ -179,6 +181,8 @@ scr_reset:
     xor a
     ld (scr_ink_br), a
     ld (scr_paper_br), a
+    ld (scr_ink_fl), a
+    ld (scr_paper_fl), a
     ld (scr_flash), a
     ld (saved_row), a
     ld (saved_col), a
@@ -811,26 +815,54 @@ scr_putchar:
 ; @end
 _decode_colour:
     sub 32
+    and 0x3F
+    ; fall through
+
+; _decode_te_colour — Decode a +3 palette byte (0..3F)
+;   Each pair of bits is one gun: 00 off, 01/10 on normal, 11 on high.
+;   The Spectrum colour index takes the gun on/off state; the bright flag
+;   is set only when every enabled gun is high.
+; @proc _decode_te_colour
+; @param %colour:u8 a
+; @out   bc
+; @clobbers af,de
+; @end
+_decode_te_colour:
     ld e, a
+
+    ; Colour index: bit0 blue, bit1 red, bit2 green.  A gun is on for
+    ; pair values 1, 2 or 3, so test the whole pair, not just one bit.
     xor a
-    ld b, a                    ; colour
-    ld c, a                    ; bright
-    bit 1, e
-    jr z, .dc_red
-    set 0, b                   ; blue
-.dc_red:
-    bit 3, e
-    jr z, .dc_green
-    set 1, b                   ; red
-.dc_green:
-    bit 5, e
-    jr z, .dc_bright
-    set 2, b                   ; green
-.dc_bright:
+    ld b, a
     ld a, e
-    and 0x15                   ; bright bits: blue 1, red 4, green 16
-    ret z
+    and 0x03
+    jr z, .dtc_red
+    set 0, b                   ; blue
+.dtc_red:
+    ld a, e
+    and 0x0C
+    jr z, .dtc_green
+    set 1, b                   ; red
+.dtc_green:
+    ld a, e
+    and 0x30
+    jr z, .dtc_bright
+    set 2, b                   ; green
+.dtc_bright:
+    ; Bright only when no gun is 01 or 10: XOR each pair's two bits.
+    ld a, e
+    ld d, a
+    srl a
+    xor d
+    and 0x15                   ; blue bit0, red bit2, green bit4
+    jr nz, .dtc_normal
+    ld a, e
+    and 0x15                   ; all guns off (black) is not bright
+    jr z, .dtc_normal
     ld c, 1
+    ret
+.dtc_normal:
+    ld c, 0
     ret
 
 
@@ -856,6 +888,22 @@ _set_attr:
     xor a
 .sa_have:
     ld b, a
+
+    ; FLASH only when both inks have a different flash colour.  Hardware
+    ; then alternates the whole cell between ink and paper.
+    xor a
+    ld (scr_flash), a
+    ld a, (scr_ink_fl)
+    and a
+    jr z, .sa_noflash
+    ld a, (scr_paper_fl)
+    and a
+    jr z, .sa_noflash
+    ld a, 0x80
+    ld (scr_flash), a
+    or b
+    ld b, a
+.sa_noflash:
     ld a, (scr_paper)
     and 0x07
     add a, a

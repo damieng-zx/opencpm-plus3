@@ -125,6 +125,27 @@ start:
     ld c, 9
     call BDOS
 
+    ; --- Test 3b: both inks to a different flash colour ---
+    ; Black paper with a yellow flash value, then yellow ink with a black
+    ; flash value.  Both cells must carry the FLASH attribute (0x86).
+    ld hl, TE_SET_INK
+    ld (userf_dw), hl
+    ld a, 0                     ; paper
+    ld b, 0x00                  ; black
+    ld c, 0x3C                  ; different => flashing
+    call userf_trampoline
+
+    ld hl, TE_SET_INK
+    ld (userf_dw), hl
+    ld a, 1                     ; ink
+    ld b, 0x3C                  ; yellow
+    ld c, 0x00                  ; different => flashing
+    call userf_trampoline
+
+    ld de, msg_flash
+    ld c, 9
+    call BDOS
+
     ; === Test 4: TE_STL_ASK ===
     ld de, msg_t4
     ld c, 9
@@ -277,6 +298,7 @@ msg_t6:     db "6.RESET..", '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'
 msg_yellow: db "YELLOW TEXT", 0x0D, 0x0A, '$'
+msg_flash:  db "FLASH TEXT", 0x0D, 0x0A, '$'
 msg_nz:     db "NZ", 0x0D, 0x0A, '$'
 msg_zf:     db "Z", 0x0D, 0x0A, '$'
 msg_crlf:   db 0x0D, 0x0A, '$'

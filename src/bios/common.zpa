@@ -369,6 +369,7 @@ _bc4_stack:
 ; @clobbers ix                  ; IX is the banked-dispatch vehicle
 ; @end
 userf_stub:
+    ld (xbios_arg_a), a            ; preserve caller A for XBIOS input
     ex (sp), hl                    ; HL = return addr â†’ inline DW, caller HL on stack
     ld a, (hl)                     ; A = func_id low byte (high byte assumed 0)
     inc hl
@@ -802,8 +803,8 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF9A0, "RAMDISK.FID expects copy_record_to_tpa at 0xF9A0"
-    assert copy_record_from_tpa == 0xF9A6, "RAMDISK.FID expects copy_record_from_tpa at 0xF9A6"
+    assert copy_record_to_tpa == 0xF9A3, "RAMDISK.FID expects copy_record_to_tpa at 0xF9A3"
+    assert copy_record_from_tpa == 0xF9A9, "RAMDISK.FID expects copy_record_from_tpa at 0xF9A9"
 
 
 ; ------------------------------------------------------------------
@@ -1036,7 +1037,7 @@ xfer_staging: ds 32
 ; so a large program cannot overwrite it while the stub is still reading.
 ccp_fcb: ds 36
     assert $ - ccp_fcb == 36, "ccp_fcb must be exactly 36 bytes (CP/M FCB format)"
-    assert ccp_fcb == 0xFB6B, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+    assert ccp_fcb == 0xFB6E, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
 
 
 ; BDOS stack (grows downward from bdos_stack label)
@@ -1104,6 +1105,7 @@ start_tpa:
 
 
 bdos_stack_base:
+    ds 128
 bdos_stack equ bdos_stack_base + 128
     assert bdos_stack - bdos_stack_base == 128, "BDOS stack must be 128 bytes"
     assert bdos_stack <= 0x10000, "BDOS stack must fit in common memory"
@@ -1112,10 +1114,11 @@ bdos_stack equ bdos_stack_base + 128
 ; record of zeros in common memory: both the FDC and the RAM-disk FID
 ; direct-copy a DMA address at or above C000h, so the BDOS can point the
 ; BIOS DMA here without touching the user's buffer.  This sits above the
-; BDOS stack (no image bytes; zero_fill_block clears it on each use).
+; BDOS stack.
 f40_zero equ bdos_stack
     assert f40_zero == bdos_stack, "f40_zero must follow the BDOS stack"
     assert f40_zero + 128 <= 0x10000, "f40_zero must fit in common memory"
+    ds 128
 
 ; ==========================================================================
 ; End of common memory stub
@@ -1123,3 +1126,10 @@ f40_zero equ bdos_stack
 common_end equ f40_zero + 128
 
     assert common_end <= 0xFFFF, "Common stub overflows bank 3!"
+
+; USERF caller-A save.  The dispatcher reuses A for the function ID, but
+; some XBIOS calls (TE_SET_INK) take A as an input.  Keep it after the
+; fixed common layout so the RAMDISK.FID copy routines and the staged
+; CCP's FCB address do not move.
+xbios_arg_a: db 0
+    assert xbios_arg_a + 1 <= 0x10000, "USERF save byte must fit in common memory"

@@ -73,10 +73,12 @@ class Colours(unittest.TestCase):
         text = source("src/bios/screen.zpa")
         body = text[text.index("_decode_colour:"):text.index("_set_attr:")]
         self.assertIn("sub 32", body)
-        self.assertIn("bit 1, e", body)     # blue
-        self.assertIn("bit 3, e", body)     # red
-        self.assertIn("bit 5, e", body)     # green
-        self.assertIn("and 0x15", body)     # bright bits
+        self.assertIn("and 0x3F", body)
+        self.assertIn("and 0x03", body)     # blue pair
+        self.assertIn("and 0x0C", body)     # red pair
+        self.assertIn("and 0x30", body)     # green pair
+        self.assertIn("xor d", body)        # high = both bits set
+        self.assertIn("and 0x15", body)     # one low bit per gun
 
     def test_attribute_recomputed_and_stamped(self):
         text = source("src/bios/screen.zpa")

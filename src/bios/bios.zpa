@@ -635,6 +635,8 @@ xbios_handler:
     jr z, .te_stl_ask
     cp 0xC8
     ret z                          ; TE_STL_ON_OFF — swallow, no status line
+    cp 0xCB
+    jr z, .te_set_ink
     cp 0x98
     jr z, .dd_drive_status
     ld a, 0xFF                     ; unknown XBIOS ID
@@ -690,6 +692,67 @@ xbios_handler:
     ; Clears the screen, homes the cursor and restores the default
     ; palette/wrap/page-mode state.  The screen width is left unchanged.
     call scr_reset
+    ret
+
+.te_set_ink:
+    ; TE_SET_INK (0x00CB): set the colour of ink 0 or ink 1.
+    ;   In:  A = ink number (preserved by userf_stub), B = colour (0-63),
+    ;        C = flash colour (0-63)
+    ;   Out: AF BC DE HL corrupt
+    ; Ink 0 is the background and the border; ink 1 is the foreground.
+    ; Other ink numbers are ignored.  Only future characters take the new
+    ; colours; existing screen cells keep the attribute they were drawn
+    ; with.  Both inks flashing turns on the hardware FLASH attribute.
+    ld a, (xbios_arg_a)
+    cp 1
+    jr z, .tsi_ink
+    or a
+    ret nz                         ; inks > 1 are ignored
+
+    ; --- ink 0: paper and border ---
+    ld a, b
+    and 0x3F
+    ld e, a                        ; E = steady colour
+    ld a, c
+    and 0x3F
+    cp e
+    ld a, 0
+    jr z, .tsi_paper_flash
+    inc a
+.tsi_paper_flash:
+    ld (scr_paper_fl), a
+    ld a, e
+    call _decode_te_colour
+    ld a, b
+    ld (scr_paper), a
+    ld (scr_border_v), a
+    out (PORT_ULA), a
+    ld a, c
+    ld (scr_paper_br), a
+    jr .tsi_done
+
+.tsi_ink:
+    ; --- ink 1: foreground ---
+    ld a, b
+    and 0x3F
+    ld e, a
+    ld a, c
+    and 0x3F
+    cp e
+    ld a, 0
+    jr z, .tsi_ink_flash
+    inc a
+.tsi_ink_flash:
+    ld (scr_ink_fl), a
+    ld a, e
+    call _decode_te_colour
+    ld a, b
+    ld (scr_ink), a
+    ld a, c
+    ld (scr_ink_br), a
+
+.tsi_done:
+    call _set_attr
     ret
 
 .dd_drive_status:

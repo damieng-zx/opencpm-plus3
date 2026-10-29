@@ -72,6 +72,49 @@ class TeReset(unittest.TestCase):
         self.assertNotIn("scr_cols", body)
 
 
+class TeSetInk(unittest.TestCase):
+    def test_dispatch_uses_jumpblock_entry(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xCB", dispatch)
+        self.assertIn("jr z, .te_set_ink", dispatch)
+
+    def test_userf_preserves_caller_a(self):
+        text = source("src/bios/common.zpa")
+        body = text[text.index("userf_stub:"):text.index("write_1ffd:")]
+        self.assertIn("ld (xbios_arg_a), a", body)
+
+    def test_handler_uses_saved_ink_number(self):
+        body = handler_body(".te_set_ink:", ".dd_drive_status:")
+        self.assertIn("ld a, (xbios_arg_a)", body)
+        self.assertIn("cp 1", body)
+        self.assertIn("ret nz", body)            # inks > 1 ignored
+        self.assertIn("call _decode_te_colour", body)
+        self.assertIn("ld (scr_paper), a", body)
+        self.assertIn("ld (scr_ink), a", body)
+        self.assertIn("ld (scr_paper_fl), a", body)
+        self.assertIn("ld (scr_ink_fl), a", body)
+        self.assertIn("out (PORT_ULA), a", body)  # ink 0 updates border
+
+    def test_flash_only_when_both_inks_flash(self):
+        text = source("src/bios/screen.zpa")
+        body = text[text.index("_set_attr:"):text.index("_cancel_paging:")]
+        self.assertIn("ld a, (scr_ink_fl)", body)
+        self.assertIn("ld a, (scr_paper_fl)", body)
+        self.assertIn("ld a, 0x80", body)
+        self.assertIn("ld (scr_flash), a", body)
+
+    def test_palette_decode_treats_1_and_2_as_on(self):
+        text = source("src/bios/screen.zpa")
+        body = text[text.index("_decode_te_colour:"):
+                    text.index("_set_attr:")]
+        self.assertIn("and 0x03", body)
+        self.assertIn("and 0x0C", body)
+        self.assertIn("and 0x30", body)
+        self.assertIn("xor d", body)             # high = both bits set
+        self.assertIn("and 0x15", body)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

@@ -20,7 +20,7 @@ BDOS    equ 0x0005             ; BDOS entry point
 FCB1    equ 0x005C             ; Default FCB 1
 DMA     equ 0x0080             ; Default DMA / command tail
 TPA_TOP equ 0xF600             ; First byte of common memory — initial stack top
-CCP_FCB_ADDR equ 0xFB6B        ; common-memory FCB for the COM loader stub
+CCP_FCB_ADDR equ 0xFB6E        ; common-memory FCB for the COM loader stub
 CCP_CHAIN_ADDR equ 0xF607      ; SCB[0x07]: BDOS F47 chain pending
 CCP_RC_ADDR    equ 0xF608      ; SCB[0x08]: program return code (F108)
 
