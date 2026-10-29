@@ -96,6 +96,12 @@ format gap, and is destructive by definition.  `DD_LOGIN`'s probe falls
 back to the standard type-0 template if the READ ID/boot-sector read
 fails, so it does not yet propagate the 0/2/3/4/5 login error codes.
 
+`KM_KT_PUT`/`KM_KT_GET` maintain the token queue, but the ASCII keyboard
+path (`kbd_getchar`, and therefore BDOS/CCP input) does not consume it:
+tokens are only visible to programs that poll `KM_KT_GET`.  Likewise
+`KM_SET_EXPAND` stores strings that nothing expands yet; keys map straight
+to ASCII characters.
+
 `SCR_RUN_ROUTINE` only supports routines in common memory (`C000-F5FF`).
 The +3 memory map used here pages bank 5 (the screen) over `4000-7FFF` in
 screen mode, so the rest of the TPA is not visible while the routine runs.

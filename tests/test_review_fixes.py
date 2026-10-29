@@ -1,6 +1,7 @@
 """One regression test class per review finding.
 
-The numbering follows docs/review-findings.md.
+The issue numbering follows the original review set (the checklist itself
+has been retired; it remains in git history).
 """
 
 from __future__ import annotations
