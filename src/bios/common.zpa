@@ -365,24 +365,34 @@ _bc4_stack:
 ; @proc userf_stub
 ; @out   af                     ; function-dependent
 ; @out   bc
+; @out   de
 ; @out   hl
-; @clobbers ix                  ; IX is the banked-dispatch vehicle
+; @out   ix
+; @out   iy
+; @clobbers
 ; @end
 userf_stub:
     ld (xbios_arg_a), a            ; preserve caller A for XBIOS input
-    ex (sp), hl                    ; HL = return addr â†’ inline DW, caller HL on stack
+    ld (xbios_ret_ix), ix          ; caller IX/IY are inputs and the default
+    ld (xbios_ret_iy), iy          ; return values for XBIOS calls
+    ex (sp), hl                    ; HL = return addr -> inline DW
     ld a, (hl)                     ; A = func_id low byte (high byte assumed 0)
     inc hl
     inc hl                         ; HL = corrected return (past the DW)
     ex (sp), hl                    ; return on stack, HL = caller HL
     ; Dispatch every XBIOS ID to the bank-4 handler. Common memory is too
     ; tight (F600-FFFF) to inline the per-function return values, and the
-    ; bank switch adds only a few hundred T-states per call.
+    ; bank switch adds only a few hundred T-states per call.  bios_call_bank4
+    ; always restores the caller's IY, so load the handler's IX/IY results
+    ; back here (they are the caller values unless a handler changed them).
     push hl                        ; preserve caller HL (XBIOS input)
     ld hl, xbios_handler
     ld (_bc4_target), hl
     pop hl
-    jp bios_call_bank4
+    call bios_call_bank4
+    ld ix, (xbios_ret_ix)
+    ld iy, (xbios_ret_iy)
+    ret
 
 
 ; ==========================================================================
@@ -803,8 +813,8 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF9A3, "RAMDISK.FID expects copy_record_to_tpa at 0xF9A3"
-    assert copy_record_from_tpa == 0xF9A9, "RAMDISK.FID expects copy_record_from_tpa at 0xF9A9"
+    assert copy_record_to_tpa == 0xF9B4, "RAMDISK.FID expects copy_record_to_tpa at 0xF9B4"
+    assert copy_record_from_tpa == 0xF9BA, "RAMDISK.FID expects copy_record_from_tpa at 0xF9BA"
 
 
 ; ------------------------------------------------------------------
@@ -1037,7 +1047,7 @@ xfer_staging: ds 32
 ; so a large program cannot overwrite it while the stub is still reading.
 ccp_fcb: ds 36
     assert $ - ccp_fcb == 36, "ccp_fcb must be exactly 36 bytes (CP/M FCB format)"
-    assert ccp_fcb == 0xFB6E, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+    assert ccp_fcb == 0xFB7F, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
 
 
 ; BDOS stack (grows downward from bdos_stack label)
@@ -1132,4 +1142,7 @@ common_end equ f40_zero + 128
 ; fixed common layout so the RAMDISK.FID copy routines and the staged
 ; CCP's FCB address do not move.
 xbios_arg_a: db 0
-    assert xbios_arg_a + 1 <= 0x10000, "USERF save byte must fit in common memory"
+xbios_ret_ix: dw 0                 ; XBIOS IX result (caller IX by default)
+xbios_ret_iy: dw 0                 ; XBIOS IY result (caller IY by default)
+xbios_tmp_hl: dw 0                 ; scratch for SCR_RUN_ROUTINE's call
+    assert xbios_tmp_hl + 2 <= 0x10000, "USERF save area must fit in common memory"

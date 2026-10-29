@@ -620,6 +620,7 @@ bios_time:
 ; @proc xbios_handler
 ; @param %func_id:u8 a
 ; @out   af bc de hl
+; @out   ix iy
 ; @clobbers
 ; @end
 xbios_handler:
@@ -641,6 +642,8 @@ xbios_handler:
     jp z, .te_set_border
     cp 0xD1
     ret z                          ; TE_SET_SPEED — +3 flash is hardware-only
+    cp 0xE9
+    jp z, .scr_run_routine
     cp 0x98
     jp z, .dd_drive_status
     ld a, 0xFF                     ; unknown XBIOS ID
@@ -771,6 +774,51 @@ xbios_handler:
     ld a, b
     ld (scr_border_v), a
     out (PORT_ULA), a
+    ret
+
+.scr_run_routine:
+    ; SCR_RUN_ROUTINE (0x00E9): run a routine with the screen paged in.
+    ;   In:  BC = routine address, DE/HL/IX/IY = arguments
+    ;   Out: AF/DE/HL/IX/IY as returned by the routine; BC corrupt
+    ; The text screen is bank 5 at 4000h in screen mode (4,5,6,3).  Only
+    ; code in common memory (C000-F5FF) stays visible there, so the routine
+    ; must live in that window.  It must not call BDOS or BIOS: those switch
+    ; back to TPA/system mode and page the screen out.
+    ld a, b
+    cp 0xC0
+    ret c                          ; below common memory: cannot page it in
+    cp 0xF6
+    ret nc                         ; common stub above the TPA
+
+    ld ix, (xbios_ret_ix)          ; pass the caller's IX/IY through
+    ld iy, (xbios_ret_iy)
+    push bc                        ; keep the routine address across the switch
+    ld a, (motor_flag)
+    or PAGING_SCREEN
+    call write_1ffd                ; screen mode: bank 5 at 4000h
+    pop bc
+
+    ld (xbios_tmp_hl), hl          ; save caller HL (XBIOS argument)
+    ld (.srr_call + 1), bc         ; patch the call target
+    ld hl, (xbios_tmp_hl)          ; restore caller HL before it starts
+    call .srr_call
+    jr .srr_after
+.srr_call:
+    call 0                         ; patched to the routine address
+    ret
+
+.srr_after:
+    ld (xbios_ret_ix), ix          ; capture the routine's IX/IY results
+    ld (xbios_ret_iy), iy
+    push af
+    push de
+    push hl
+    ld a, (motor_flag)
+    or BANK1_1FFD
+    call write_1ffd                ; back to system mode (4,7,6,3)
+    pop hl
+    pop de
+    pop af
     ret
 
 .dd_drive_status:

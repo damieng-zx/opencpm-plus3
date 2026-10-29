@@ -225,8 +225,12 @@ F664  ───────────────────┘
       fcb_buf      ( 36 B)   FCB shadow
       fcb_user_addr (2 B)
       xfer_staging ( 32 B)   bank-switching staging buffer
+      ccp_fcb      ( 36 B)   CCP COM-loader FCB (pinned in miniccp.zpa)
       bdos_stack_base
       bdos_stack equ bdos_stack_base + 128   ◄ SP loads point HERE (top)
+      f40_zero equ bdos_stack                ◄ 128-byte zero record
+      xbios_arg_a / xbios_ret_ix / xbios_ret_iy / xbios_tmp_hl
+                                             USERF and TE state
 FFFF  ────────────────────  hard limit (assert common_end <= 0xFFFF)
 ```
 
@@ -234,8 +238,9 @@ FFFF  ────────────────────  hard limit (
 
 | Address  | What                          | Why pinned                                                       |
 |----------|-------------------------------|------------------------------------------------------------------|
-| `0xF996` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa.              |
-| `0xF99C` | `copy_record_from_tpa`        | Same - assert at common.zpa.                                 |
+| `0xF9B4` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa.              |
+| `0xF9BA` | `copy_record_from_tpa`        | Same - assert at common.zpa.                                 |
+| `0xFB7F` | `ccp_fcb`                     | miniccp.zpa `CCP_FCB_ADDR`; assert at common.zpa.            |
 | `bdos_vector` (F600) | itself            | Page zero 0005h/0006h target; (0006h) is the TPA memory ceiling. |
 | SCB offsets `0x05, 0x1A, 0x3A, 0x3C, 0x3E, 0x44, 0x58-0x5C, 0x62` | DRI documented | Programs index off scb_base.    |
 
@@ -310,7 +315,8 @@ wrote in `start_tpa`.
 | Hang on first SELDSK                           | XDPB Freeze byte stuck nonzero with stale geometry                         | `xdpb_a` byte 26, `fdc_login` |
 | ISR fires but motor never spins down           | `fdc_busy` left non-zero by a driver path                                  | `isr_handler` motor-off block, `common.zpa` |
 | Inter-bank `MOVE` returns wrong data           | xmove banks set with `xmove_active=0`, or copying with stale `_ibm_*_bank` | `bios_xmove`, `interbank_move` |
-| Mallard BASIC hangs probing XBIOS              | New XBIOS ID needs handler — currently returns 0xFF                        | `xbios_handler` in `bios.zpa` |
+| Mallard BASIC hangs probing XBIOS              | Unknown XBIOS ID returns 0xFF; TE IDs are handled                           | `xbios_handler` in `bios.zpa` |
+| `SCR_RUN_ROUTINE` does nothing or crashes      | Routine is outside common memory; screen mode pages the TPA out             | put the routine in `C000-F5FF` |
 
 ---
 

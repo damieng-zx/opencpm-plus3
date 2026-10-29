@@ -216,6 +216,68 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 7: SCR_RUN_ROUTINE ===
+    ; Copy the test routine into common memory (C000-F5FF), then run it
+    ; with the screen paged in.  The routine checks DE/HL/IX/IY pass-through
+    ; and writes 5Ah to the bottom-right attribute cell (bank 5, 5AFFh).
+    ld de, msg_t7
+    ld c, 9
+    call BDOS
+
+    ld hl, srr_code
+    ld de, 0xD000
+    ld bc, srr_code_end - srr_code
+    ldir
+
+    ld hl, SCR_RUN_ROUTINE
+    ld (userf_dw), hl
+    ld bc, 0xD000
+    ld de, 0x1111
+    ld hl, 0x2222
+    ld ix, 0x3333
+    ld iy, 0x4444
+    call userf_trampoline
+
+    ; DE = 1234h, HL = 5678h, IX = 9ABCh, IY = DEF0h
+    ld a, d
+    cp 0x12
+    jr nz, .t7_fail
+    ld a, e
+    cp 0x34
+    jr nz, .t7_fail
+    ld a, h
+    cp 0x56
+    jr nz, .t7_fail
+    ld a, l
+    cp 0x78
+    jr nz, .t7_fail
+    push ix
+    pop bc
+    ld a, b
+    cp 0x9A
+    jr nz, .t7_fail
+    ld a, c
+    cp 0xBC
+    jr nz, .t7_fail
+    push iy
+    pop bc
+    ld a, b
+    cp 0xDE
+    jr nz, .t7_fail
+    ld a, c
+    cp 0xF0
+    jr nz, .t7_fail
+    ld a, (0xD100)              ; routine's input pass-through flag
+    cp 1
+    jr nz, .t7_fail
+    ld de, msg_ok
+    jr .t7_print
+.t7_fail:
+    ld de, msg_fail
+.t7_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -232,6 +294,56 @@ userf_trampoline:
 userf_dw:
     dw 0                        ; Target address patched per call
     ret
+
+
+; ============================================================
+; srr_code — copied to D000h and run by SCR_RUN_ROUTINE
+;   In:  DE=1111h, HL=2222h, IX=3333h, IY=4444h
+;   Out: DE=1234h, HL=5678h, IX=9ABCh, IY=DEF0h
+;   Writes 5Ah to the screen attribute at 5AFFh (bank 5) and 1 to
+;   D100h when every input matched.  Only relative jumps are used, so
+;   the block is position-independent.
+; ============================================================
+srr_code:
+    ld a, e
+    cp 0x11
+    jr nz, .srr_ret
+    ld a, d
+    cp 0x11
+    jr nz, .srr_ret
+    ld a, l
+    cp 0x22
+    jr nz, .srr_ret
+    ld a, h
+    cp 0x22
+    jr nz, .srr_ret
+    push ix
+    pop bc
+    ld a, b
+    cp 0x33
+    jr nz, .srr_ret
+    ld a, c
+    cp 0x33
+    jr nz, .srr_ret
+    push iy
+    pop bc
+    ld a, b
+    cp 0x44
+    jr nz, .srr_ret
+    ld a, c
+    cp 0x44
+    jr nz, .srr_ret
+    ld a, 0x5A
+    ld (0x5AFF), a             ; bottom-right attribute (bank 5)
+    ld a, 1
+    ld (0xD100), a
+.srr_ret:
+    ld de, 0x1234
+    ld hl, 0x5678
+    ld ix, 0x9ABC
+    ld iy, 0xDEF0
+    ret
+srr_code_end:
 
 
 ; ============================================================
@@ -310,6 +422,8 @@ msg_t4:     db "4.STL_ASK:", '$'
 msg_t5:     db 0x0D, 0x0A, "5.BORDER blue..", '$'
 msg_t5b:    db "5b.SPEED..", '$'
 msg_t6:     db "6.RESET..", '$'
+msg_t7:     db "7.RUN..", '$'
+msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'
 msg_yellow: db "YELLOW TEXT", 0x0D, 0x0A, '$'

@@ -6,8 +6,14 @@ zx84 MCP emulator.
 ## Automated runner
 
 `tools/zx84_smoke.py` boots the built image through the zx84 MCP server,
-runs `SYSTEST`, `DISKTEST`, `BDOSTEST`, and the main CCP flows, and asserts
-the 51x24 character buffer plus an empty FDC retry log:
+runs `SYSTEST`, `XTETEST`, `DISKTEST`, `BDOSTEST`, and the main CCP flows,
+and asserts the 51x24 character buffer plus an empty FDC retry log:
+
+`XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry, `TE_RESET`,
+`TE_SET_INK` (including FLASH), `TE_SET_BORDER`, `TE_SET_SPEED` and
+`SCR_RUN_ROUTINE`.  The runner requires `7.RUN..OK`, the `5Ah` marker in
+the bottom-right screen attribute (bank 5, `5AFFh`) and the `D100h`
+input-pass-through flag.
 
 ```text
 python3 tools/zx84_smoke.py
@@ -186,6 +192,25 @@ A stack failure stops the run; the other checks continue after a failure.
 Then run `DIR`: the listing must be normal.  A garbled/run-on listing means
 the F110 delimiter leaked into the CCP's `$`-terminated messages instead of
 being reset at warm boot.
+
+### XBIOS TE regression suite
+
+Run:
+
+```text
+type "XTETEST`enter`"
+run 1200
+```
+
+Require `7.RUN..OK` and `DONE`, with no `FAIL`.  `XTETEST` calls every
+implemented TE entry through `USERF`: `TE_ASK` reports `51x24`, `TE_RESET`
+clears, the ink/border tests change the palette, and `TE_SET_SPEED` is
+accepted.  Test 7 stages a routine at `D000h`, runs it via
+`SCR_RUN_ROUTINE`, checks DE/HL/IX/IY pass-through and leaves:
+
+- `5Ah` in the bottom-right screen attribute (bank 5, offset `1AFFh` for
+  flat address `5AFFh`)
+- `01h` in the common-memory flag at `D100h`
 
 ### BDOS file regression suite
 

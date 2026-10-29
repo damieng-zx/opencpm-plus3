@@ -526,7 +526,7 @@ jump table directly:
 | 27 | BNKSEL | A=bank | — | Select bank (0=TPA, else system). |
 | 28 | SETBNK | A=bank | — | Set DMA bank for next I/O. |
 | 29 | XMOVE | B=dst,C=src | — | Set up cross-bank move. |
-| 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions).  See [XBIOS/TE Interface](cpm-plus-xbios.md). |
+| 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions).  Implements `TE_ASK`, `TE_RESET`, `TE_SET_INK`, `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`.  See [XBIOS/TE Interface](cpm-plus-xbios.md). |
 | 31 | — | — | — | Reserved (JP 0). |
 | 32 | SCRMODE | A=32, 51 or 64 | — | Set screen column count (clears screen). |
 
@@ -732,6 +732,23 @@ input_buf:
         call 5
         ; A=character or 0 if none ready
 ```
+
+### XBIOS terminal-emulator calls
+
+BIOS function 30 (`USERF`) exposes the +3 extended jumpblock.  Place the
+entry address immediately after the `CALL`:
+
+```asm
+        call userf_entry        ; BIOS entry 30
+        dw   0x00BF             ; TE_ASK
+```
+
+Implemented TE entries: `TE_ASK` (`0x00BF`), `TE_RESET` (`0x00C2`),
+`TE_STL_ASK` (`0x00C5`), `TE_STL_ON_OFF` (`0x00C8`), `TE_SET_INK`
+(`0x00CB`), `TE_SET_BORDER` (`0x00CE`), `TE_SET_SPEED` (`0x00D1`) and
+`SCR_RUN_ROUTINE` (`0x00E9`).  See
+[XBIOS/TE Interface](cpm-plus-xbios.md) for the register contracts,
+colour encoding and the `SCR_RUN_ROUTINE` common-memory limitation.
 
 ---
 

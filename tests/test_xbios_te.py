@@ -145,6 +145,46 @@ class TeSetSpeed(unittest.TestCase):
         self.assertIn("5b.SPEED", text)
 
 
+class ScrRunRoutine(unittest.TestCase):
+    def test_dispatch_uses_jumpblock_entry(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xE9", dispatch)
+        self.assertIn("jp z, .scr_run_routine", dispatch)
+
+    def test_handler_pages_screen_and_restores(self):
+        body = handler_body(".scr_run_routine:", ".dd_drive_status:")
+        self.assertIn("or PAGING_SCREEN", body)
+        self.assertIn("call write_1ffd", body)
+        self.assertIn("or BANK1_1FFD", body)
+        self.assertIn("ld (xbios_ret_ix), ix", body)
+        self.assertIn("ld (xbios_ret_iy), iy", body)
+        self.assertIn("call 0", body)          # patched call target
+        self.assertIn("ld (.srr_call + 1), bc", body)
+
+    def test_only_common_memory_routines(self):
+        body = handler_body(".scr_run_routine:", ".dd_drive_status:")
+        self.assertIn("cp 0xC0", body)
+        self.assertIn("ret c", body)
+        self.assertIn("cp 0xF6", body)
+        self.assertIn("ret nc", body)
+
+    def test_userf_round_trips_ix_iy(self):
+        text = source("src/bios/common.zpa")
+        body = text[text.index("userf_stub:"):text.index("write_1ffd:")]
+        self.assertIn("ld (xbios_ret_ix), ix", body)
+        self.assertIn("ld (xbios_ret_iy), iy", body)
+        self.assertIn("ld ix, (xbios_ret_ix)", body)
+        self.assertIn("ld iy, (xbios_ret_iy)", body)
+
+    def test_tester_stages_routine_in_common(self):
+        text = source("src/test/xtetest.asm")
+        self.assertIn("7.RUN", text)
+        self.assertIn("ld de, 0xD000", text)
+        self.assertIn("ld (0x5AFF), a", text)
+        self.assertIn("ld (0xD100), a", text)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

@@ -12,6 +12,10 @@ for this project.
 - **Terminal**: VT52/ADM-3A cursor and erase sequences, colour and BRIGHT via
   `ESC b`/`ESC c`, wrap control (`ESC v`/`ESC w`), and the `ESC 3`/`ESC 4`
   screen-size and page-mode controls from the +3 CP/M manual.
+- **XBIOS/TE**: the +3 extended BIOS terminal calls `TE_ASK`, `TE_RESET`,
+  `TE_SET_INK`, `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`
+  through BIOS function 30 (`USERF`); see
+  [XBIOS/TE Interface](docs/cpm-plus-xbios.md).
 - **Keyboard**: the +3 CP/M matrix — BREAK (`Caps Shift`+`Space`) sends ESC,
   `Caps Shift`+`Symbol` sends control codes, plus the function-key mappings.
 - **BDOS**: console and file I/O plus the CP/M 3 extensions real software
@@ -117,7 +121,8 @@ Also supported:
 - `REGTEST` — BDOS register preservation (BC/DE/IX/IY across calls).
 - `SYSTEST` — stack/MOVE/clock, page-zero, TAB and delimiter checks.
 - `TERMTEST` — terminal escape-sequence walkthrough.
-- `XTETEST` — XBIOS/TE probe.
+- `XTETEST` — XBIOS/TE self-test (`TE_ASK`, `TE_RESET`, ink, border, speed,
+  `SCR_RUN_ROUTINE`).
 - `B16TEST` — 16-bit block-number file I/O on B: (720K PCW image).
 
 ## Wishlist / TODO

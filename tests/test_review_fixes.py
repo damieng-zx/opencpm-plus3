@@ -264,14 +264,14 @@ class Issue14ComFcb(unittest.TestCase):
 
     def test_ccp_uses_common_fcb(self):
         text = source("src/ccp/miniccp.zpa")
-        self.assertIn("CCP_FCB_ADDR equ 0xFB6E", text)
+        self.assertIn("CCP_FCB_ADDR equ 0xFB7F", text)
         self.assertIn("ld hl, CCP_FCB_ADDR", text)
         self.assertNotIn("0xF600 - 36", text)
 
     def test_common_reserves_fcb(self):
         text = source("src/bios/common.zpa")
         self.assertIn("ccp_fcb: ds 36", text)
-        self.assertIn("ccp_fcb == 0xFB6E", text)
+        self.assertIn("ccp_fcb == 0xFB7F", text)
 
 
 class Issue15FdcTimeouts(unittest.TestCase):

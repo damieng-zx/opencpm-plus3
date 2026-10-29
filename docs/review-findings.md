@@ -203,8 +203,9 @@ set.
   failure; recursive ZPA discovery; `BUILD_NUM` in `build/buildnum`
   passed as `-DBUILD_NUM`; patchsum error check; obsolete
   `check_clobber.py`/`zpa_compare.py` removed; lint covers boot/FID/tools.
-- [x] **XBIOS/TE docs.** `docs/cpm-plus-xbios.md` documents the inline-ID
-  convention, supported IDs and the unimplemented TE calls.
+- [x] **XBIOS/TE docs.** `docs/cpm-plus-xbios.md` documents the extended
+  jumpblock convention, supported IDs, TE behaviour and the
+  `SCR_RUN_ROUTINE` memory limitation.
 - [x] **Stale README/comments.** README refreshed (61K/F600 map,
   built-ins, test suites, wishlist).
 - [x] **F46 free-space accounting.** `bf_f46` scans the selected drive's
@@ -242,7 +243,23 @@ set.
   B:, where the free-space deltas only add up with 16-bit blocks.
   Files: `src/bdos/bdos.zpa`, `tools/mkdsk.py`, `src/tools/b16test.asm`,
   `tools/zx84_smoke.py`.
+- [x] **XBIOS TE functions.** `TE_ASK` returns the full-screen viewport and
+  cursor position; `TE_RESET` restores the default palette, wrapping and
+  page state and clears the screen; `TE_SET_INK` decodes the +3
+  two-bits-per-gun palette (bright only when both inks are high, FLASH only
+  when both inks flash, border follows ink 0); `TE_SET_BORDER` sets the
+  border; `TE_SET_SPEED` is accepted and ignored; and `SCR_RUN_ROUTINE`
+  pages bank 5 in and runs a common-memory routine with IX/IY pass-through.
+  `userf_stub` now saves caller A for `TE_SET_INK` and round-trips IX/IY.
+  `XTETEST.COM` covers all six calls (including a `D000h` staged routine
+  that writes the bottom-right attribute) and `tests/test_xbios_te.py`
+  pins the dispatch IDs and contracts.
+  Files: `src/bios/bios.zpa`, `src/bios/screen.zpa`, `src/bios/common.zpa`,
+  `src/test/xtetest.asm`, `tests/test_xbios_te.py`.
 
 ## P3 — Remaining follow-ups
 
-- Full `TE_*` / `SCR_RUN_ROUTINE` XBIOS functions.
+- `SCR_RUN_ROUTINE` can only run routines in common memory (`C000-F5FF`);
+  screen mode pages the rest of the TPA out.
+- The non-TE extended BIOS entries (`DD_*`, `CD_SA_*`, `KM_*`, `FIND_FID`)
+  remain unimplemented.

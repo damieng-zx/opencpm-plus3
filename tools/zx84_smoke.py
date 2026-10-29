@@ -408,6 +408,31 @@ class Smoke:
                 "DELIM BAD" in screen:
             raise SmokeError("SYSTEST reported a failure:\n" + screen)
 
+    def run_xtetest(self) -> None:
+        """Exercise the XBIOS TE calls and their register contracts."""
+        self.log("XTETEST")
+        self.mcp.call("type", {"text": "XTETEST"})
+        self.mcp.call("key", {"name": "enter"})
+        self.wait_for(["DONE"], frames=500, attempts=8)
+        screen = self.text()
+        if "FAIL" in screen:
+            raise SmokeError("XTETEST reported a failure:\n" + screen)
+        for needle in ("7.RUN..OK", "DONE"):
+            if needle not in screen:
+                raise SmokeError(
+                    f"XTETEST missing {needle!r}:\n" + screen)
+        # SCR_RUN_ROUTINE stages its routine at D000h, writes 5Ah to the
+        # bottom-right attribute in bank 5 and 1 to the D100h flag.
+        marker = self.memory(5, 0x5AFF, 1)[0]
+        if marker != 0x5A:
+            raise SmokeError(
+                f"SCR_RUN_ROUTINE screen marker {marker:02X}, expected 5A")
+        flag = self.memory(3, 0xD100, 1)[0]
+        if flag != 1:
+            raise SmokeError(
+                f"SCR_RUN_ROUTINE input flag {flag:02X}, expected 01")
+        self.expect("XTETEST prompt", "A>")
+
     def run_disktest(self) -> None:
         self.log("DISKTEST")
         self.mcp.call("type", {"text": "DISKTEST"})
@@ -821,6 +846,7 @@ class Smoke:
     def run(self) -> None:
         self.boot()
         self.run_systest()
+        self.run_xtetest()
         # SYSTEST deliberately changes and restores the delimiter; DIR must
         # still be clean afterwards.
         self.command("DIR", 500)
