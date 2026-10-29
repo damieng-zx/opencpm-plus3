@@ -297,13 +297,19 @@ set.
   `XTETEST` test 12 checks the standard +3 DPB values.
   Files: `src/bios/bios.zpa`, `src/test/xtetest.asm`,
   `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
+- [x] **XBIOS DD_L_XDPB.** Uses the shared spec builder to produce the
+  full 27-byte XDPB: the standard DPB plus sidedness, tracks, physical
+  sectors, first sector ID (type-dependent), sector size, gap lengths,
+  MFM flag and the fixed/detected marker.  `XTETEST` test 13 checks the
+  standard +3 extension.
+  Files: `src/bios/bios.zpa`, `src/test/xtetest.asm`,
+  `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
 
 ## P3 — Remaining follow-ups
 
 - `SCR_RUN_ROUTINE` can only run routines in common memory (`C000-F5FF`);
   screen mode pages the rest of the TPA out.
-- The low-level disc calls are still stubs: `DD_L_XDPB`, `DD_L_READ` and
-  `DD_L_WRITE`.
+- The low-level disc calls are still stubs: `DD_L_READ` and `DD_L_WRITE`.
 - `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` only
   accept CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
 - `DD_LOGIN` falls back to the type-0 template if the probe fails; it does

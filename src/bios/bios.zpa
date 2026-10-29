@@ -675,6 +675,8 @@ xbios_handler:
     jp z, .dd_read_id
     cp 0x9E
     jp z, .dd_l_dpb
+    cp 0xA1
+    jp z, .dd_l_xdpb
     cp 0xA4
     jp z, .dd_l_on_motor
     cp 0xA7
@@ -1029,6 +1031,11 @@ xbios_handler:
     ld a, 17
     jr .dd_l_build
 
+.dd_l_xdpb:
+    ; DD_L_XDPB (0x00A1): build a 27-byte XDPB from a disc spec.
+    ;   In: HL = 10-byte spec in common memory, IX = destination XDPB
+    ;   Out: carry set + A = disc type, or carry clear + A = 6
+    ld a, 27
 .dd_l_build:
     ld (dd_copy_len), a
     call .dd_build_xdpb

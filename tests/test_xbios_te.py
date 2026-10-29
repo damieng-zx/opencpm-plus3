@@ -439,6 +439,22 @@ class DdLDpb(unittest.TestCase):
         self.assertIn("dd_xdpb_buf + 23", body)   # gap 1
         self.assertIn("dd_xdpb_buf + 24", body)   # gap 2
 
+    def test_xdpb_dispatch_and_length(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xA1", dispatch)
+        self.assertIn("jp z, .dd_l_xdpb", dispatch)
+        body = handler_body(".dd_l_xdpb:", ".dd_l_build:")
+        self.assertIn("ld a, 27", body)
+        self.assertIn("DD_L_XDPB", body)
+
+    def test_tester_covers_xdpb(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("DD_L_XDPB", tester)
+        self.assertIn("13.XDPB", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("13.XDPB..OK", smoke)
+
     def test_tester_covers_dpb(self):
         tester = source("src/test/xtetest.asm")
         self.assertIn("DD_L_DPB", tester)

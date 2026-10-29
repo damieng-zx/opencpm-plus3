@@ -418,7 +418,7 @@ class Smoke:
         if "FAIL" in screen:
             raise SmokeError("XTETEST reported a failure:\n" + screen)
         for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK",
-                       "11.SETUP..OK", "12.DPB..OK", "DONE"):
+                       "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK", "DONE"):
             if needle not in screen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + screen)

@@ -733,6 +733,74 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 13: DD_L_XDPB ===
+    ld de, msg_t13
+    ld c, 9
+    call BDOS
+
+    ld hl, DD_L_XDPB
+    ld (userf_dw), hl
+    ld hl, 0xD700
+    ld ix, 0xD820
+    call userf_trampoline
+    jp nc, .t13_fail
+    cp 0
+    jp nz, .t13_fail
+
+    ; DPB prefix
+    ld a, (0xD820)
+    cp 36
+    jp nz, .t13_fail
+    ld a, (0xD822)
+    cp 3
+    jp nz, .t13_fail
+    ld a, (0xD825)
+    cp 174
+    jp nz, .t13_fail
+    ld a, (0xD827)
+    cp 63
+    jp nz, .t13_fail
+
+    ; Extension: sides, tracks, sectors, first, size, gap1, gap2,
+    ; flags, freeze
+    ld a, (0xD831)
+    or a
+    jp nz, .t13_fail
+    ld a, (0xD832)
+    cp 40
+    jp nz, .t13_fail
+    ld a, (0xD833)
+    cp 9
+    jp nz, .t13_fail
+    ld a, (0xD834)
+    cp 1
+    jp nz, .t13_fail
+    ld a, (0xD835)
+    or a
+    jp nz, .t13_fail
+    ld a, (0xD836)
+    cp 2
+    jp nz, .t13_fail
+    ld a, (0xD837)
+    cp 0x2A
+    jp nz, .t13_fail
+    ld a, (0xD838)
+    cp 0x52
+    jp nz, .t13_fail
+    ld a, (0xD839)
+    cp 0x40
+    jp nz, .t13_fail
+    ld a, (0xD83A)
+    cp 0xFF
+    jp nz, .t13_fail
+    ld de, msg_ok
+    jr .t13_print
+.t13_fail:
+    ld de, msg_fail
+.t13_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -887,6 +955,7 @@ msg_t9:     db 0x0D, 0x0A, "9.RW..", '$'
 msg_t10:    db 0x0D, 0x0A, "10.FMT..", '$'
 msg_t11:    db 0x0D, 0x0A, "11.SETUP..", '$'
 msg_t12:    db 0x0D, 0x0A, "12.DPB..", '$'
+msg_t13:    db 0x0D, 0x0A, "13.XDPB..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'
