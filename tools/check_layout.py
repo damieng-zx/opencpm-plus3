@@ -108,8 +108,7 @@ def check(sections: list[Section]) -> list[str]:
     # --- Buffer sizes (expected fixed layout) --------------------------------
     expected_sizes = [
         # (start_label, end_label, expected_bytes, description)
-        ("dirbuf",         "fcb_buf",          128, "directory buffer"),
-        ("fcb_buf",        "fcb_user_addr",     36, "FCB shadow buffer"),
+        ("dirbuf",         "fcb_user_addr",    128, "directory buffer"),
         ("xfer_staging",   "ccp_fcb",           32, "inter-bank transfer staging"),
         ("ccp_fcb",        "start_tpa",         36, "CCP COM-loader FCB"),
         ("xdpb_a",         "xdpb_b",            27, "xdpb_a"),
@@ -131,7 +130,7 @@ def check(sections: list[Section]) -> list[str]:
             errors.append(f"xdpb_c..dirbuf = {got} bytes, expected 28 (27 + motor_running)")
 
     # --- Buffers must sit inside common memory range -------------------------
-    for name in ("dirbuf", "fcb_buf", "xfer_staging", "ccp_fcb",
+    for name in ("dirbuf", "xfer_staging", "ccp_fcb",
                  "bdos_stack_base",
                  "xdpb_a", "xdpb_b", "xdpb_c",
                  "xdph_a", "xdph_b", "xdph_c"):

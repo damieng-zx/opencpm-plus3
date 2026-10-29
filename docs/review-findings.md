@@ -354,6 +354,21 @@ set.
   Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
   `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`;
   bank-6 map in `docs/boot.md` and `AGENTS.md`.
+- [x] **Move scratch state out of the image.** Keyboard state/token/inject
+  buffers (`A63F-A6B4`), XBIOS disc scratch (`A600-A63E`, `A82D-A83C`),
+  screen cursor/ESC scratch (`A730-A739`), BDOS scratch (`A6B5-A6FB`) and
+  `fcb_buf` (`AD80-ADA3`) now live in bank 6, which is mapped in both
+  system and screen modes.  `kbd_init` seeds the repeat timings and
+  `cold_boot` seeds the BDOS values that must not be stale
+  (`ms_active`, `f40_zfill`, `last_dir_sec/drv`, `cached_drive`).
+  `ccp_fcb` moved to `FB66h`; `miniccp.zpa`, the layout checker, the smoke
+  runner and `docs/boot.md` were updated.  Net: **282 bytes** freed
+  (`CPM3.SYS` 16,299 → 16,017), headroom 85 → 367 bytes.
+  Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
+  `src/bios/screen.zpa`, `src/bios/common.zpa`, `src/bdos/bdos.zpa`,
+  `src/ccp/miniccp.zpa`, `tools/check_layout.py`, `tools/zx84_smoke.py`,
+  `tests/test_xbios_te.py`, `tests/test_review_fixes.py`,
+  `docs/boot.md`, `AGENTS.md`.
 
 ## P3 - Remaining follow-ups
 

@@ -39,6 +39,15 @@ def label_address(name: str) -> int:
     if not listing.exists():
         raise SmokeError("build/bios.lst is missing; run build.cmd first")
     lines = listing.read_text(encoding="utf-8", errors="replace").splitlines()
+    # An equate definition wins over the address the assembler happened to
+    # be at: `foo: equ 0xA649` is listed with the current PC in the address
+    # column, which is not the value of foo.
+    for line in lines:
+        m = re.match(
+            rf"^\s*\d+\+*\s+[0-9A-F]{{4}}\s+[^;]*\b{re.escape(name)}\s*:\s*equ\s+0x([0-9A-Fa-f]+)",
+            line, re.I)
+        if m:
+            return int(m.group(1), 16)
     # Prefer an exact-case label definition.  The equate pass below is
     # case-insensitive (so callers can ask for an `equ` constant), and
     # without this pass `scr_attr` would match `SCR_ATTR equ 0x5800`
@@ -281,7 +290,7 @@ class Smoke:
                 self.memory(4, self.scr_wrap, 1)[0],
                 self.memory(4, self.scr_attr, 1)[0],
                 int.from_bytes(self.memory(4, self.con_mode, 2), "little"),
-                self.memory(4, self.esc_state, 1)[0],
+                self.memory(6, self.esc_state, 1)[0],
             ))
 
     def finish_prompt(self, frames: int = 900) -> None:
@@ -330,8 +339,8 @@ class Smoke:
         self.esc("H")
         self.mcp.call("type", {"text": "X" * 40})
         self.mcp.call("run", {"frames": 1200})
-        row = self.memory(4, self.cursor_row, 1)[0]
-        col = self.memory(4, self.cursor_col, 1)[0]
+        row = self.memory(6, self.cursor_row, 1)[0]
+        col = self.memory(6, self.cursor_col, 1)[0]
         if (row, col) != (0, 31):
             raise SmokeError(f"ESC w: cursor {row}/{col}, expected 0/31")
         self.finish_prompt()
@@ -342,7 +351,7 @@ class Smoke:
         self.esc("H")
         self.mcp.call("type", {"text": "X" * 40})
         self.mcp.call("run", {"frames": 1200})
-        if self.memory(4, self.cursor_row, 1)[0] == 0:
+        if self.memory(6, self.cursor_row, 1)[0] == 0:
             raise SmokeError("ESC v: a 40-character line did not wrap")
         self.finish_prompt()
 
@@ -450,20 +459,21 @@ class Smoke:
             if value != expected:
                 raise SmokeError(
                     f"DD_SETUP {name} {value:02X}, expected {expected:02X}")
+        # Keyboard state lives in bank 6 (A63F+).
         for name, expected in (("kbd_repeat_delay", 10),
                                ("kbd_repeat_rate", 5)):
-            value = self.memory(4, label_address(name), 1)[0]
+            value = self.memory(6, label_address(name), 1)[0]
             if value != expected:
                 raise SmokeError(
                     f"KM_SET_SPEED {name} {value}, expected {expected}")
-        tokens = self.memory(4, label_address("kbd_token_buf"), 4)
+        tokens = self.memory(6, label_address("kbd_token_buf"), 4)
         if tokens != bytes((0x08, 0x2B, 0x00, 0x1F)):
             raise SmokeError(
                 f"KM_KT_PUT tokens {tokens!r}, expected [08, 2B, 00, 1F]")
-        count = self.memory(4, label_address("kbd_token_count"), 1)[0]
+        count = self.memory(6, label_address("kbd_token_count"), 1)[0]
         if count != 0:
             raise SmokeError(f"KM_KT_GET token count {count}, expected 0")
-        head = self.memory(4, label_address("kbd_token_head"), 1)[0]
+        head = self.memory(6, label_address("kbd_token_head"), 1)[0]
         if head != 2:
             raise SmokeError(f"KM_KT_GET head {head}, expected 2")
         # Test 19 restored the built-in translation for Z after checking it.

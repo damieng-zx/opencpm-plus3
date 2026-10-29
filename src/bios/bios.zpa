@@ -177,32 +177,39 @@ disk_track:   dw 0                 ; Current track
 disk_sector:  dw 0                 ; Current sector
 disk_dma:     dw 0                 ; Current DMA address
 
+; Scratch that is only touched from system mode lives in bank 6, outside
+; the image.  Bank 6 is mapped at 8000h-BFFFh in both system (4,7,6,3) and
+; screen (4,5,6,3) modes, so the access cost is the same as bank 4.  The
+; A600-A6FF window is free after the 64-column character buffer, and
+; A82D-A8FF after the per-drive CSV/ALV vectors.
+;
 ; XBIOS DD_READ_SECTOR / WRITE / CHECK / FORMAT scratch
-dd_bank:      db 0                 ; CP/M bank of the caller's buffer
-dd_unit:      db 0
-dd_track:     db 0                 ; logical track
-dd_sector:    db 0                 ; logical sector
-dd_user_ptr:  dw 0                 ; caller's buffer
-dd_phys_sec:  db 0                 ; mapped physical sector ID
-dd_cylinder:  db 0                 ; mapped physical cylinder
-dd_filler:    db 0                 ; DD_FORMAT filler byte
-dd_format_sc: db 0                 ; DD_FORMAT sectors per track
+dd_bank:      equ 0xA82D          ; CP/M bank of the caller's buffer
+dd_unit:      equ 0xA82E
+dd_track:     equ 0xA82F          ; logical track
+dd_sector:    equ 0xA830          ; logical sector
+dd_user_ptr:  equ 0xA831          ; caller's buffer
+dd_phys_sec:  equ 0xA833          ; mapped physical sector ID
+dd_cylinder:  equ 0xA834          ; mapped physical cylinder
+dd_filler:    equ 0xA835          ; DD_FORMAT filler byte
+dd_format_sc: equ 0xA836          ; DD_FORMAT sectors per track
 
 ; DD_L_DPB / DD_L_XDPB spec -> XDPB builder
-dd_spec:      ds 10                ; copied disc specification
-dd_xdpb_buf:  ds 27                ; built XDPB/DPB image
-dd_copy_len:  db 0                 ; 17 = DPB, 27 = XDPB
-dd_type:      db 0
-dd_psh:       db 0
-dd_bsh:       db 0
+dd_spec:      equ 0xA600          ; 10-byte copied disc specification
+dd_xdpb_buf:  equ 0xA60A          ; 27-byte built XDPB/DPB image
+dd_copy_len:  equ 0xA839          ; 17 = DPB, 27 = XDPB
+dd_type:      equ 0xA83A
+dd_psh:       equ 0xA83B
+dd_bsh:       equ 0xA83C
 
 ; DD_L_READ / DD_L_WRITE parameter-block state
-dd_param_ptr: dw 0
-dd_cmd_ptr:   dw 0
-dd_cmd_left:  db 0
-dd_xfer_ptr:  dw 0
-dd_xfer_left: dw 0
-dd_res_idx:   db 0
+dd_param_ptr: equ 0xA625
+dd_cmd_ptr:   equ 0xA627
+dd_cmd_left:  equ 0xA629
+dd_xfer_ptr:  equ 0xA62A
+dd_xfer_left: equ 0xA62C
+dd_res_idx:   equ 0xA62E
+_ccp_al:      equ 0xA62F          ; 16-byte CCP.COM allocation map
 
 
 ; ==========================================================================
@@ -214,6 +221,16 @@ dd_res_idx:   db 0
 cold_boot:
     di
     ld sp, bdos_stack              ; Use common-memory stack
+
+    ; BDOS scratch state lives in bank 6; seed the values that must not be
+    ; stale on the first call.
+    xor a
+    ld (ms_active), a
+    ld (f40_zfill), a
+    ld a, 0xFF
+    ld (last_dir_sec), a
+    ld (last_dir_drv), a
+    ld (cached_drive), a
 
     ; Initialize drivers
     call scr_init                  ; Screen: clear, set attributes
@@ -2534,7 +2551,6 @@ _font32_blk1: db 0
 _font64_blk0: db 0                  ; first block number of FONT64.BIN
 _font64_blk1: db 0
 _fid_block:   db 0                  ; first block number of RAMDISK.FID (0 = absent)
-_ccp_al:      ds 16                 ; CCP.COM allocation map (0 = end of file)
 _ccp_len:     dw 0                  ; bytes staged at CCP_STAGE (0 = missing)
 _lf_abs_phys: dw 0                  ; scratch: current absolute physical sector
 _lf_sec_id:   db 0                  ; scratch: sector ID saved across fdc_seek

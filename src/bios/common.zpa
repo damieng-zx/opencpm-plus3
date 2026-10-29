@@ -22,6 +22,12 @@
 ; @clobbers af,bc,de,hl
 ; @end
 
+; FCB shadow buffer — file functions copy the user's FCB here before
+; processing and copy it back on return.  It lives in bank 6 (AD80h),
+; outside the image: the BDOS only touches it in system mode, where bank 6
+; is mapped at 8000h-BFFFh.  See the buffer map at the end of this file.
+fcb_buf:        equ 0xAD80
+
 ; ==========================================================================
 ; System Control Block (100 bytes at common_base + 0x00)
 ; ==========================================================================
@@ -1036,10 +1042,7 @@ motor_running: db 0
 dirbuf:     ds 128
     assert $ - dirbuf == 128, "dirbuf must be exactly 128 bytes (fdc_read writes one full deblocked record)"
 
-; FCB shadow buffer — file functions copy the user's FCB here before
-; processing, then copy it back on return. Avoids per-access bank switching.
-fcb_buf:        ds 36
-    assert $ - fcb_buf == 36, "fcb_buf must be exactly 36 bytes (CP/M FCB format)"
+; fcb_buf is defined near the top of this file; it lives in bank 6.
 fcb_user_addr:  dw 0               ; TPA address of the user's FCB
 
 ; Inter-bank transfer staging buffer (32 bytes).
@@ -1052,7 +1055,7 @@ xfer_staging: ds 32
 ; so a large program cannot overwrite it while the stub is still reading.
 ccp_fcb: ds 36
     assert $ - ccp_fcb == 36, "ccp_fcb must be exactly 36 bytes (CP/M FCB format)"
-    assert ccp_fcb == 0xFB8A, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+    assert ccp_fcb == 0xFB66, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
 
 
 ; BDOS stack (grows downward from bdos_stack label)

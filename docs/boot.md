@@ -169,8 +169,8 @@ and trampolines. `scb_tpa` is patched to `TPA_TOP` too.
 | `0000-3FFF` | Bank 4. BIOS jump table at 0000, then state, drivers, font/CCP/FID loaders, BDOS. Asserted ≤ 16K (`system_end <= 0x4000`). |
 | `0038`      | ISR vector — JP isr_handler (in common memory).           |
 | `4000-7FFF` | Bank 7. C: RAM disk (16K) when RAMDISK.FID is loaded.     |
-| `8000-BFFF` | Bank 6. FONT51 at `8000`, FONT32 at `8800`, RAMDISK.FID at `9000` if loaded, FONT64 at `9400`, FDC deblock buffer at `9C00`, `DD_CHECK_SECTOR` compare buffer at `9E00`; text/scroll buffers at `A000-A8FF`; `KM_SET_KEY` translation table at
-`A900-A99F`, `KM_SET_EXPAND` slots at `A9A0-AD7F`; staged `CCP.COM` at
+| `8000-BFFF` | Bank 6. FONT51 at `8000`, FONT32 at `8800`, RAMDISK.FID at `9000` if loaded, FONT64 at `9400`, FDC deblock buffer at `9C00`, `DD_CHECK_SECTOR` compare buffer at `9E00`; text/scroll buffers at `A000-A5FF`; BIOS/BDOS scratch at `A600-A6FF` and `A82D-A83C`; screen cursor/ESC scratch at `A730-A739`; row table at `A700`, CSV/ALV at `A740-A82C`; `KM_SET_KEY` translation table at
+`A900-A99F`, `KM_SET_EXPAND` slots at `A9A0-AD7F`, FCB shadow at `AD80-ADA3`; staged `CCP.COM` at
 `B000-BFFF`. |
 | `F600-FFFF` | Common stub (bank 3). Same content as in mode 0 — that's the point. |
 
@@ -224,8 +224,7 @@ F664  ───────────────────┘
       XDPH prefixes + xdph_a, xdph_b, xdph_c
       xdpb_a, xdpb_b, xdpb_c (27 bytes each)
       dirbuf       (128 B)   FDC deblock destination, BDOS dir buffer
-      fcb_buf      ( 36 B)   FCB shadow
-      fcb_user_addr (2 B)
+      fcb_user_addr (2 B)    (fcb_buf itself is in bank 6 at AD80h)
       xfer_staging ( 32 B)   bank-switching staging buffer
       ccp_fcb      ( 36 B)   CCP COM-loader FCB (pinned in miniccp.zpa)
       bdos_stack_base
@@ -243,7 +242,7 @@ FFFF  ────────────────────  hard limit (
 |----------|-------------------------------|------------------------------------------------------------------|
 | `0xF9BF` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa.              |
 | `0xF9C5` | `copy_record_from_tpa`        | Same - assert at common.zpa.                                 |
-| `0xFB8A` | `ccp_fcb`                     | miniccp.zpa `CCP_FCB_ADDR`; assert at common.zpa.            |
+| `0xFB66` | `ccp_fcb`                     | miniccp.zpa `CCP_FCB_ADDR`; assert at common.zpa.            |
 | `bdos_vector` (F600) | itself            | Page zero 0005h/0006h target; (0006h) is the TPA memory ceiling. |
 | SCB offsets `0x05, 0x1A, 0x3A, 0x3C, 0x3E, 0x44, 0x58-0x5C, 0x62` | DRI documented | Programs index off scb_base.    |
 

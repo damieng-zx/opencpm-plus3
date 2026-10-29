@@ -50,18 +50,21 @@ REPEAT_RATE   equ 3
 
 
 ; --- Variables ---
-kbd_last_raw:   db 0xFF        ; Last raw key (0-39), 0xFF = none
-kbd_rep_count:  dw 0           ; 16-bit repeat countdown
-kbd_key_ready:  db 0           ; 1 = key in buffer
-kbd_key_buf:    db 0           ; Buffered ASCII code
-kbd_mods:       db 0           ; Saved modifier state for repeat
-kbd_settle:     db 0           ; Debounce: 1 = waiting for settle scan
-kbd_last_tick:  dw 0           ; isr_tick value at last real scan
-kbd_tick_changed: db 0         ; 1 = this scan is on a new ISR tick
+; All keyboard state lives in bank 6 (A63F-A6B4), outside the image.  It is
+; only touched from system mode, where bank 6 is mapped at 8000h-BFFFh, so
+; the access cost matches bank 4.  kbd_init establishes every initial value.
+kbd_last_raw:   equ 0xA63F     ; Last raw key (0-39), 0xFF = none
+kbd_rep_count:  equ 0xA640     ; 16-bit repeat countdown
+kbd_key_ready:  equ 0xA642     ; 1 = key in buffer
+kbd_key_buf:    equ 0xA643     ; Buffered ASCII code
+kbd_mods:       equ 0xA644     ; Saved modifier state for repeat
+kbd_settle:     equ 0xA645     ; Debounce: 1 = waiting for settle scan
+kbd_last_tick:  equ 0xA646     ; isr_tick value at last real scan
+kbd_tick_changed: equ 0xA648   ; 1 = this scan is on a new ISR tick
 
 ; KM_SET_SPEED values (scans at 50Hz; 0 means 256)
-kbd_repeat_delay: dw REPEAT_DELAY
-kbd_repeat_rate:  dw REPEAT_RATE
+kbd_repeat_delay: equ 0xA649
+kbd_repeat_rate:  equ 0xA64B
 
 ; KM_SET_KEY translation table (bank 6): 40 keys x 4 shift states
 ; (normal, CAPS, SYMB, EXTEND).  In bank 6 so it costs no image space;
@@ -74,22 +77,22 @@ KMTAB_SIZE  equ 160
 KMEXP       equ 0xA9A0
 KMEXP_SLOT  equ 32
 KMEXP_MAX   equ 31
-km_speed_h: db 0
-km_speed_l: db 0
+km_speed_h: equ 0xA64D
+km_speed_l: equ 0xA64E
 
 ; KM_KT_PUT / KM_KT_GET token queue (16 entries of shift, key)
-kbd_token_buf:   ds 32
-kbd_token_head:  db 0
-kbd_token_tail:  db 0
-kbd_token_count: db 0
-kbd_lock_state:  db 0           ; lock bits last reported by KM_KT_GET
+kbd_token_buf:   equ 0xA64F   ; 32 bytes
+kbd_token_head:  equ 0xA66F
+kbd_token_tail:  equ 0xA670
+kbd_token_count: equ 0xA671
+kbd_lock_state:  equ 0xA672   ; lock bits last reported by KM_KT_GET
 
 ; Inject buffer — write text here, set kbd_inject_len, reset kbd_inject_rd.
 ; kbd_getchar drains this before polling the real keyboard.
-; Layout: buf[64], len, rd (consecutive so emutil can write in one call).
-kbd_inject_buf: ds 64          ; Up to 64 ASCII bytes to inject
-kbd_inject_len: db 0           ; Bytes remaining in buffer
-kbd_inject_rd:  db 0           ; Read offset into buf (0-63)
+; Layout: buf[64], len, rd (consecutive so a tool can write in one call).
+kbd_inject_buf: equ 0xA673   ; 64 ASCII bytes to inject
+kbd_inject_len: equ 0xA6B3   ; Bytes remaining in buffer
+kbd_inject_rd:  equ 0xA6B4   ; Read offset into buf (0-63)
 
 
 ; ==========================================================================
@@ -127,6 +130,11 @@ kbd_init:
     ld a, b
     or c
     jr nz, .kbd_init_tab
+    ; The repeat timings now live in bank 6, so seed their defaults here.
+    ld hl, REPEAT_DELAY
+    ld (kbd_repeat_delay), hl
+    ld hl, REPEAT_RATE
+    ld (kbd_repeat_rate), hl
     ld hl, (kbd_repeat_delay)
     ld (kbd_rep_count), hl
     ret

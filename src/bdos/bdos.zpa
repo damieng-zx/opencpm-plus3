@@ -70,7 +70,11 @@
 ; BDOS stack and saved_sp are in common memory (common.asm).
 ; The common stub switches to bdos_stack before calling bdos_entry.
 
-rdbuf_ptr:  dw 0               ; Buffer pointer for F10
+; Scratch state that is set before use lives in bank 6 (A6B5-A6FB), outside
+; the image.  BDOS always runs in system mode, where bank 6 is mapped at
+; 8000h-BFFFh.  The initial values that matter (last_dir_*, cached_drive,
+; f40_zfill) are set by cold_boot.
+rdbuf_ptr:  equ 0xA6B5         ; Buffer pointer for F10
 
 ; --- BDOS state ---
 bdos_dma:   dw 0x0080          ; Current DMA address (default 0080h)
@@ -95,39 +99,39 @@ out_delim:  db '$'             ; F110: F9 output delimiter
 ; --- Multi-sector I/O (F44) state ---
 ; The record count itself lives in the SCB (scb_multi) so F49 sees it.
 ; These track a transfer in progress.
-ms_active:  db 0               ; 1 = inner record handlers return to caller
-ms_left:    db 0               ; records left to transfer
-ms_done:    db 0               ; records transferred so far
-ms_result:  db 0               ; non-zero result from the inner handler
-ms_fcb:     dw 0               ; user FCB pointer across iterations
+ms_active:  equ 0xA6B7         ; 1 = inner record handlers return to caller
+ms_left:    equ 0xA6B8         ; records left to transfer
+ms_done:    equ 0xA6B9         ; records transferred so far
+ms_result:  equ 0xA6BA         ; non-zero result from the inner handler
+ms_fcb:     equ 0xA6BB         ; user FCB pointer across iterations
 
 ; --- F46 free-space scratch ---
-f46_left:   dw 0               ; blocks still to scan
-f46_ptr:    dw 0               ; current ALV byte pointer
-f46_mask:   db 0               ; bit mask within the current byte
-f46_byte:   db 0               ; current ALV byte
+f46_left:   equ 0xA6BD         ; blocks still to scan
+f46_ptr:    equ 0xA6BF         ; current ALV byte pointer
+f46_mask:   equ 0xA6C1         ; bit mask within the current byte
+f46_byte:   equ 0xA6C2         ; current ALV byte
 
 ; --- F40 zero-fill scratch ---
-f40_zfill:  db 0               ; 1 = the next allocation must be zeroed
-f40_pending: db 0              ; request consumed by bf_f21_core
-f40_block:  dw 0               ; block being filled
-f40_left:   db 0               ; records still to write
-f40_rec:    dw 0               ; next absolute record in that block
+f40_zfill:  equ 0xA6C3         ; 1 = the next allocation must be zeroed
+f40_pending: equ 0xA6C4        ; request consumed by bf_f21_core
+f40_block:  equ 0xA6C5         ; block being filled
+f40_left:   equ 0xA6C7         ; records still to write
+f40_rec:    equ 0xA6C8         ; next absolute record in that block
 
 ; --- F59 / F111 scratch ---
-f59_fcb:    dw 0               ; FCB passed to F59
-f59_dest:   dw 0               ; load address from FCB+21h
-f59_dma:    dw 0               ; saved DMA address
-f111_addr:  dw 0               ; F111 text address
-f111_len:   dw 0               ; F111 text length
-f111_cb:    dw 0               ; F111 control block pointer
-f99_target: dw 0               ; F99 requested length in records
-f99_size:   dw 0               ; F99 current length in records
-f99_pos:    dw 0               ; F99 directory scan position
-f99_entry:  dw 0               ; F99 current directory entry
-f99_blocks: db 0               ; F99 first alloc slot to free
-f99_newrc:  db 0               ; F99 record count for the cut extent
-f99_found:  db 0               ; F99 saw at least one extent
+f59_fcb:    equ 0xA6CA         ; FCB passed to F59
+f59_dest:   equ 0xA6CC         ; load address from FCB+21h
+f59_dma:    equ 0xA6CE         ; saved DMA address
+f111_addr:  equ 0xA6D0         ; F111 text address
+f111_len:   equ 0xA6D2         ; F111 text length
+f111_cb:    equ 0xA6D4         ; F111 control block pointer
+f99_target: equ 0xA6D6         ; F99 requested length in records
+f99_size:   equ 0xA6D8         ; F99 current length in records
+f99_pos:    equ 0xA6DA         ; F99 directory scan position
+f99_entry:  equ 0xA6DC         ; F99 current directory entry
+f99_blocks: equ 0xA6DE         ; F99 first alloc slot to free
+f99_newrc:  equ 0xA6DF         ; F99 record count for the cut extent
+f99_found:  equ 0xA6E0         ; F99 saw at least one extent
 
 ; Private SETDEF state (F120..F123). Not in the SCB — only reachable via
 ; our own BDOS functions. Default: no search path (current drive only),
@@ -137,32 +141,32 @@ bdos_order:     db 0           ; 0=COM→SUB, 1=SUB→COM, 2=COM only, 3=SUB onl
 ; Date/time fields are in the SCB (common.asm): scb_date, scb_minute, scb_sec
 
 ; Directory search state
-search_pos: dw 0               ; Next directory entry to examine
-search_fcb: dw 0               ; FCB being searched for
-last_dir_sec: db 0xFF          ; Directory sector of last read_dir_entry (0xFF=invalid)
-last_dir_drv: db 0xFF          ; Drive of last read_dir_entry cache (0xFF=invalid)
+search_pos: equ 0xA6E1         ; Next directory entry to examine
+search_fcb: equ 0xA6E3         ; FCB being searched for
+last_dir_sec: equ 0xA6E5       ; Directory sector of last read_dir_entry (0xFF=invalid)
+last_dir_drv: equ 0xA6E6       ; Drive of last read_dir_entry cache (0xFF=invalid)
 
 ; Cached DPB values for current disk (avoid repeated pointer chasing)
-cached_spt: dw 0               ; Sectors per track
-cached_bsh: db 0               ; Block shift
-cached_blm: db 0               ; Block mask
-cached_dsm: dw 0               ; Max block number
-cached_drm: dw 0               ; Max directory entry
-cached_off: dw 0               ; Reserved track offset
-cached_dpb: dw 0               ; Pointer to DPB
-cached_alv: dw 0               ; Pointer to ALV
-cached_csv: dw 0               ; Pointer to CSV
-cached_drive: db 0xFF          ; Drive the cached_* above refer to (0xFF = none).
+cached_spt: equ 0xA6E7         ; Sectors per track
+cached_bsh: equ 0xA6E9         ; Block shift
+cached_blm: equ 0xA6EA         ; Block mask
+cached_dsm: equ 0xA6EB         ; Max block number
+cached_drm: equ 0xA6ED         ; Max directory entry
+cached_off: equ 0xA6EF         ; Reserved track offset
+cached_dpb: equ 0xA6F1         ; Pointer to DPB
+cached_alv: equ 0xA6F3         ; Pointer to ALV
+cached_csv: equ 0xA6F5         ; Pointer to CSV
+cached_drive: equ 0xA6F7       ; Drive the cached_* above refer to (0xFF = none).
                                ; select_drive short-circuits when called for the
                                ; same drive, avoiding a full directory scan per
                                ; F20/F21/F33/F40 record. F13 invalidates it.
-cached_blk16: db 0             ; 1 = DSM > 255: eight 16-bit block numbers per
+cached_blk16: equ 0xA6F8       ; 1 = DSM > 255: eight 16-bit block numbers per
                                ; extent, high byte first, instead of sixteen
                                ; 8-bit ones (CP/M 3 16-bit block format).
 
 ; Scratch for the allocation-map loops (build_alv, F19, F99).
-map_base:   dw 0               ; 32-byte FCB or directory entry being scanned
-map_idx:    db 0               ; current block slot
+map_base:   equ 0xA6F9         ; 32-byte FCB or directory entry being scanned
+map_idx:    equ 0xA6FB         ; current block slot
 
 
 ; ==========================================================================

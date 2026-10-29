@@ -62,19 +62,22 @@ BORDER_COL   equ 1             ; Blue
 ; Variables (in system bank — only accessed during BDOS/BIOS calls)
 ; ==========================================================================
 
-cursor_col: db 0               ; 0-50
-cursor_row: db 0               ; 0-23
-_rnd_row:   db 0               ; Row for current render (saved here
+; Cursor/render scratch lives in bank 6 (A730-A732), outside the image;
+; scr_init establishes the cursor values.
+cursor_col: equ 0xA730         ; 0-50
+cursor_row: equ 0xA731         ; 0-23
+_rnd_row:   equ 0xA732         ; Row for current render (saved here
                                ; because we run out of registers)
 
 ; --- Escape-sequence parser state ---
-esc_state:  db 0               ; Current parser state (ESC_*)
-esc_cmd:    db 0               ; Command byte for parameterised ESC
-esc_p1:     db 0               ; First param byte (e.g. Y row, X top)
-esc_p2:     db 0               ; Second param byte
-esc_p3:     db 0               ; Third param byte
-saved_row:  db 0               ; Saved cursor row  (ESC j / ESC k)
-saved_col:  db 0               ; Saved cursor col  (ESC j / ESC k)
+; Scratch only; lives in bank 6 (A730-A738) outside the image.
+esc_state:  equ 0xA733         ; Current parser state (ESC_*)
+esc_cmd:    equ 0xA734         ; Command byte for parameterised ESC
+esc_p1:     equ 0xA735         ; First param byte (e.g. Y row, X top)
+esc_p2:     equ 0xA736         ; Second param byte
+esc_p3:     equ 0xA737         ; Third param byte
+saved_row:  equ 0xA738         ; Saved cursor row  (ESC j / ESC k)
+saved_col:  equ 0xA739         ; Saved cursor col  (ESC j / ESC k)
 
 ; --- XBIOS colour state ---
 scr_ink:      db 7             ; Ink colour 0-7 (Spectrum GRB)

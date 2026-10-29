@@ -550,12 +550,15 @@ class KmSetSpeed(unittest.TestCase):
 
     def test_keyboard_uses_variables(self):
         text = source("src/bios/keyboard.zpa")
-        self.assertIn("kbd_repeat_delay: dw REPEAT_DELAY", text)
-        self.assertIn("kbd_repeat_rate:  dw REPEAT_RATE", text)
-        self.assertIn("ld hl, (kbd_repeat_delay)", text)
-        self.assertIn("ld hl, (kbd_repeat_rate)", text)
-        self.assertNotIn("ld hl, REPEAT_DELAY", text)
-        self.assertNotIn("ld hl, REPEAT_RATE", text)
+        # The timings live in bank 6 now; the defaults are seeded in kbd_init.
+        self.assertIn("kbd_repeat_delay: equ 0xA649", text)
+        self.assertIn("kbd_repeat_rate:  equ 0xA64B", text)
+        repeat = text[text.index(".same_repeat:"):text.index(".emit:")]
+        self.assertIn("ld hl, (kbd_repeat_rate)", repeat)
+        self.assertNotIn("ld hl, REPEAT_RATE", repeat)
+        init = text[text.index("kbd_init:"):text.index("kbd_status:")]
+        self.assertIn("ld hl, REPEAT_DELAY", init)
+        self.assertIn("ld hl, REPEAT_RATE", init)
 
     def test_tester_covers_speed(self):
         tester = source("src/test/xtetest.asm")
@@ -587,10 +590,10 @@ class KmKtPut(unittest.TestCase):
 
     def test_keyboard_defines_queue(self):
         text = source("src/bios/keyboard.zpa")
-        self.assertIn("kbd_token_buf:   ds 32", text)
-        self.assertIn("kbd_token_head:  db 0", text)
-        self.assertIn("kbd_token_tail:  db 0", text)
-        self.assertIn("kbd_token_count: db 0", text)
+        self.assertIn("kbd_token_buf:   equ 0xA64F", text)
+        self.assertIn("kbd_token_head:  equ 0xA66F", text)
+        self.assertIn("kbd_token_tail:  equ 0xA670", text)
+        self.assertIn("kbd_token_count: equ 0xA671", text)
         # kbd_init empties the queue.
         reset = text[text.index("kbd_init:"):text.index("kbd_status:")]
         self.assertIn("(kbd_token_count), a", reset)
@@ -716,6 +719,69 @@ class KmSetExpand(unittest.TestCase):
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("20.EXP..OK", smoke)
         self.assertIn("0xA9A0 + 5 * 32", smoke)
+
+
+class Bank6Scratch(unittest.TestCase):
+    def test_scratch_blocks_are_equates(self):
+        bios = source("src/bios/bios.zpa")
+        for token in ("dd_spec:      equ 0xA600",
+                      "dd_xdpb_buf:  equ 0xA60A",
+                      "dd_param_ptr: equ 0xA625",
+                      "_ccp_al:      equ 0xA62F",
+                      "dd_bank:      equ 0xA82D",
+                      "dd_copy_len:  equ 0xA839"):
+            self.assertIn(token, bios)
+        kbd = source("src/bios/keyboard.zpa")
+        for token in ("kbd_last_raw:   equ 0xA63F",
+                      "kbd_token_buf:   equ 0xA64F",
+                      "kbd_inject_buf: equ 0xA673",
+                      "kbd_inject_rd:  equ 0xA6B4"):
+            self.assertIn(token, kbd)
+        bdos = source("src/bdos/bdos.zpa")
+        for token in ("rdbuf_ptr:  equ 0xA6B5",
+                      "ms_active:  equ 0xA6B7",
+                      "map_idx:    equ 0xA6FB"):
+            self.assertIn(token, bdos)
+        scr = source("src/bios/screen.zpa")
+        self.assertIn("cursor_col: equ 0xA730", scr)
+        self.assertIn("saved_col:  equ 0xA739", scr)
+        common = source("src/bios/common.zpa")
+        self.assertIn("fcb_buf:        equ 0xAD80", common)
+        self.assertIn("ccp_fcb == 0xFB66", common)
+
+    def test_blocks_fit_the_free_windows(self):
+        # A600-A6FF ends before the row table at A700.
+        self.assertLessEqual(0xA6FB + 1, 0xA700)
+        # A730-A739 ends before csv_a at A740.
+        self.assertLessEqual(0xA739 + 1, 0xA740)
+        # A82D-A83C sits after alv_b (A800 + 45 = A82D).
+        self.assertGreaterEqual(0xA82D, 0xA800 + 45)
+        self.assertLessEqual(0xA83C + 1, 0xA840)   # alv_c
+        # FCB shadow is clear of KMEXP (A9A0-AD7F).
+        self.assertGreaterEqual(0xAD80, 0xAD80)
+        self.assertLessEqual(0xAD80 + 36, 0xB000)
+
+    def test_cold_boot_seeds_bdos_state(self):
+        bios = source("src/bios/bios.zpa")
+        boot = bios[bios.index("cold_boot:"):bios.index("; Initialize drivers")]
+        for token in ("(ms_active), a", "(f40_zfill), a",
+                      "(last_dir_sec), a", "(last_dir_drv), a",
+                      "(cached_drive), a"):
+            self.assertIn(token, boot)
+
+    def test_kbd_init_seeds_repeat_timings(self):
+        kbd = source("src/bios/keyboard.zpa")
+        init = kbd[kbd.index("kbd_init:"):kbd.index("kbd_status:")]
+        self.assertIn("ld (kbd_repeat_delay), hl", init)
+        self.assertIn("ld (kbd_repeat_rate), hl", init)
+        self.assertIn("REPEAT_DELAY", init)
+        self.assertIn("REPEAT_RATE", init)
+
+    def test_smoke_reads_moved_state_from_bank6(self):
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn('self.memory(6, label_address("kbd_token_buf"), 4)', smoke)
+        self.assertIn('self.memory(6, self.cursor_row, 1)', smoke)
+        self.assertIn('self.memory(6, self.cursor_col, 1)', smoke)
 
 
 class TesterConstants(unittest.TestCase):
