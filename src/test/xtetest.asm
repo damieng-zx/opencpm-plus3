@@ -21,6 +21,7 @@ SCR_RUN_ROUTINE EQU 0x00E9
 
 ; Phase-1 XBIOS disc entries
 DD_INIT         EQU 0x0080
+DD_SETUP        EQU 0x0083
 DD_SEL_FORMAT   EQU 0x0095
 DD_READ_ID      EQU 0x009B
 DD_L_ON_MOTOR   EQU 0x00A4
@@ -630,6 +631,26 @@ start:
     call BDOS
 .t10_skip:
 
+    ; === Test 11: DD_SETUP ===
+    ld de, msg_t11
+    ld c, 9
+    call BDOS
+
+    ; Default +3 parameter block at D600h
+    ld hl, dd_setup_defaults
+    ld de, 0xD600
+    ld bc, 7
+    ldir
+
+    ld hl, DD_SETUP
+    ld (userf_dw), hl
+    ld hl, 0xD600
+    call userf_trampoline
+
+    ld de, msg_ok
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -763,6 +784,7 @@ res_r: db 0
 res_c: db 0
 t8_ok: db 0
 t9_ok: db 0
+dd_setup_defaults: db 10, 50, 175, 30, 12, 15, 3
 
 
 ; ============================================================
@@ -780,6 +802,7 @@ msg_t7:     db "7.RUN..", '$'
 msg_t8:     db 0x0D, 0x0A, "8.DISK..", '$'
 msg_t9:     db 0x0D, 0x0A, "9.RW..", '$'
 msg_t10:    db 0x0D, 0x0A, "10.FMT..", '$'
+msg_t11:    db 0x0D, 0x0A, "11.SETUP..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

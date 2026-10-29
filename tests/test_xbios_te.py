@@ -24,7 +24,7 @@ class TeAsk(unittest.TestCase):
         text = source("src/bios/bios.zpa")
         dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
         self.assertIn("cp 0xBF", dispatch)
-        self.assertIn("jr z, .te_ask", dispatch)
+        self.assertRegex(dispatch, r"j[pr] z, \.te_ask")
 
     def test_returns_viewport_and_cursor(self):
         body = handler_body(".te_ask:", ".dd_drive_status:")
@@ -77,7 +77,7 @@ class TeSetInk(unittest.TestCase):
         text = source("src/bios/bios.zpa")
         dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
         self.assertIn("cp 0xCB", dispatch)
-        self.assertIn("jr z, .te_set_ink", dispatch)
+        self.assertRegex(dispatch, r"j[pr] z, \.te_set_ink")
 
     def test_userf_preserves_caller_a(self):
         text = source("src/bios/common.zpa")
@@ -232,7 +232,7 @@ class DiscPhase1(unittest.TestCase):
         self.assertIn("pop bc", body)
 
         body = handler_body(".dd_l_t_off_motor:", ".dd_off_motor:")
-        self.assertIn("MOTOR_OFF_DELAY", body)
+        self.assertIn("(motor_off_ticks)", body)
         self.assertIn("ld (motor_countdown), a", body)
         self.assertIn("ld bc, (xbios_arg_af)", body)
         self.assertIn("pop af", body)
@@ -365,6 +365,43 @@ class DiscPhase2(unittest.TestCase):
         self.assertIn("run_xtetest_format", text)
         self.assertIn("10.FMT..OK", text)
         self.assertIn("format-test.dsk", text)
+
+
+class DdSetup(unittest.TestCase):
+    def test_dispatch_uses_jumpblock_entry(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0x83", dispatch)
+        self.assertIn("jp z, .dd_setup", dispatch)
+
+    def test_handler_copies_and_scales(self):
+        body = handler_body(".dd_setup:", ".dd_sel_format:")
+        self.assertIn("ld de, dd_setup_pb", body)
+        self.assertIn("ld bc, 7", body)
+        self.assertIn("ldir", body)
+        self.assertIn("(dd_setup_pb + 1)", body)   # motor-off timeout
+        self.assertIn("(motor_off_ticks), a", body)
+        self.assertIn("call fdc_specify", body)
+
+    def test_fdc_specify_builds_srt_hut_hlt(self):
+        text = source("src/bios/fdc765.zpa")
+        body = text[text.index("fdc_specify:"):
+                    text.index("; FDC interrupt critical-section helpers")]
+        self.assertIn("FDC_SPECIFY", body)
+        self.assertIn("(dd_setup_pb + 4)", body)   # step rate
+        self.assertIn("(dd_setup_pb + 5)", body)   # head unload
+        self.assertIn("(dd_setup_pb + 6)", body)   # head load / ND
+        self.assertIn("fdc_spec1", body)
+        self.assertIn("fdc_spec2", body)
+
+    def test_tester_and_smoke_cover_setup(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("DD_SETUP", tester)
+        self.assertIn("11.SETUP", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("11.SETUP..OK", smoke)
+        self.assertIn("motor_off_ticks", smoke)
+        self.assertIn("fdc_spec1", smoke)
 
 
 class TesterConstants(unittest.TestCase):

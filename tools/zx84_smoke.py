@@ -417,7 +417,8 @@ class Smoke:
         screen = self.text()
         if "FAIL" in screen:
             raise SmokeError("XTETEST reported a failure:\n" + screen)
-        for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK", "DONE"):
+        for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK",
+                       "11.SETUP..OK", "DONE"):
             if needle not in screen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + screen)
@@ -431,6 +432,13 @@ class Smoke:
         if flag != 1:
             raise SmokeError(
                 f"SCR_RUN_ROUTINE input flag {flag:02X}, expected 01")
+        for name, expected in (("motor_off_ticks", 250),
+                               ("fdc_spec1", 0x4F),
+                               ("fdc_spec2", 0x05)):
+            value = self.memory(4, label_address(name), 1)[0]
+            if value != expected:
+                raise SmokeError(
+                    f"DD_SETUP {name} {value:02X}, expected {expected:02X}")
         self.expect("XTETEST prompt", "A>")
 
     def run_xtetest_format(self) -> None:

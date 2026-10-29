@@ -42,6 +42,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | ID | Name | Input | Output |
 |----|------|-------|--------|
 | `0x80` | `DD_INIT` | - | Reset the disc driver to defaults and turn the motor off. |
+| `0x83` | `DD_SETUP` | HL = 7-byte parameter block in common memory | Applies the motor-off timeout (100 ms units, 0 = never) and sends the uPD765A SPECIFY command with the step/head timings.  The motor-on timeout and write-current-off time are stored in the block but not otherwise used. |
 | `0x86` | `DD_READ_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = destination, IX = XDPB | Reads one 512-byte sector.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted. |
 | `0x89` | `DD_WRITE` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = source, IX = XDPB | Writes one 512-byte sector.  Carry set OK; carry clear + A = error (1 = write protected).  Only bank 1 (TPA) is accepted. |
 | `0x8C` | `DD_CHECK_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = compare buffer, IX = XDPB | Reads the sector and compares it with the buffer.  Carry set + Z set if equal, carry set + Z clear if different, carry clear + A = error. |
@@ -70,15 +71,14 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 
 All six documented TE operations (`TE_ASK`, `TE_RESET`, `TE_SET_INK`,
 `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`) have handlers, and
-the disc calls above are implemented: phase 1 (`DD_INIT`, `DD_SEL_FORMAT`,
-`DD_READ_ID`, `DD_L_ON_MOTOR`, `DD_L_T_OFF_MOTOR`, `DD_OFF_MOTOR`,
-`DD_L_SEEK`) and phase 2 (`DD_LOGIN`, `DD_READ_SECTOR`, `DD_WRITE`,
-`DD_CHECK_SECTOR`, `DD_FORMAT`).
+the disc calls above are implemented: phase 1 (`DD_INIT`, `DD_SETUP`,
+`DD_SEL_FORMAT`, `DD_READ_ID`, `DD_L_ON_MOTOR`, `DD_L_T_OFF_MOTOR`,
+`DD_OFF_MOTOR`, `DD_L_SEEK`) and phase 2 (`DD_LOGIN`, `DD_READ_SECTOR`,
+`DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`).
 
-Still unimplemented: the low-level disc calls (`DD_SETUP`, `DD_L_DPB`,
-`DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`), the serial calls (`CD_SA_*`),
-the keyboard calls (`KM_*`) and `FIND_FID`.  Unknown IDs return
-`A = 0xFF`.
+Still unimplemented: the low-level disc calls (`DD_L_DPB`, `DD_L_XDPB`,
+`DD_L_READ`, `DD_L_WRITE`), the serial calls (`CD_SA_*`), the keyboard
+calls (`KM_*`) and `FIND_FID`.  Unknown IDs return `A = 0xFF`.
 
 `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` currently
 accept only CP/M bank 1 (the TPA); other bank numbers return `A = 9`.

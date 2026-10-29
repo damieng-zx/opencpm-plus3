@@ -55,6 +55,7 @@
 ; Motor flag: motor_flag in common.asm
 
 ; --- FDC commands ---
+FDC_SPECIFY equ 0x03           ; SPECIFY
 FDC_READ    equ 0x46           ; READ DATA (MFM, skip deleted)
 FDC_WRITE   equ 0x45           ; WRITE DATA (MFM)
 FDC_SEEK    equ 0x0F           ; SEEK
@@ -137,6 +138,12 @@ fdc_poll:          dw 0        ; RQM poll timeout counter (16-bit)
 fdc_seek_timeout:  dw 0        ; seek/recalibrate poll timeout
 fdc_login_force:   db 0        ; 1 = DD_LOGIN: re-detect despite Freeze
 fdc_login_type:    db 0        ; Disc type found by the last login probe
+
+; DD_SETUP parameter block (defaults from the +3 manual)
+dd_setup_pb:  db 10, 50, 175, 30, 12, 15, 3
+motor_off_ticks: db 50         ; ISR frames until motor-off (0 = never)
+fdc_spec1:    db 0             ; SPECIFY SRT/HUT
+fdc_spec2:    db 0             ; SPECIFY HLT/ND
 
 ; FORMAT TRACK scratch
 fmt_ptr:  dw 0
@@ -224,6 +231,57 @@ fdc_init:
     call motor_on
     call fdc_recalibrate
     call motor_off             ; Don't leave drive spinning after init
+    call fdc_specify
+    ret
+
+
+; ------------------------------------------------------------------
+; fdc_specify — send the uPD765A SPECIFY command from dd_setup_pb
+;   In:  dd_setup_pb
+;   Out: nothing
+;   Clobbers: AF, BC
+; ------------------------------------------------------------------
+; @proc fdc_specify
+; @clobbers af,bc
+; @end
+fdc_specify:
+    ; SRT/HUT: step rate is (16 - SRT) ms; head unload is in 32 ms units.
+    ld a, (dd_setup_pb + 4)
+    cp 17
+    jr c, .step_ok
+    ld a, 16
+.step_ok:
+    ld b, a
+    ld a, 16
+    sub b
+    and 0x0F
+    rlca
+    rlca
+    rlca
+    rlca
+    ld c, a
+    ld a, (dd_setup_pb + 5)
+    and 0x0F
+    or c
+    ld (fdc_spec1), a
+
+    ; HLT/ND: byte 6 bits 7..1 are 4 ms units; HLT is 2 ms units.
+    ld a, (dd_setup_pb + 6)
+    ld b, a
+    and 0xFE
+    add a, a
+    ld c, a
+    ld a, b
+    and 0x01
+    or c
+    ld (fdc_spec2), a
+
+    ld a, FDC_SPECIFY
+    call fdc_send_byte
+    ld a, (fdc_spec1)
+    call fdc_send_byte
+    ld a, (fdc_spec2)
+    call fdc_send_byte
     ret
 
 
@@ -1355,7 +1413,7 @@ motor_on:
     ; Set motor flag in common memory and assert on port
     ld a, MOTOR_BIT
     ld (motor_flag), a         ; Common-memory variable
-    ld a, MOTOR_OFF_DELAY
+    ld a, (motor_off_ticks)
     ld (motor_countdown), a    ; Arm the motor-off timer in the ISR
     ld a, BANK1_1FFD | MOTOR_BIT
     call write_1ffd

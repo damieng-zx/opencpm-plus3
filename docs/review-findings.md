@@ -283,13 +283,21 @@ set.
   Files: `src/bios/bios.zpa`, `src/bios/fdc765.zpa`,
   `src/bios/common.zpa`, `src/test/xtetest.asm`,
   `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
+- [x] **XBIOS DD_SETUP.** Applies the 7-byte parameter block: scales the
+  motor-off timeout from 100 ms units to ISR frames (0 = never) and sends
+  the uPD765A SPECIFY command with SRT/HUT/HLT/ND derived from the
+  step/head-unload/head-load bytes.  `XTETEST` test 11 applies the
+  defaults; the smoke runner checks `motor_off_ticks=250`, `fdc_spec1=4Fh`
+  and `fdc_spec2=05h`.
+  Files: `src/bios/bios.zpa`, `src/bios/fdc765.zpa`,
+  `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
 
 ## P3 — Remaining follow-ups
 
 - `SCR_RUN_ROUTINE` can only run routines in common memory (`C000-F5FF`);
   screen mode pages the rest of the TPA out.
-- The low-level disc calls are still stubs: `DD_SETUP`, `DD_L_DPB`,
-  `DD_L_XDPB`, `DD_L_READ` and `DD_L_WRITE`.
+- The low-level disc calls are still stubs: `DD_L_DPB`, `DD_L_XDPB`,
+  `DD_L_READ` and `DD_L_WRITE`.
 - `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` only
   accept CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
 - `DD_LOGIN` falls back to the type-0 template if the probe fails; it does

@@ -11,14 +11,16 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 
 `XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry, `TE_RESET`,
 `TE_SET_INK` (including FLASH), `TE_SET_BORDER`, `TE_SET_SPEED` and
-`SCR_RUN_ROUTINE`, plus the disc calls (`DD_INIT`, `DD_LOGIN`,
-`DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`,
+`SCR_RUN_ROUTINE`, plus the disc calls (`DD_INIT`, `DD_SETUP`,
+`DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`,
 `DD_CHECK_SECTOR`, `DD_FORMAT`, motor on/off/timeout, `DD_L_SEEK`).  The
-runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`, the `5Ah` marker in
-the bottom-right screen attribute (bank 5, `5AFFh`) and the `D100h`
-input-pass-through flag.  It then boots a scratch copy, sets the `DC00h`
-magic byte, runs `XTETEST` again, requires `10.FMT..OK` and checks the
-formatted track with `sector_read`.
+runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
+`11.SETUP..OK`, the `5Ah` marker in the bottom-right screen attribute
+(bank 5, `5AFFh`) and the `D100h` input-pass-through flag.  It also checks
+that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
+`fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
+byte, runs `XTETEST` again, requires `10.FMT..OK` and checks the formatted
+track with `sector_read`.
 
 ```text
 python3 tools/zx84_smoke.py
@@ -234,6 +236,11 @@ sets the `DC00h` magic byte.  It builds a standard 9-sector header table at
 `D500h`, formats track 39 with filler `E5h`, reads the track back and
 checks the data area.  The smoke runner does this on a scratch copy and
 uses `sector_read` to confirm the filler.
+
+Test 11 applies the default `DD_SETUP` parameter block at `D600h`.  The
+smoke runner then checks the translated fields: `motor_off_ticks=250`
+(50 × 100 ms in 50 Hz frames), `fdc_spec1=4Fh` (SRT 4 = 12 ms step, HUT
+15) and `fdc_spec2=05h` (HLT 2 = 4 ms head load, non-DMA).
 
 ### BDOS file regression suite
 

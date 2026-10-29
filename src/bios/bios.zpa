@@ -636,7 +636,7 @@ bios_time:
 ; @end
 xbios_handler:
     cp 0xBF
-    jr z, .te_ask
+    jp z, .te_ask
     cp 0xC2
     jp z, .te_reset
     cp 0xE3
@@ -648,7 +648,7 @@ xbios_handler:
     cp 0xC8
     ret z                          ; TE_STL_ON_OFF — swallow, no status line
     cp 0xCB
-    jr z, .te_set_ink
+    jp z, .te_set_ink
     cp 0xCE
     jp z, .te_set_border
     cp 0xD1
@@ -659,6 +659,8 @@ xbios_handler:
     jp z, .dd_drive_status
     cp 0x80
     jp z, .dd_init
+    cp 0x83
+    jp z, .dd_setup
     cp 0x95
     jp z, .dd_sel_format
     cp 0x9B
@@ -862,6 +864,36 @@ xbios_handler:
     call fdc_init
     ret
 
+.dd_setup:
+    ; DD_SETUP (0x0083): set disc timings.
+    ;   In:  HL = 7-byte parameter block in common memory
+    ;   Out: AF BC DE HL corrupt
+    ld de, dd_setup_pb
+    ld bc, 7
+    ldir
+
+    ; Motor-off timeout: byte 1 is in 100 ms units; the ISR counts 50 Hz
+    ; frames.  Clamp to 51 units (255 frames); zero disables the timeout.
+    ld a, (dd_setup_pb + 1)
+    or a
+    jr z, .dsu_no_motor_off
+    cp 52
+    jr c, .dsu_scale
+    ld a, 51
+.dsu_scale:
+    ld b, a
+    add a, a
+    add a, a
+    add a, b
+    ld (motor_off_ticks), a
+    jr .dsu_specify
+.dsu_no_motor_off:
+    xor a
+    ld (motor_off_ticks), a
+.dsu_specify:
+    call fdc_specify
+    ret
+
 .dd_sel_format:
     ; DD_SEL_FORMAT (0x0095): load a standard XDPB.
     ;   In:  A = format 0-3, IX = destination XDPB in common memory
@@ -996,7 +1028,7 @@ xbios_handler:
 .dd_l_t_off_motor:
     ; DD_L_T_OFF_MOTOR (0x00A7): arm the motor-off timeout.
     ;   Out: all registers and flags preserved
-    ld a, MOTOR_OFF_DELAY
+    ld a, (motor_off_ticks)
     ld (motor_countdown), a
     push bc
     ld bc, (xbios_arg_af)
