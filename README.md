@@ -14,7 +14,8 @@ for this project.
   screen-size and page-mode controls from the +3 CP/M manual.
 - **XBIOS/TE**: the +3 extended BIOS terminal calls `TE_ASK`, `TE_RESET`,
   `TE_SET_INK`, `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`, plus
-  the phase-1 disc calls (`DD_INIT`, `DD_SEL_FORMAT`, `DD_READ_ID`, motor
+  the disc calls (`DD_INIT`, `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`,
+  `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, motor
   on/off/timeout and `DD_L_SEEK`) through BIOS function 30 (`USERF`); see
   [XBIOS/TE Interface](docs/cpm-plus-xbios.md).
 - **Keyboard**: the +3 CP/M matrix — BREAK (`Caps Shift`+`Space`) sends ESC,
@@ -123,7 +124,7 @@ Also supported:
 - `SYSTEST` — stack/MOVE/clock, page-zero, TAB and delimiter checks.
 - `TERMTEST` — terminal escape-sequence walkthrough.
 - `XTETEST` — XBIOS self-test (`TE_ASK`, `TE_RESET`, ink, border, speed,
-  `SCR_RUN_ROUTINE`, and the phase-1 disc calls).
+  `SCR_RUN_ROUTINE`, and the disc calls).
 - `B16TEST` — 16-bit block-number file I/O on B: (720K PCW image).
 
 ## Wishlist / TODO

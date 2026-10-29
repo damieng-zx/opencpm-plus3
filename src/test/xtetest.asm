@@ -27,6 +27,11 @@ DD_L_ON_MOTOR   EQU 0x00A4
 DD_L_T_OFF_MOTOR EQU 0x00A7
 DD_OFF_MOTOR    EQU 0x00AA
 DD_L_SEEK       EQU 0x00B3
+DD_READ_SECTOR  EQU 0x0086
+DD_WRITE        EQU 0x0089
+DD_CHECK_SECTOR EQU 0x008C
+DD_FORMAT       EQU 0x008F
+DD_LOGIN        EQU 0x0092
 
 ; ============================================================
 ; Entry
@@ -419,6 +424,212 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 9: phase-2 disc calls ===
+    ld de, msg_t9
+    ld c, 9
+    call BDOS
+
+    xor a
+    ld (t9_ok), a
+
+    ; DD_LOGIN: unit 0, XDPB at D200h
+    ld hl, DD_LOGIN
+    ld (userf_dw), hl
+    ld bc, 0
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t9_fail_restore
+    cp 0
+    jp nz, .t9_fail_restore
+    ld a, d
+    cp 0
+    jp nz, .t9_fail_restore
+    ld a, e
+    cp 45                       ; floor(174/4)+2
+    jp nz, .t9_fail_restore
+    ld a, h
+    cp 1                        ; 4*(63+1) = 256
+    jp nz, .t9_fail_restore
+    ld a, l
+    cp 0
+    jp nz, .t9_fail_restore
+
+    ; DD_READ_SECTOR: logical track 0, sector 0 into D300h
+    ld hl, DD_READ_SECTOR
+    ld (userf_dw), hl
+    ld bc, 0x0100
+    ld de, 0
+    ld hl, 0xD300
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t9_fail_restore
+
+    ; Boot-sector disc spec: 00 00 28 09 02 01 03 02 2A 52
+    ld a, (0xD300)
+    or a
+    jp nz, .t9_fail_restore
+    ld a, (0xD301)
+    or a
+    jp nz, .t9_fail_restore
+    ld a, (0xD302)
+    cp 0x28
+    jp nz, .t9_fail_restore
+    ld a, (0xD303)
+    cp 9
+    jp nz, .t9_fail_restore
+    ld a, (0xD304)
+    cp 2
+    jp nz, .t9_fail_restore
+    ld a, (0xD305)
+    cp 1
+    jp nz, .t9_fail_restore
+    ld a, (0xD306)
+    cp 3
+    jp nz, .t9_fail_restore
+    ld a, (0xD307)
+    cp 2
+    jp nz, .t9_fail_restore
+    ld a, (0xD308)
+    cp 0x2A
+    jp nz, .t9_fail_restore
+    ld a, (0xD309)
+    cp 0x52
+    jp nz, .t9_fail_restore
+
+    ; DD_WRITE: write the same sector back unchanged
+    ld hl, DD_WRITE
+    ld (userf_dw), hl
+    ld bc, 0x0100
+    ld de, 0
+    ld hl, 0xD300
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t9_fail_restore
+
+    ; DD_CHECK_SECTOR: equal buffer
+    ld hl, DD_CHECK_SECTOR
+    ld (userf_dw), hl
+    ld bc, 0x0100
+    ld de, 0
+    ld hl, 0xD300
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t9_fail_restore
+    jp nz, .t9_fail_restore
+
+    ; DD_CHECK_SECTOR: one byte different
+    ld a, 1
+    ld (0xD300), a
+    ld hl, DD_CHECK_SECTOR
+    ld (userf_dw), hl
+    ld bc, 0x0100
+    ld de, 0
+    ld hl, 0xD300
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t9_fail_restore
+    jr z, .t9_fail_restore
+    xor a
+    ld (0xD300), a
+
+    ; DD_FORMAT: an unsupported bank must fail without formatting
+    ld hl, DD_FORMAT
+    ld (userf_dw), hl
+    ld bc, 0
+    ld de, 0
+    ld hl, 0xD400
+    ld ix, 0xD200
+    call userf_trampoline
+    jr c, .t9_fail_restore
+    cp 9
+    jp nz, .t9_fail_restore
+
+    ld a, 1
+    ld (t9_ok), a
+    jr .t9_done
+
+.t9_fail_restore:
+    xor a
+    ld (0xD300), a
+.t9_done:
+    ld a, (t9_ok)
+    or a
+    ld de, msg_fail
+    jr z, .t9_print
+    ld de, msg_ok
+.t9_print:
+    ld c, 9
+    call BDOS
+
+    ; === Test 10: optional destructive DD_FORMAT test ===
+    ; Only runs when the harness has set the DC00h magic byte, so the
+    ; normal boot-disk self-test never formats anything.
+    ld a, (0xDC00)
+    cp 0xA5
+    jr nz, .t10_skip
+    ld de, msg_t10
+    ld c, 9
+    call BDOS
+
+    ; Header table at D500h: track 39, head 0, sectors 1-9, N=2.
+    ld hl, 0xD500
+    ld b, 1
+.t10_hdr:
+    ld a, 39
+    ld (hl), a
+    inc hl
+    xor a
+    ld (hl), a
+    inc hl
+    ld a, b
+    ld (hl), a
+    inc hl
+    ld a, 2
+    ld (hl), a
+    inc hl
+    inc b
+    ld a, b
+    cp 10
+    jr nz, .t10_hdr
+
+    ; DD_FORMAT: B=1, C=0, D=39, E=0xE5, HL=D500h, IX=D200h
+    ld hl, DD_FORMAT
+    ld (userf_dw), hl
+    ld bc, 0x0100
+    ld de, 0x27E5
+    ld hl, 0xD500
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t10_fail
+
+    ; Read track 39 sector 0 back into D300h.
+    ld hl, DD_READ_SECTOR
+    ld (userf_dw), hl
+    ld bc, 0x0100
+    ld de, 0x2700
+    ld hl, 0xD300
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t10_fail
+
+    ; The formatted data area is filled with 0xE5.
+    ld hl, 0xD300
+    ld b, 32
+.t10_check:
+    ld a, (hl)
+    cp 0xE5
+    jr nz, .t10_fail
+    inc hl
+    djnz .t10_check
+    ld de, msg_ok
+    jr .t10_print
+.t10_fail:
+    ld de, msg_fail
+.t10_print:
+    ld c, 9
+    call BDOS
+.t10_skip:
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -551,6 +762,7 @@ res_h: db 0
 res_r: db 0
 res_c: db 0
 t8_ok: db 0
+t9_ok: db 0
 
 
 ; ============================================================
@@ -566,6 +778,8 @@ msg_t5b:    db "5b.SPEED..", '$'
 msg_t6:     db "6.RESET..", '$'
 msg_t7:     db "7.RUN..", '$'
 msg_t8:     db 0x0D, 0x0A, "8.DISK..", '$'
+msg_t9:     db 0x0D, 0x0A, "9.RW..", '$'
+msg_t10:    db 0x0D, 0x0A, "10.FMT..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

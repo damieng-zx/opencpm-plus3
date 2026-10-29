@@ -11,11 +11,14 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 
 `XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry, `TE_RESET`,
 `TE_SET_INK` (including FLASH), `TE_SET_BORDER`, `TE_SET_SPEED` and
-`SCR_RUN_ROUTINE`, plus the phase-1 disc calls (`DD_INIT`,
-`DD_SEL_FORMAT`, `DD_READ_ID`, motor on/off/timeout, `DD_L_SEEK`).  The
-runner requires `7.RUN..OK`, `8.DISK..OK`, the `5Ah` marker in the
-bottom-right screen attribute (bank 5, `5AFFh`) and the `D100h`
-input-pass-through flag.
+`SCR_RUN_ROUTINE`, plus the disc calls (`DD_INIT`, `DD_LOGIN`,
+`DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`,
+`DD_CHECK_SECTOR`, `DD_FORMAT`, motor on/off/timeout, `DD_L_SEEK`).  The
+runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`, the `5Ah` marker in
+the bottom-right screen attribute (bank 5, `5AFFh`) and the `D100h`
+input-pass-through flag.  It then boots a scratch copy, sets the `DC00h`
+magic byte, runs `XTETEST` again, requires `10.FMT..OK` and checks the
+formatted track with `sector_read`.
 
 ```text
 python3 tools/zx84_smoke.py
@@ -204,11 +207,12 @@ type "XTETEST`enter`"
 run 1200
 ```
 
-Require `7.RUN..OK`, `8.DISK..OK` and `DONE`, with no `FAIL`.  `XTETEST`
-calls every implemented TE entry through `USERF`: `TE_ASK` reports
-`51x24`, `TE_RESET` clears, the ink/border tests change the palette, and
-`TE_SET_SPEED` is accepted.  Test 7 stages a routine at `D000h`, runs it
-via `SCR_RUN_ROUTINE`, checks DE/HL/IX/IY pass-through and leaves:
+Require `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK` and `DONE`, with no `FAIL`.
+`XTETEST` calls every implemented TE entry through `USERF`: `TE_ASK`
+reports `51x24`, `TE_RESET` clears, the ink/border tests change the
+palette, and `TE_SET_SPEED` is accepted.  Test 7 stages a routine at
+`D000h`, runs it via `SCR_RUN_ROUTINE`, checks DE/HL/IX/IY pass-through
+and leaves:
 
 - `5Ah` in the bottom-right screen attribute (bank 5, offset `1AFFh` for
   flat address `5AFFh`)
@@ -218,6 +222,18 @@ Test 8 runs the phase-1 disc calls: it loads the standard XDPB template to
 `D200h`, spins the motor up, seeks track 0, reads the first sector ID and
 checks the result buffer, then stops the motor.  It also verifies that
 `DD_L_ON_MOTOR` and `DD_L_T_OFF_MOTOR` preserve AF/BC/DE/HL.
+
+Test 9 runs `DD_LOGIN` (checking the returned disc type, ALV and hash
+sizes), reads the boot sector with `DD_READ_SECTOR`, writes it back
+unchanged with `DD_WRITE`, and checks `DD_CHECK_SECTOR` reports both equal
+and different buffers correctly.  It also confirms `DD_FORMAT` rejects an
+unsupported bank without formatting.
+
+Test 10 is the destructive format check.  It only runs when the harness
+sets the `DC00h` magic byte.  It builds a standard 9-sector header table at
+`D500h`, formats track 39 with filler `E5h`, reads the track back and
+checks the data area.  The smoke runner does this on a scratch copy and
+uses `sector_read` to confirm the filler.
 
 ### BDOS file regression suite
 

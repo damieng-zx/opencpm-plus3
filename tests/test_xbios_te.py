@@ -47,7 +47,7 @@ class TeReset(unittest.TestCase):
         text = source("src/bios/bios.zpa")
         dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
         self.assertIn("cp 0xC2", dispatch)
-        self.assertIn("jr z, .te_reset", dispatch)
+        self.assertRegex(dispatch, r"j[pr] z, \.te_reset")
 
     def test_handler_calls_scr_reset(self):
         body = handler_body(".te_reset:", ".dd_drive_status:")
@@ -272,6 +272,99 @@ class DiscPhase1(unittest.TestCase):
             self.assertRegex(text, rf"{name}\s+EQU\s+{addr}")
         self.assertIn("8.DISK", text)
         self.assertIn("DD_READ_ID", text)
+
+
+class DiscPhase2(unittest.TestCase):
+    def test_dispatch_ids(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        for entry, target in (
+            ("0x86", ".dd_read_sector"),
+            ("0x89", ".dd_write"),
+            ("0x8C", ".dd_check"),
+            ("0x8F", ".dd_format"),
+            ("0x92", ".dd_login"),
+        ):
+            self.assertIn(f"cp {entry}", dispatch)
+            self.assertIn(f"jp z, {target}", dispatch)
+
+    def test_dd_login_forces_detection_and_sizes(self):
+        body = handler_body(".dd_login:", ".dd_read_sector:")
+        self.assertIn("ld (fdc_login_force), a", body)
+        self.assertIn("call fdc_login", body)
+        self.assertIn("ld hl, xdpb_a", body)
+        self.assertIn("ld bc, 27", body)
+        self.assertIn("fdc_login_type", body)
+        self.assertIn("srl h", body)          # DSM / 4
+        self.assertIn("add hl, hl", body)     # 4 * (DRM + 1)
+
+    def test_read_write_check_share_setup(self):
+        for start, end in ((".dd_read_sector:", ".dd_write:"),
+                           (".dd_write:", ".dd_check:"),
+                           (".dd_check:", ".dd_format:")):
+            body = handler_body(start, end)
+            self.assertIn("call .dd_prepare", body)
+
+        read = handler_body(".dd_read_sector:", ".dd_write:")
+        self.assertIn("call fdc_read_sector", read)
+        self.assertIn("call copy_to_user", read)
+
+        write = handler_body(".dd_write:", ".dd_check:")
+        self.assertIn("call fdc_write_sector", write)
+        self.assertIn("call copy_from_user", write)
+
+        check = handler_body(".dd_check:", ".dd_format:")
+        self.assertIn("dd_compare_buf", check)
+        self.assertIn("cp (hl)", check)
+
+    def test_prepare_maps_geometry(self):
+        body = handler_body(".dd_prepare:", ".dd_map_track:")
+        self.assertIn("call flush_deblock_body", body)
+        self.assertIn("call .dd_map_sector", body)
+        self.assertIn("call .dd_map_track", body)
+        self.assertIn("call fdc_seek", body)
+
+    def test_dd_format_uses_standard_geometry(self):
+        body = handler_body(".dd_format:", ".dd_prepare:")
+        self.assertIn("(ix + XDPB_SECTS)", body)
+        self.assertIn("(ix + XDPB_GAP2)", body)
+        self.assertIn("dd_format_hdr", body)
+        self.assertIn("call fdc_format_track", body)
+
+    def test_compare_buffer_is_clear_of_deblock(self):
+        text = source("src/bios/fdc765.zpa")
+        self.assertIn("deblock_buf equ 0x9C00", text)
+        self.assertIn("dd_compare_buf equ 0x9E00", text)
+
+    def test_fdc_format_track(self):
+        text = source("src/bios/fdc765.zpa")
+        body = text[text.index("fdc_format_track:"):
+                    text.index("; FDC byte-level I/O")]
+        self.assertIn("FDC_FORMAT", body)
+        self.assertIn("fmt_sc", body)
+        self.assertIn("fmt_left", body)
+        self.assertIn("bit 6, b", body)        # write protected
+        self.assertIn("0x3B", body)            # data/ID error bits
+        self.assertIn("fdc_read_byte", body)
+
+    def test_tester_covers_phase2(self):
+        text = source("src/test/xtetest.asm")
+        for name, addr in (
+            ("DD_READ_SECTOR", "0x0086"),
+            ("DD_WRITE", "0x0089"),
+            ("DD_CHECK_SECTOR", "0x008C"),
+            ("DD_FORMAT", "0x008F"),
+            ("DD_LOGIN", "0x0092"),
+        ):
+            self.assertRegex(text, rf"{name}\s+EQU\s+{addr}")
+        self.assertIn("9.RW", text)
+        self.assertIn("10.FMT", text)
+
+    def test_smoke_runs_format_on_scratch(self):
+        text = source("tools/zx84_smoke.py")
+        self.assertIn("run_xtetest_format", text)
+        self.assertIn("10.FMT..OK", text)
+        self.assertIn("format-test.dsk", text)
 
 
 class TesterConstants(unittest.TestCase):

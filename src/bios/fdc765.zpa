@@ -61,6 +61,7 @@ FDC_SEEK    equ 0x0F           ; SEEK
 FDC_RECAL   equ 0x07           ; RECALIBRATE
 FDC_SENSEI  equ 0x08           ; SENSE INTERRUPT STATUS
 FDC_READ_ID equ 0x4A           ; READ ID (MFM)
+FDC_FORMAT  equ 0x0D           ; FORMAT TRACK (MFM)
 
 ; --- XDPB field offsets (byte index within the 27-byte per-drive XDPB) ---
 XDPB_BSH    equ 2              ; Block shift (block size = 128 << BSH)
@@ -75,6 +76,7 @@ XDPB_TRACKS equ 18             ; Tracks per side
 XDPB_SECTS  equ 19             ; Physical sectors per track
 XDPB_FIRST  equ 20             ; First sector ID on disc
 XDPB_GAP1   equ 23             ; Gap3 for read/write
+XDPB_GAP2   equ 24             ; Gap3 for format
 XDPB_FREEZE equ 26             ; 0 = auto-detect on login, 0xFF = keep current
 
 ; --- Retry count ---
@@ -112,6 +114,11 @@ alv_b:      equ 0xA800
 ; clear of the 64-column character buffer.
 deblock_buf equ 0x9C00
 
+; Second 512-byte buffer used by XBIOS DD_CHECK_SECTOR to hold a copy of
+; the caller's buffer while deblock_buf holds the sector read from disc.
+; Bank 6 is visible in system mode, and 9E00-9FFF is unused.
+dd_compare_buf equ 0x9E00
+
 ; Deblocking state
 deblock_drv:  db 0xFF          ; Drive of buffered sector (FF=invalid)
 deblock_trk:  dw 0             ; Track of buffered sector
@@ -128,6 +135,16 @@ _ens_psec:    db 0             ; scratch: physical sector across seek/read
 fdc_current_track: db 0xFF, 0xFF
 fdc_poll:          dw 0        ; RQM poll timeout counter (16-bit)
 fdc_seek_timeout:  dw 0        ; seek/recalibrate poll timeout
+fdc_login_force:   db 0        ; 1 = DD_LOGIN: re-detect despite Freeze
+fdc_login_type:    db 0        ; Disc type found by the last login probe
+
+; FORMAT TRACK scratch
+fmt_ptr:  dw 0
+fmt_n:    db 0
+fmt_sc:   db 0
+fmt_gpl:  db 0
+fmt_fill: db 0
+fmt_left: db 0
 
 
 ; ==========================================================================
@@ -283,10 +300,18 @@ fdc_login:
 ; @end
 fdc_login_body:
     call load_drive_xdpb            ; IX = this drive's XDPB
+    ld a, (fdc_login_force)
+    or a
+    jr nz, .force_login
     ld a, (ix + XDPB_FREEZE)
     cp 0xFF
     ret z                           ; Already detected — motor wasn't touched.
+    jr .start_probe
+.force_login:
+    xor a
+    ld (fdc_login_force), a         ; DD_LOGIN ignores the Freeze flag once
 
+.start_probe:
     call motor_on
     call .probe                     ; All internal paths ret into us...
     jp motor_off                    ; ...then tail-off the motor on the way out.
@@ -350,10 +375,14 @@ fdc_login_body:
     ld b, 0                         ; Default to type 0 (+3/PCW SS)
 .apply_static:
     ; B = disc type (0-3). Copy xdpb_std_table[B] to the drive's XDPB.
+    ld a, b
+    ld (fdc_login_type), a
     call .copy_template
     ret
 
 .apply_and_patch:
+    ld a, b
+    ld (fdc_login_type), a
     call .copy_template
     ; --- Overlay AL0/AL1/DRM/CKS from disc spec byte 7 (DirBlocks) ---
     ; Only valid for PCW/Spectrum formats that carry a 10-byte AMSDOS disc
@@ -1120,6 +1149,113 @@ fdc_write_sector:
     ret
 .readonly:
     ld a, 2                    ; BIOS WRITE: read-only disk
+    ret
+
+
+; ------------------------------------------------------------------
+; fdc_format_track — Format one track with a 4-byte-per-sector header table
+;   In:  A = N (sector size code), B = SC (sectors),
+;        C = GPL (format gap), D = filler byte,
+;        HL = header table (track, head, sector, N per sector)
+;   Out: A = 0 and Z on success; A = 1 write protected, 3 data error,
+;        5 missing address mark and NZ on failure
+;   Clobbers: AF, BC, DE, HL
+; ------------------------------------------------------------------
+; @proc fdc_format_track
+; @param %n:u8 a
+; @param %sc:u8 b
+; @param %gpl:u8 c
+; @param %fill:u8 d
+; @param %hdr:u16 hl
+; @out   a
+; @out   zero
+; @clobbers af,bc,de,hl
+; @end
+fdc_format_track:
+    ld (fmt_n), a
+    ld a, b
+    ld (fmt_sc), a
+    ld a, c
+    ld (fmt_gpl), a
+    ld a, d
+    ld (fmt_fill), a
+    ld (fmt_ptr), hl
+
+    ; Command phase
+    ld a, FDC_FORMAT
+    call fdc_send_byte
+    ld a, (disk_head)
+    rlca
+    rlca
+    and 0x04
+    ld b, a
+    ld a, (disk_drive)
+    and 0x03
+    or b                       ; HD | US
+    call fdc_send_byte
+    ld a, (fmt_n)
+    call fdc_send_byte         ; N
+    ld a, (fmt_sc)
+    call fdc_send_byte         ; SC
+    ld a, (fmt_gpl)
+    call fdc_send_byte         ; GPL
+    ld a, (fmt_fill)
+    call fdc_send_byte         ; D
+
+    ; ID-field stream: C, H, R, N for every sector
+    ld a, (fmt_sc)
+    add a, a
+    add a, a
+    ld (fmt_left), a
+    or a
+    jr z, .fmt_result
+    ld hl, (fmt_ptr)
+.fmt_loop:
+    ld a, (hl)
+    inc hl
+    ld (fmt_ptr), hl
+    call fdc_send_byte
+    ld hl, (fmt_ptr)
+    ld a, (fmt_left)
+    dec a
+    ld (fmt_left), a
+    jr nz, .fmt_loop
+
+.fmt_result:
+    call fdc_read_byte         ; ST0
+    push af
+    call fdc_read_byte         ; ST1
+    push af
+    call fdc_read_byte         ; ST2
+    call fdc_read_byte         ; C
+    call fdc_read_byte         ; H
+    call fdc_read_byte         ; R
+    call fdc_read_byte         ; N
+    pop bc                     ; B = ST1
+    pop af                     ; A = ST0
+
+    bit 6, b                   ; ST1.WP
+    jr nz, .fmt_wp
+    and 0xC0
+    cp 0x80
+    jr nc, .fmt_data
+    ld a, b
+    and 0x3B                   ; DE, OR, ND, NW, MA
+    jr nz, .fmt_data
+    xor a                      ; success, Z
+    ret
+.fmt_wp:
+    ld a, 1
+    or a
+    ret
+.fmt_data:
+    ld a, b
+    and 0x01                   ; missing address mark?
+    ld a, 3
+    jr z, .fmt_err
+    ld a, 5
+.fmt_err:
+    or a
     ret
 
 

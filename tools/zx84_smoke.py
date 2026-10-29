@@ -417,7 +417,7 @@ class Smoke:
         screen = self.text()
         if "FAIL" in screen:
             raise SmokeError("XTETEST reported a failure:\n" + screen)
-        for needle in ("7.RUN..OK", "8.DISK..OK", "DONE"):
+        for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK", "DONE"):
             if needle not in screen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + screen)
@@ -432,6 +432,32 @@ class Smoke:
             raise SmokeError(
                 f"SCR_RUN_ROUTINE input flag {flag:02X}, expected 01")
         self.expect("XTETEST prompt", "A>")
+
+    def run_xtetest_format(self) -> None:
+        """Run the destructive DD_FORMAT test on a scratch disk copy."""
+        scratch = ROOT / "build" / "format-test.dsk"
+        shutil.copyfile(self.dsk, scratch)
+        self.log("XTETEST format test on a scratch image")
+        old_dsk = self.dsk
+        self.dsk = scratch
+        try:
+            self.boot()
+            self.mcp.call("write_memory",
+                          {"address": "DC00", "hex_bytes": "A5"})
+            self.mcp.call("type", {"text": "XTETEST"})
+            self.mcp.call("key", {"name": "enter"})
+            self.wait_for(["10.FMT..OK"], frames=500, attempts=10)
+            dump = self.mcp.call("sector_read", {
+                "track": 39, "sector": 1, "side": 0, "length": 32})
+            if "E5 E5 E5" not in dump:
+                raise SmokeError(
+                    "DD_FORMAT did not fill track 39 with 0xE5:\n" + dump)
+        finally:
+            self.dsk = old_dsk
+            try:
+                scratch.unlink()
+            except OSError:
+                pass
 
     def run_disktest(self) -> None:
         self.log("DISKTEST")
@@ -862,6 +888,7 @@ class Smoke:
         self.run_pagination()
         self.run_block16()
         self.run_ccp_external()
+        self.run_xtetest_format()
         self.check_fdc()
         self.log("all checks passed")
 

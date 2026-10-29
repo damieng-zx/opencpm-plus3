@@ -1152,4 +1152,5 @@ xbios_ret_iy: dw 0                 ; XBIOS IY result (caller IY by default)
 xbios_tmp_hl: dw 0                 ; scratch for SCR_RUN_ROUTINE's call
 dd_results: db 0                   ; DD_READ_ID result count
     ds 7                           ; ST0 ST1 ST2 C H R N
-    assert dd_results + 8 <= 0x10000, "USERF/disc save area must fit in common memory"
+dd_format_hdr: ds 36               ; DD_FORMAT header table (9 x 4 bytes)
+    assert dd_format_hdr + 36 <= 0x10000, "USERF/disc save area must fit in common memory"

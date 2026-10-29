@@ -177,6 +177,17 @@ disk_track:   dw 0                 ; Current track
 disk_sector:  dw 0                 ; Current sector
 disk_dma:     dw 0                 ; Current DMA address
 
+; XBIOS DD_READ_SECTOR / WRITE / CHECK / FORMAT scratch
+dd_bank:      db 0                 ; CP/M bank of the caller's buffer
+dd_unit:      db 0
+dd_track:     db 0                 ; logical track
+dd_sector:    db 0                 ; logical sector
+dd_user_ptr:  dw 0                 ; caller's buffer
+dd_phys_sec:  db 0                 ; mapped physical sector ID
+dd_cylinder:  db 0                 ; mapped physical cylinder
+dd_filler:    db 0                 ; DD_FORMAT filler byte
+dd_format_sc: db 0                 ; DD_FORMAT sectors per track
+
 
 ; ==========================================================================
 ; COLD BOOT — System startup
@@ -627,7 +638,7 @@ xbios_handler:
     cp 0xBF
     jr z, .te_ask
     cp 0xC2
-    jr z, .te_reset
+    jp z, .te_reset
     cp 0xE3
     jr z, .cd_version
     cp 0xE6
@@ -660,6 +671,16 @@ xbios_handler:
     jp z, .dd_off_motor
     cp 0xB3
     jp z, .dd_l_seek
+    cp 0x86
+    jp z, .dd_read_sector
+    cp 0x89
+    jp z, .dd_write
+    cp 0x8C
+    jp z, .dd_check
+    cp 0x8F
+    jp z, .dd_format
+    cp 0x92
+    jp z, .dd_login
     ld a, 0xFF                     ; unknown XBIOS ID
     ret
 
@@ -1027,6 +1048,312 @@ xbios_handler:
     ret
 .dls_not_ready:
     xor a                         ; A = 0, carry clear
+    ret
+
+; --- Phase-2 disc calls ---
+
+.dd_login:
+    ; DD_LOGIN (0x0092): detect the format and initialise the caller's XDPB.
+    ;   In:  C = unit, IX = destination XDPB in common memory
+    ;   Out: carry set + A = disc type, DE = ALV size, HL = hash size;
+    ;        carry clear + A = error
+    ld a, c
+    and 0x03
+    jp nz, .dd2_not_ready
+    ld ix, (xbios_ret_ix)
+    ld a, ixh
+    cp 0xC0
+    jp c, .dd2_bad_bank
+    xor a
+    ld (disk_drive), a
+    ld a, 1
+    ld (fdc_login_force), a
+    call fdc_login
+
+    ; Copy the detected XDPB to the caller's buffer.
+    ld ix, (xbios_ret_ix)
+    ld hl, xdpb_a
+    push ix
+    pop de
+    ld bc, 27
+    ldir
+
+    ; DE = floor(DSM / 4) + 2, HL = 4 * (DRM + 1)
+    ld ix, (xbios_ret_ix)
+    ld l, (ix + 5)
+    ld h, (ix + 6)                ; DSM
+    srl h
+    rr l
+    srl h
+    rr l
+    ld de, 2
+    add hl, de
+    ex de, hl                    ; DE = ALV size
+    ld l, (ix + 7)
+    ld h, (ix + 8)                ; DRM
+    inc hl
+    add hl, hl
+    add hl, hl                   ; HL = hash table size
+    ld a, (fdc_login_type)
+    scf
+    ret
+
+.dd_read_sector:
+    ; DD_READ_SECTOR (0x0086)
+    ;   In:  B = CP/M bank, C = unit, D = logical track,
+    ;        E = logical sector, HL = destination, IX = XDPB
+    ;   Out: carry set OK; carry clear + A = error
+    call .dd_prepare
+    ret nz
+    ld a, (dd_phys_sec)
+    call fdc_read_sector
+    jp nz, .dd2_data_error
+    ld hl, deblock_buf
+    ld de, (dd_user_ptr)
+    ld bc, 512
+    call copy_to_user
+    scf
+    ret
+
+.dd_write:
+    ; DD_WRITE (0x0089)
+    ;   In:  B = CP/M bank, C = unit, D = logical track,
+    ;        E = logical sector, HL = source, IX = XDPB
+    ;   Out: carry set OK; carry clear + A = error (1 = write protected)
+    call .dd_prepare
+    ret nz
+    ld hl, (dd_user_ptr)
+    ld de, deblock_buf
+    ld bc, 512
+    call copy_from_user
+    ld a, (dd_phys_sec)
+    call fdc_write_sector
+    jp nz, .dd2_write_error     ; lint: ignore - write returns Z/NZ
+    ld a, 0xFF
+    ld (deblock_drv), a
+    xor a
+    ld (deblock_dirty), a
+    scf
+    ret
+
+.dd_check:
+    ; DD_CHECK_SECTOR (0x008C)
+    ;   In:  B = CP/M bank, C = unit, D = logical track,
+    ;        E = logical sector, HL = compare buffer, IX = XDPB
+    ;   Out: carry set + Z set if equal, Z clear if different;
+    ;        carry clear + A = error
+    call .dd_prepare
+    ret nz
+    ld a, (dd_phys_sec)
+    call fdc_read_sector
+    jp nz, .dd2_data_error
+    ld hl, (dd_user_ptr)
+    ld de, dd_compare_buf
+    ld bc, 512
+    call copy_from_user
+    ld hl, deblock_buf
+    ld de, dd_compare_buf
+    ld bc, 512
+.ddc_loop:
+    ld a, (de)
+    cp (hl)
+    jr nz, .ddc_diff
+    inc hl
+    inc de
+    dec bc
+    ld a, b
+    or c
+    jr nz, .ddc_loop
+    scf
+    ret
+.ddc_diff:
+    scf
+    ret
+
+.dd_format:
+    ; DD_FORMAT (0x008F): format a logical track.
+    ;   In:  B = CP/M bank, C = unit, D = logical track, E = filler,
+    ;        HL = header table (track, head, sector, size per sector),
+    ;        IX = XDPB
+    ;   Out: carry set OK; carry clear + A = error
+    ld a, b
+    cp 1
+    jp nz, .dd2_bad_bank
+    ld a, c
+    and 0x03
+    jp nz, .dd2_not_ready
+    ld ix, (xbios_ret_ix)
+    ld a, ixh
+    cp 0xC0
+    jp c, .dd2_bad_bank
+    ld a, (ix + XDPB_SECTS)
+    or a
+    jp z, .dd2_bad_bank
+    cp 10
+    jr c, .ddf_sc_ok
+    ld a, 9
+.ddf_sc_ok:
+    ld (dd_format_sc), a
+    ld a, d
+    ld (dd_track), a
+    ld a, e
+    ld (dd_filler), a
+    ld (dd_user_ptr), hl
+
+    ; Copy 4 * SC header bytes to the common buffer.
+    ld a, (dd_format_sc)
+    add a, a
+    add a, a
+    ld c, a
+    ld b, 0
+    ld hl, (dd_user_ptr)
+    ld de, dd_format_hdr
+    call copy_from_user
+
+    call flush_deblock_body
+    jp nz, .dd2_write_error        ; lint: ignore - flush returns Z/NZ
+    ld a, 0xFF
+    ld (deblock_drv), a
+    xor a
+    ld (deblock_dirty), a
+
+    ld ix, (xbios_ret_ix)
+    ld a, (dd_track)
+    ld d, a
+    call .dd_map_track
+    ld (dd_cylinder), a
+    xor a
+    ld (disk_drive), a
+    call motor_on
+    ld a, (dd_cylinder)
+    call fdc_seek
+    jp nz, .dd2_seek_error      ; lint: ignore - fdc_seek returns Z/NZ
+
+    ld ix, (xbios_ret_ix)
+    ld a, (dd_format_sc)
+    ld b, a                       ; SC
+    ld c, (ix + XDPB_GAP2)        ; GPL
+    ld a, (dd_filler)
+    ld d, a
+    ld a, (ix + XDPB_PSH)         ; N
+    ld hl, dd_format_hdr
+    call fdc_format_track
+    jp nz, .ddf_fail
+    scf
+    ret
+.ddf_fail:
+    or a
+    ret
+
+; Shared READ/WRITE/CHECK setup.  On success: dd_phys_sec and dd_user_ptr
+; set, disk_drive=0, motor on and the head on the right cylinder.
+;   Out: Z success, NZ + A = error
+.dd_prepare:
+    ld a, b
+    cp 1
+    jr nz, .ddp_bad_bank
+    ld a, c
+    and 0x03
+    jr nz, .ddp_not_ready
+    ld a, d
+    ld (dd_track), a
+    ld a, e
+    ld (dd_sector), a
+    ld (dd_user_ptr), hl
+
+    call flush_deblock_body
+    jr nz, .ddp_write_error     ; lint: ignore - flush returns Z/NZ
+    ld a, 0xFF
+    ld (deblock_drv), a
+    xor a
+    ld (deblock_dirty), a
+
+    ld ix, (xbios_ret_ix)
+    ld a, ixh
+    cp 0xC0
+    jr c, .ddp_bad_bank
+    ld a, (dd_sector)
+    ld e, a
+    call .dd_map_sector
+    ld (dd_phys_sec), a
+    ld a, (dd_track)
+    ld d, a
+    call .dd_map_track
+    ld (dd_cylinder), a
+
+    xor a
+    ld (disk_drive), a
+    call motor_on
+    ld a, (dd_cylinder)
+    call fdc_seek
+    jr nz, .ddp_seek_error      ; lint: ignore - fdc_seek returns Z/NZ
+    xor a
+    ret
+.ddp_bad_bank:
+    ld a, 9                       ; unsuitable: only CP/M bank 1 supported
+    or a
+    ret
+.ddp_not_ready:
+    xor a
+    ret
+.ddp_seek_error:
+    ld a, 2
+    or a
+    ret
+.ddp_write_error:
+    ld a, 1
+    or a
+    ret
+
+; D = logical track, IX = XDPB; returns A = physical cylinder and sets
+; disk_head from the XDPB sidedness.
+.dd_map_track:
+    ld a, (ix + XDPB_SIDES)
+    cp 1
+    jr z, .dmt_alt
+    xor a
+    ld (disk_head), a
+    ld a, d
+    ret
+.dmt_alt:
+    ld a, d
+    and 1
+    ld (disk_head), a
+    ld a, d
+    srl a
+    ret
+
+; E = logical sector, IX = XDPB; returns A = physical sector ID.
+.dd_map_sector:
+    ld a, e
+    ld b, (ix + XDPB_PSH)
+.dms_shift:
+    dec b
+    jp m, .dms_done
+    srl a
+    jr .dms_shift
+.dms_done:
+    add a, (ix + XDPB_FIRST)
+    ret
+
+.dd2_bad_bank:
+    ld a, 9
+    or a
+    ret
+.dd2_not_ready:
+    xor a
+    ret
+.dd2_seek_error:
+    ld a, 2
+    or a
+    ret
+.dd2_data_error:
+    ld a, 3
+    or a
+    ret
+.dd2_write_error:
+    ld a, 1
+    or a
     ret
 
 .dd_drive_status:

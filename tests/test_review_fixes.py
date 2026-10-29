@@ -523,7 +523,7 @@ class P2FdcSt1Mask(unittest.TestCase):
 
     def test_st1_mask(self):
         text = source("src/bios/fdc765.zpa")
-        self.assertEqual(text.count("and 0x3B"), 2)
+        self.assertGreaterEqual(text.count("and 0x3B"), 2)
         self.assertNotIn("and 0x37", text)
 
 

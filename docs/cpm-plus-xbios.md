@@ -42,6 +42,11 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | ID | Name | Input | Output |
 |----|------|-------|--------|
 | `0x80` | `DD_INIT` | - | Reset the disc driver to defaults and turn the motor off. |
+| `0x86` | `DD_READ_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = destination, IX = XDPB | Reads one 512-byte sector.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted. |
+| `0x89` | `DD_WRITE` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = source, IX = XDPB | Writes one 512-byte sector.  Carry set OK; carry clear + A = error (1 = write protected).  Only bank 1 (TPA) is accepted. |
+| `0x8C` | `DD_CHECK_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = compare buffer, IX = XDPB | Reads the sector and compares it with the buffer.  Carry set + Z set if equal, carry set + Z clear if different, carry clear + A = error. |
+| `0x8F` | `DD_FORMAT` | B = CP/M bank, C = unit, D = logical track, E = filler, HL = header table (track, head, sector, size), IX = XDPB | Formats one track with the uPD765A FORMAT TRACK command.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted. |
+| `0x92` | `DD_LOGIN` | C = unit, IX = destination XDPB in common memory | Re-detects the format, copies the XDPB, and returns carry set + A = disc type, DE = ALV size, HL = hash-table size; carry clear + A = error. |
 | `0x95` | `DD_SEL_FORMAT` | A = format 0-3, IX = destination XDPB in common memory | Carry set + A = format, or carry clear + A = 6 (bad format).  Loads one of the four standard XDPB templates. |
 | `0x98` | `DD_DRIVE_STATUS` | C = unit (bits 1-0), head (bit 2) | A = ST3.  Unit 0 returns `0x30` (Ready + Track 0 + unit 0); other units return `0x01` (not fitted). |
 | `0x9B` | `DD_READ_ID` | C = unit, D = logical track, IX = XDPB | Carry set + A = sector number, or carry clear + A = error (0 not ready, 2 seek, 3 data, 5 missing address mark); HL = `dd_results` (count + ST0 ST1 ST2 C H R N). |
@@ -65,15 +70,22 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 
 All six documented TE operations (`TE_ASK`, `TE_RESET`, `TE_SET_INK`,
 `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`) have handlers, and
-the phase-1 disc calls above are implemented (`DD_INIT`, `DD_SEL_FORMAT`,
+the disc calls above are implemented: phase 1 (`DD_INIT`, `DD_SEL_FORMAT`,
 `DD_READ_ID`, `DD_L_ON_MOTOR`, `DD_L_T_OFF_MOTOR`, `DD_OFF_MOTOR`,
-`DD_L_SEEK`).
+`DD_L_SEEK`) and phase 2 (`DD_LOGIN`, `DD_READ_SECTOR`, `DD_WRITE`,
+`DD_CHECK_SECTOR`, `DD_FORMAT`).
 
-Still unimplemented: the rest of the disc driver (`DD_SETUP`,
-`DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_LOGIN`,
-`DD_L_DPB`, `DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`), the serial calls
-(`CD_SA_*`), the keyboard calls (`KM_*`) and `FIND_FID`.  Unknown IDs
-return `A = 0xFF`.
+Still unimplemented: the low-level disc calls (`DD_SETUP`, `DD_L_DPB`,
+`DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`), the serial calls (`CD_SA_*`),
+the keyboard calls (`KM_*`) and `FIND_FID`.  Unknown IDs return
+`A = 0xFF`.
+
+`DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` currently
+accept only CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
+`DD_FORMAT` uses the XDPB's physical sector count, `PSH` size code and
+format gap, and is destructive by definition.  `DD_LOGIN`'s probe falls
+back to the standard type-0 template if the READ ID/boot-sector read
+fails, so it does not yet propagate the 0/2/3/4/5 login error codes.
 
 `SCR_RUN_ROUTINE` only supports routines in common memory (`C000-F5FF`).
 The +3 memory map used here pages bank 5 (the screen) over `4000-7FFF` in
@@ -88,6 +100,11 @@ implemented TE call; `7.RUN` checks the `SCR_RUN_ROUTINE` register
 round-trip and leaves `5Ah` in the bottom-right attribute cell (bank 5,
 `5AFFh`).  `8.DISK` runs the phase-1 disc calls and verifies the standard
 XDPB template, the motor/seek path and the `DD_READ_ID` result buffer.
+`9.RW` exercises `DD_LOGIN`, `DD_READ_SECTOR`, `DD_WRITE` and
+`DD_CHECK_SECTOR` against the boot sector (writing the same data back).
+`10.FMT` is an optional destructive `DD_FORMAT` test: it runs only when
+the harness sets the `DC00h` magic byte, formats track 39 and checks the
+`0xE5` fill.  The smoke runner does this on a scratch image.
 
 ## Calling from a .COM program
 

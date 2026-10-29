@@ -270,13 +270,29 @@ set.
   smoke runner requires `8.DISK..OK`.
   Files: `src/bios/bios.zpa`, `src/bios/common.zpa`, `src/test/xtetest.asm`,
   `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
+- [x] **XBIOS disc calls (phase 2).** `DD_LOGIN` re-detects the format
+  (ignoring the XDPB Freeze flag), copies the XDPB and returns the disc
+  type, ALV size and hash-table size.  `DD_READ_SECTOR` and `DD_WRITE`
+  transfer 512-byte sectors between the disc and the TPA through the
+  deblock buffer; `DD_CHECK_SECTOR` compares a sector with a caller
+  buffer; `DD_FORMAT` drives the uPD765A FORMAT TRACK command from a
+  9-entry header table.  Sectors/format currently accept only CP/M bank 1.
+  `XTETEST` test 9 covers login/read/write/check and the format error path;
+  test 10 is an optional destructive format test, and the smoke runner
+  runs it on a scratch image and verifies the filler with `sector_read`.
+  Files: `src/bios/bios.zpa`, `src/bios/fdc765.zpa`,
+  `src/bios/common.zpa`, `src/test/xtetest.asm`,
+  `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
 
 ## P3 — Remaining follow-ups
 
 - `SCR_RUN_ROUTINE` can only run routines in common memory (`C000-F5FF`);
   screen mode pages the rest of the TPA out.
-- The remaining disc calls are still stubs: `DD_SETUP`, `DD_READ_SECTOR`,
-  `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_LOGIN`, `DD_L_DPB`,
+- The low-level disc calls are still stubs: `DD_SETUP`, `DD_L_DPB`,
   `DD_L_XDPB`, `DD_L_READ` and `DD_L_WRITE`.
+- `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` only
+  accept CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
+- `DD_LOGIN` falls back to the type-0 template if the probe fails; it does
+  not yet return the documented 0/2/3/4/5 login errors.
 - `CD_SA_*` (no serial model), `KM_*` and `FIND_FID` remain unimplemented.
   Unknown IDs return `A = 0xFF`.

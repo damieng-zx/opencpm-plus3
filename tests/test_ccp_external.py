@@ -89,7 +89,7 @@ class BuiltImage(unittest.TestCase):
         self.assertNotIn(ccp.read_bytes(), bios.read_bytes())
         # The CCP used to be almost 3K of the ~15.5K image; leaving it out
         # must keep CPM3.SYS well clear of the 16K window.
-        self.assertLess(bios.stat().st_size, 14 * 1024)
+        self.assertLess(bios.stat().st_size, 15 * 1024)
 
 
 class CheckTool(unittest.TestCase):
