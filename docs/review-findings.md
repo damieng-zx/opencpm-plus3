@@ -1,17 +1,19 @@
 # Code Review Findings
 
 Recorded from the full-project review. Issues 1–20 are tracked as the
-"fix one per commit" set; P2 items are candidates for later.
+"fix one per commit" set and are all closed; the P2 candidates are also
+addressed.  P3 records the documented limitations and the remaining
+extended-BIOS gaps.
 
 Status: `[ ]` open, `[x]` fixed.
 
 ## P0 — Critical
 
 - [x] **1. TPA stack top is above `COMMON_BASE`.**
-  The CCP loader sets `SP = word at 0006h` (`bdos_stub`, F723) and
+  The CCP loader sets `SP = word at 0006h` (`bdos_stub`, F737) and
   `scb_tpa` is patched to `bdos_stub`.  The stack therefore grows down
-  through `bv_shim` (F71B–F722), `bv_tramp`, `bios_visible`, and the SCB
-  (F600–F663).  The first TPA `CALL 5` overwrites `bv_shim`'s final `JP`
+  through `bv_shim` (F724–F736), `bv_tramp`, `bios_visible` (F664), and the
+  SCB (F600–F663).  The first TPA `CALL 5` overwrites `bv_shim`'s final `JP`
   target.  `0006h` is the BDOS entry, not the TPA top.
   Files: `src/ccp/miniccp.zpa`, `src/bios/bios.zpa`, `src/bios/common.zpa`,
   `docs/API.md`, `docs/boot.md`.
@@ -93,7 +95,7 @@ Status: `[ ]` open, `[x]` fixed.
 
 - [x] **14. COM loader FCB sits at F5DC (inside the TPA) and can be
   overwritten mid-load.**  The FCB now lives in common memory
-  (`ccp_fcb`, asserted at 0xFB91), above `COMMON_BASE`.
+  (`ccp_fcb`, asserted at 0xFB7F), above `COMMON_BASE`.
   Files: `src/ccp/miniccp.zpa`, `src/bios/common.zpa`.
 
 - [x] **15. FDC has no timeouts and ignores EXM in the 512-byte transfer
@@ -162,8 +164,8 @@ set.
   Files: `src/bios/fdc765.zpa`, `src/bios/bios.zpa`.
 
 - **`SYSTEST` computed BIOS entries as 4×fn, not 3×fn.**  The test
-  therefore called 0xF6C8 (mid-trampoline) for fn 25 and landed in its own
-  `fail` label.  It now computes 3×fn.  `MOVE` is also preceded by
+  therefore called one byte into the trampoline for fn 25 and landed in
+  its own `fail` label.  It now computes 3×fn.  `MOVE` is also preceded by
   `XMOVE` (fn 29) selecting TPA→TPA banks, since `MOVE` executes in the
   bank chosen by `XMOVE`.
   File: `src/test/systest.asm`.
@@ -252,14 +254,16 @@ set.
   pages bank 5 in and runs a common-memory routine with IX/IY pass-through.
   `userf_stub` now saves caller A for `TE_SET_INK` and round-trips IX/IY.
   `XTETEST.COM` covers all six calls (including a `D000h` staged routine
-  that writes the bottom-right attribute) and `tests/test_xbios_te.py`
-  pins the dispatch IDs and contracts.
+  that writes the bottom-right attribute), `tests/test_xbios_te.py` pins
+  the dispatch IDs and contracts, and `tools/zx84_smoke.py` runs
+  `XTETEST` and checks the marker and input-pass-through flag.
   Files: `src/bios/bios.zpa`, `src/bios/screen.zpa`, `src/bios/common.zpa`,
-  `src/test/xtetest.asm`, `tests/test_xbios_te.py`.
+  `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
 
 ## P3 — Remaining follow-ups
 
 - `SCR_RUN_ROUTINE` can only run routines in common memory (`C000-F5FF`);
   screen mode pages the rest of the TPA out.
-- The non-TE extended BIOS entries (`DD_*`, `CD_SA_*`, `KM_*`, `FIND_FID`)
-  remain unimplemented.
+- The rest of the extended BIOS jumpblock remains unimplemented: the
+  `DD_*` entries other than `DD_DRIVE_STATUS` (`0x98`), `CD_SA_*`,
+  `KM_*` and `FIND_FID`.  Unknown IDs return `A = 0xFF`.

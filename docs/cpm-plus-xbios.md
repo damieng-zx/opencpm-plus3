@@ -58,8 +58,9 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 
 All six documented TE operations (`TE_ASK`, `TE_RESET`, `TE_SET_INK`,
 `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`) have handlers.  The
-remaining extended BIOS entries (`DD_*`, `CD_SA_*`, `KM_*`, `FIND_FID`)
-are not implemented; unknown IDs return `A = 0xFF`.
+rest of the extended BIOS jumpblock is not implemented: the `DD_*` entries
+other than `DD_DRIVE_STATUS` (`0x98`), `CD_SA_*`, `KM_*` and `FIND_FID`.
+Unknown IDs return `A = 0xFF`.
 
 `SCR_RUN_ROUTINE` only supports routines in common memory (`C000-F5FF`).
 The +3 memory map used here pages bank 5 (the screen) over `4000-7FFF` in
