@@ -57,6 +57,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | `0xA7` | `DD_L_T_OFF_MOTOR` | - | Arm the motor-off timeout (about one second).  All registers and flags preserved. |
 | `0xAA` | `DD_OFF_MOTOR` | - | Turn the motor off immediately. |
 | `0xAD` | `DD_L_READ` | HL = parameter block in common memory: bank, buffer, byte count, command count, command bytes | Raw uPD765A read-type command driver: sends the command bytes, reads the data phase into the buffer and returns the result bytes in `dd_results`.  Only CP/M bank 1 (TPA) is supported. |
+| `0xB0` | `DD_L_WRITE` | HL = parameter block in common memory: bank, buffer, byte count, command count, command bytes | Raw uPD765A write-type command driver: sends the command bytes, writes the data phase from the buffer and returns the result bytes.  Only CP/M bank 1 (TPA) is supported. |
 | `0xB3` | `DD_L_SEEK` | C = unit (bits 0-1) + head (bit 2), D = physical track, IX = XDPB | Carry set on success, or carry clear + A = 0 (not ready) / 2 (seek fail).  The motor must already be running. |
 | `0xBF` | `TE_ASK` | - | B = viewport top row, C = viewport left column, D = height - 1, E = width - 1, H = cursor row, L = cursor column.  The viewport is always the full screen, so B = C = 0, D = 23 and E = current columns - 1. |
 | `0xC2` | `TE_RESET` | - | Re-initialise the terminal emulator: restore the default white-on-blue palette, wrapping and page mode, clear the screen and home the cursor.  The current screen width is kept. |
@@ -78,11 +79,10 @@ the disc calls above are implemented: phase 1 (`DD_INIT`, `DD_SETUP`,
 `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_L_ON_MOTOR`, `DD_L_T_OFF_MOTOR`,
 `DD_OFF_MOTOR`, `DD_L_SEEK`) and phase 2 (`DD_LOGIN`, `DD_READ_SECTOR`,
 `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_L_DPB`, `DD_L_XDPB`,
-`DD_L_READ`).
+`DD_L_READ`, `DD_L_WRITE`).
 
-Still unimplemented: the low-level write driver (`DD_L_WRITE`), the serial
-calls (`CD_SA_*`), the keyboard calls (`KM_*`) and `FIND_FID`.  Unknown
-IDs return `A = 0xFF`.
+Still unimplemented: the serial calls (`CD_SA_*`), the keyboard calls
+(`KM_*`) and `FIND_FID`.  Unknown IDs return `A = 0xFF`.
 
 `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` currently
 accept only CP/M bank 1 (the TPA); other bank numbers return `A = 9`.

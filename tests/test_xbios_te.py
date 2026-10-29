@@ -500,6 +500,33 @@ class DdLRead(unittest.TestCase):
         self.assertIn("14.LREAD..OK", smoke)
 
 
+class DdLWrite(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xB0", dispatch)
+        self.assertIn("jp z, .dd_l_write", dispatch)
+
+    def test_handler_writes_from_user(self):
+        body = handler_body(".dd_l_write:", "; --- Phase-2 disc calls ---")
+        self.assertIn("dd_param_ptr", body)
+        self.assertIn("dd_xfer_ptr", body)
+        self.assertIn("dd_xfer_left", body)
+        self.assertIn("call .dd_send_cmd", body)
+        self.assertIn("call read_user_byte", body)
+        self.assertIn("call fdc_send_byte", body)
+        self.assertIn("call .dd_drain_results", body)
+        self.assertIn("deblock_drv", body)      # invalidate cache
+        self.assertIn(".ddlw_no_xfer", body)
+
+    def test_tester_covers_lwrite(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("DD_L_WRITE", tester)
+        self.assertIn("15.LWRITE", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("15.LWRITE..OK", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

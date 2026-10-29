@@ -660,7 +660,7 @@ xbios_handler:
     cp 0xE6
     jr z, .cd_info
     cp 0xC5
-    jr z, .te_stl_ask
+    jp z, .te_stl_ask
     cp 0xC8
     ret z                          ; TE_STL_ON_OFF — swallow, no status line
     cp 0xCB
@@ -693,6 +693,8 @@ xbios_handler:
     jp z, .dd_off_motor
     cp 0xAD
     jp z, .dd_l_read
+    cp 0xB0
+    jp z, .dd_l_write
     cp 0xB3
     jp z, .dd_l_seek
     cp 0x86
@@ -1525,6 +1527,62 @@ xbios_handler:
 .ddr_done:
     ld a, (dd_res_idx)
     ld (dd_results), a
+    ret
+
+.dd_l_write:
+    ; DD_L_WRITE (0x00B0): raw uPD765A write-type command driver.
+    ;   In:  HL = parameter block in common memory:
+    ;          +0 CP/M bank, +1 buffer, +3 byte count,
+    ;          +5 command-byte count, +6 command bytes
+    ;   Out: HL = dd_results (count + result bytes)
+    ; Only CP/M bank 1 (TPA) is supported.
+    ld (dd_param_ptr), hl
+    ld a, (hl)
+    cp 1
+    jp nz, .ddlw_no_xfer
+    inc hl
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    ld (dd_xfer_ptr), de
+    inc hl
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    ld (dd_xfer_left), de
+
+    ld hl, (dd_param_ptr)
+    call .dd_send_cmd
+
+    ld hl, (dd_xfer_left)
+    ld a, h
+    or l
+    jr z, .ddlw_results
+.ddlw_loop:
+    ld de, (dd_xfer_ptr)
+    call read_user_byte
+    call fdc_send_byte
+    ld hl, (dd_xfer_ptr)
+    inc hl
+    ld (dd_xfer_ptr), hl
+    ld hl, (dd_xfer_left)
+    dec hl
+    ld (dd_xfer_left), hl
+    ld a, h
+    or l
+    jr nz, .ddlw_loop
+.ddlw_results:
+    call .dd_drain_results
+    ld a, 0xFF
+    ld (deblock_drv), a
+    xor a
+    ld (deblock_dirty), a
+    ld hl, dd_results
+    ret
+.ddlw_no_xfer:
+    xor a
+    ld (dd_results), a
+    ld hl, dd_results
     ret
 
 ; --- Phase-2 disc calls ---

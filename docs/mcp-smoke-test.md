@@ -15,8 +15,8 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`,
 `DD_CHECK_SECTOR`, `DD_FORMAT`, motor on/off/timeout, `DD_L_SEEK`).  The
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
-`11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`, the `5Ah`
-marker in the bottom-right screen attribute
+`11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
+`15.LWRITE..OK`, the `5Ah` marker in the bottom-right screen attribute
 (bank 5, `5AFFh`) and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
 `fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
@@ -254,6 +254,9 @@ sector=1, sector size=512, gap1=42, gap2=82, flags=40h, freeze=FFh.
 Test 14 drives `DD_L_READ` directly: a READ ID command returns seven
 result bytes with a valid R, and a READ DATA command reads the boot sector
 into `D300h` and returns a clean result phase.
+
+Test 15 uses `DD_L_WRITE` with WRITE DATA to write the same boot sector
+back unchanged, then re-reads it with `DD_L_READ` and checks the prefix.
 
 ### BDOS file regression suite
 

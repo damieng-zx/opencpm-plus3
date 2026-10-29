@@ -36,6 +36,7 @@ DD_LOGIN        EQU 0x0092
 DD_L_DPB        EQU 0x009E
 DD_L_XDPB       EQU 0x00A1
 DD_L_READ       EQU 0x00AD
+DD_L_WRITE      EQU 0x00B0
 
 ; ============================================================
 ; Entry
@@ -913,6 +914,104 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 15: DD_L_WRITE ===
+    ld de, msg_t15
+    ld c, 9
+    call BDOS
+
+    xor a
+    ld (t15_ok), a
+
+    ld hl, DD_L_ON_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+    ld hl, DD_L_SEEK
+    ld (userf_dw), hl
+    ld bc, 0
+    ld d, 0
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t15_motor_off
+
+    ; Read sector 1 into D300h with DD_L_READ.
+    ld hl, lread_data_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t15_motor_off
+
+    ; Write the same sector back with DD_L_WRITE (0x45 = WRITE DATA).
+    ld hl, lwrite_data_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_WRITE
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t15_motor_off
+    inc hl
+    inc hl
+    ld a, (hl)                  ; ST1
+    and 0x7B                    ; WP, DE, OR, ND, NW, MA
+    jp nz, .t15_motor_off
+
+    ; Read it back and verify the boot-sector prefix.
+    ld hl, lread_data_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t15_motor_off
+    ld a, (0xD300)
+    or a
+    jp nz, .t15_motor_off
+    ld a, (0xD302)
+    cp 0x28
+    jp nz, .t15_motor_off
+    ld a, (0xD303)
+    cp 9
+    jp nz, .t15_motor_off
+    ld a, (0xD308)
+    cp 0x2A
+    jp nz, .t15_motor_off
+    ld a, (0xD309)
+    cp 0x52
+    jp nz, .t15_motor_off
+
+    ld a, 1
+    ld (t15_ok), a
+
+.t15_motor_off:
+    ld hl, DD_L_T_OFF_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+    ld hl, DD_OFF_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+
+    ld a, (t15_ok)
+    or a
+    ld de, msg_fail
+    jr z, .t15_print
+    ld de, msg_ok
+.t15_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1047,6 +1146,7 @@ res_c: db 0
 t8_ok: db 0
 t9_ok: db 0
 t14_ok: db 0
+t15_ok: db 0
 dd_setup_defaults: db 10, 50, 175, 30, 12, 15, 3
 dd_l_spec: db 0, 0, 40, 9, 2, 1, 3, 2, 42, 82
 
@@ -1062,6 +1162,12 @@ lread_data_pb:
     dw 512
     db 9
     db 0x46, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x2A, 0xFF
+lwrite_data_pb:
+    db 1
+    dw 0xD300
+    dw 512
+    db 9
+    db 0x45, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x2A, 0xFF
 
 
 ; ============================================================
@@ -1083,6 +1189,7 @@ msg_t11:    db 0x0D, 0x0A, "11.SETUP..", '$'
 msg_t12:    db 0x0D, 0x0A, "12.DPB..", '$'
 msg_t13:    db 0x0D, 0x0A, "13.XDPB..", '$'
 msg_t14:    db 0x0D, 0x0A, "14.LREAD..", '$'
+msg_t15:    db 0x0D, 0x0A, "15.LWRITE..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

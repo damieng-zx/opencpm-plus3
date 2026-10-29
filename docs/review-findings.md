@@ -311,12 +311,18 @@ set.
   boot sector.
   Files: `src/bios/bios.zpa`, `src/test/xtetest.asm`,
   `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
+- [x] **XBIOS DD_L_WRITE.** The raw µPD765A write-type driver mirrors
+  `DD_L_READ`: parses the parameter block, sends the command bytes, writes
+  the data phase from the TPA, drains the results and invalidates the
+  deblock cache.  `XTETEST` test 15 writes the boot sector back unchanged
+  and re-reads it.
+  Files: `src/bios/bios.zpa`, `src/test/xtetest.asm`,
+  `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
 
 ## P3 — Remaining follow-ups
 
 - `SCR_RUN_ROUTINE` can only run routines in common memory (`C000-F5FF`);
   screen mode pages the rest of the TPA out.
-- The low-level disc call `DD_L_WRITE` is still a stub.
 - `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` only
   accept CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
 - `DD_LOGIN` falls back to the type-0 template if the probe fails; it does
