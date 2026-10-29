@@ -11,8 +11,10 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 
 `XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry, `TE_RESET`,
 `TE_SET_INK` (including FLASH), `TE_SET_BORDER`, `TE_SET_SPEED` and
-`SCR_RUN_ROUTINE`.  The runner requires `7.RUN..OK`, the `5Ah` marker in
-the bottom-right screen attribute (bank 5, `5AFFh`) and the `D100h`
+`SCR_RUN_ROUTINE`, plus the phase-1 disc calls (`DD_INIT`,
+`DD_SEL_FORMAT`, `DD_READ_ID`, motor on/off/timeout, `DD_L_SEEK`).  The
+runner requires `7.RUN..OK`, `8.DISK..OK`, the `5Ah` marker in the
+bottom-right screen attribute (bank 5, `5AFFh`) and the `D100h`
 input-pass-through flag.
 
 ```text
@@ -202,15 +204,20 @@ type "XTETEST`enter`"
 run 1200
 ```
 
-Require `7.RUN..OK` and `DONE`, with no `FAIL`.  `XTETEST` calls every
-implemented TE entry through `USERF`: `TE_ASK` reports `51x24`, `TE_RESET`
-clears, the ink/border tests change the palette, and `TE_SET_SPEED` is
-accepted.  Test 7 stages a routine at `D000h`, runs it via
-`SCR_RUN_ROUTINE`, checks DE/HL/IX/IY pass-through and leaves:
+Require `7.RUN..OK`, `8.DISK..OK` and `DONE`, with no `FAIL`.  `XTETEST`
+calls every implemented TE entry through `USERF`: `TE_ASK` reports
+`51x24`, `TE_RESET` clears, the ink/border tests change the palette, and
+`TE_SET_SPEED` is accepted.  Test 7 stages a routine at `D000h`, runs it
+via `SCR_RUN_ROUTINE`, checks DE/HL/IX/IY pass-through and leaves:
 
 - `5Ah` in the bottom-right screen attribute (bank 5, offset `1AFFh` for
   flat address `5AFFh`)
 - `01h` in the common-memory flag at `D100h`
+
+Test 8 runs the phase-1 disc calls: it loads the standard XDPB template to
+`D200h`, spins the motor up, seeks track 0, reads the first sector ID and
+checks the result buffer, then stops the motor.  It also verifies that
+`DD_L_ON_MOTOR` and `DD_L_T_OFF_MOTOR` preserve AF/BC/DE/HL.
 
 ### BDOS file regression suite
 

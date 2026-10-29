@@ -417,7 +417,7 @@ class Smoke:
         screen = self.text()
         if "FAIL" in screen:
             raise SmokeError("XTETEST reported a failure:\n" + screen)
-        for needle in ("7.RUN..OK", "DONE"):
+        for needle in ("7.RUN..OK", "8.DISK..OK", "DONE"):
             if needle not in screen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + screen)

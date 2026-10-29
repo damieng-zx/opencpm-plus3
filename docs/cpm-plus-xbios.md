@@ -41,7 +41,14 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 
 | ID | Name | Input | Output |
 |----|------|-------|--------|
+| `0x80` | `DD_INIT` | - | Reset the disc driver to defaults and turn the motor off. |
+| `0x95` | `DD_SEL_FORMAT` | A = format 0-3, IX = destination XDPB in common memory | Carry set + A = format, or carry clear + A = 6 (bad format).  Loads one of the four standard XDPB templates. |
 | `0x98` | `DD_DRIVE_STATUS` | C = unit (bits 1-0), head (bit 2) | A = ST3.  Unit 0 returns `0x30` (Ready + Track 0 + unit 0); other units return `0x01` (not fitted). |
+| `0x9B` | `DD_READ_ID` | C = unit, D = logical track, IX = XDPB | Carry set + A = sector number, or carry clear + A = error (0 not ready, 2 seek, 3 data, 5 missing address mark); HL = `dd_results` (count + ST0 ST1 ST2 C H R N). |
+| `0xA4` | `DD_L_ON_MOTOR` | - | Turn the motor on and wait for spin-up.  All registers and flags preserved. |
+| `0xA7` | `DD_L_T_OFF_MOTOR` | - | Arm the motor-off timeout (about one second).  All registers and flags preserved. |
+| `0xAA` | `DD_OFF_MOTOR` | - | Turn the motor off immediately. |
+| `0xB3` | `DD_L_SEEK` | C = unit (bits 0-1) + head (bit 2), D = physical track, IX = XDPB | Carry set on success, or carry clear + A = 0 (not ready) / 2 (seek fail).  The motor must already be running. |
 | `0xBF` | `TE_ASK` | - | B = viewport top row, C = viewport left column, D = height - 1, E = width - 1, H = cursor row, L = cursor column.  The viewport is always the full screen, so B = C = 0, D = 23 and E = current columns - 1. |
 | `0xC2` | `TE_RESET` | - | Re-initialise the terminal emulator: restore the default white-on-blue palette, wrapping and page mode, clear the screen and home the cursor.  The current screen width is kept. |
 | `0xC5` | `TE_STL_ASK` | - | A = 0, Z set.  Status line is always off. |
@@ -57,10 +64,16 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 ## Not implemented / limitations
 
 All six documented TE operations (`TE_ASK`, `TE_RESET`, `TE_SET_INK`,
-`TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`) have handlers.  The
-rest of the extended BIOS jumpblock is not implemented: the `DD_*` entries
-other than `DD_DRIVE_STATUS` (`0x98`), `CD_SA_*`, `KM_*` and `FIND_FID`.
-Unknown IDs return `A = 0xFF`.
+`TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`) have handlers, and
+the phase-1 disc calls above are implemented (`DD_INIT`, `DD_SEL_FORMAT`,
+`DD_READ_ID`, `DD_L_ON_MOTOR`, `DD_L_T_OFF_MOTOR`, `DD_OFF_MOTOR`,
+`DD_L_SEEK`).
+
+Still unimplemented: the rest of the disc driver (`DD_SETUP`,
+`DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_LOGIN`,
+`DD_L_DPB`, `DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`), the serial calls
+(`CD_SA_*`), the keyboard calls (`KM_*`) and `FIND_FID`.  Unknown IDs
+return `A = 0xFF`.
 
 `SCR_RUN_ROUTINE` only supports routines in common memory (`C000-F5FF`).
 The +3 memory map used here pages bank 5 (the screen) over `4000-7FFF` in
@@ -73,7 +86,8 @@ functions and the VT52-style escape sequences documented in
 [API.md](API.md#6-terminal-screen--keyboard).  `XTETEST.COM` exercises every
 implemented TE call; `7.RUN` checks the `SCR_RUN_ROUTINE` register
 round-trip and leaves `5Ah` in the bottom-right attribute cell (bank 5,
-`5AFFh`).
+`5AFFh`).  `8.DISK` runs the phase-1 disc calls and verifies the standard
+XDPB template, the motor/seek path and the `DD_READ_ID` result buffer.
 
 ## Calling from a .COM program
 

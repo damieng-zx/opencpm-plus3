@@ -95,7 +95,7 @@ Status: `[ ]` open, `[x]` fixed.
 
 - [x] **14. COM loader FCB sits at F5DC (inside the TPA) and can be
   overwritten mid-load.**  The FCB now lives in common memory
-  (`ccp_fcb`, asserted at 0xFB7F), above `COMMON_BASE`.
+  (`ccp_fcb`, asserted at 0xFB8A), above `COMMON_BASE`.
   Files: `src/ccp/miniccp.zpa`, `src/bios/common.zpa`.
 
 - [x] **15. FDC has no timeouts and ignores EXM in the 512-byte transfer
@@ -259,11 +259,24 @@ set.
   `XTETEST` and checks the marker and input-pass-through flag.
   Files: `src/bios/bios.zpa`, `src/bios/screen.zpa`, `src/bios/common.zpa`,
   `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
+- [x] **XBIOS disc calls (phase 1).** `DD_INIT` resets the driver;
+  `DD_SEL_FORMAT` copies one of the four standard XDPB templates;
+  `DD_READ_ID` converts a logical track through the XDPB geometry and
+  returns the result buffer; `DD_L_ON_MOTOR` and `DD_L_T_OFF_MOTOR`
+  preserve AF/BC/DE/HL; `DD_OFF_MOTOR` stops the motor; and `DD_L_SEEK`
+  maps unit/head and returns the documented carry/A status.  `USERF` now
+  saves the caller's AF so the preserving motor calls can restore it.
+  `XTETEST` test 8 exercises the whole path against the boot disk, and the
+  smoke runner requires `8.DISK..OK`.
+  Files: `src/bios/bios.zpa`, `src/bios/common.zpa`, `src/test/xtetest.asm`,
+  `tests/test_xbios_te.py`, `tools/zx84_smoke.py`.
 
 ## P3 — Remaining follow-ups
 
 - `SCR_RUN_ROUTINE` can only run routines in common memory (`C000-F5FF`);
   screen mode pages the rest of the TPA out.
-- The rest of the extended BIOS jumpblock remains unimplemented: the
-  `DD_*` entries other than `DD_DRIVE_STATUS` (`0x98`), `CD_SA_*`,
-  `KM_*` and `FIND_FID`.  Unknown IDs return `A = 0xFF`.
+- The remaining disc calls are still stubs: `DD_SETUP`, `DD_READ_SECTOR`,
+  `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_LOGIN`, `DD_L_DPB`,
+  `DD_L_XDPB`, `DD_L_READ` and `DD_L_WRITE`.
+- `CD_SA_*` (no serial model), `KM_*` and `FIND_FID` remain unimplemented.
+  Unknown IDs return `A = 0xFF`.

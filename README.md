@@ -13,8 +13,9 @@ for this project.
   `ESC b`/`ESC c`, wrap control (`ESC v`/`ESC w`), and the `ESC 3`/`ESC 4`
   screen-size and page-mode controls from the +3 CP/M manual.
 - **XBIOS/TE**: the +3 extended BIOS terminal calls `TE_ASK`, `TE_RESET`,
-  `TE_SET_INK`, `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`
-  through BIOS function 30 (`USERF`); see
+  `TE_SET_INK`, `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`, plus
+  the phase-1 disc calls (`DD_INIT`, `DD_SEL_FORMAT`, `DD_READ_ID`, motor
+  on/off/timeout and `DD_L_SEEK`) through BIOS function 30 (`USERF`); see
   [XBIOS/TE Interface](docs/cpm-plus-xbios.md).
 - **Keyboard**: the +3 CP/M matrix — BREAK (`Caps Shift`+`Space`) sends ESC,
   `Caps Shift`+`Symbol` sends control codes, plus the function-key mappings.
@@ -121,8 +122,8 @@ Also supported:
 - `REGTEST` — BDOS register preservation (BC/DE/IX/IY across calls).
 - `SYSTEST` — stack/MOVE/clock, page-zero, TAB and delimiter checks.
 - `TERMTEST` — terminal escape-sequence walkthrough.
-- `XTETEST` — XBIOS/TE self-test (`TE_ASK`, `TE_RESET`, ink, border, speed,
-  `SCR_RUN_ROUTINE`).
+- `XTETEST` — XBIOS self-test (`TE_ASK`, `TE_RESET`, ink, border, speed,
+  `SCR_RUN_ROUTINE`, and the phase-1 disc calls).
 - `B16TEST` — 16-bit block-number file I/O on B: (720K PCW image).
 
 ## Wishlist / TODO

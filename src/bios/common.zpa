@@ -373,6 +373,11 @@ _bc4_stack:
 ; @end
 userf_stub:
     ld (xbios_arg_a), a            ; preserve caller A for XBIOS input
+    ld (xbios_tmp_hl), hl          ; preserve caller AF as a word too
+    push af
+    pop hl
+    ld (xbios_arg_af), hl
+    ld hl, (xbios_tmp_hl)
     ld (xbios_ret_ix), ix          ; caller IX/IY are inputs and the default
     ld (xbios_ret_iy), iy          ; return values for XBIOS calls
     ex (sp), hl                    ; HL = return addr -> inline DW
@@ -813,8 +818,8 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF9B4, "RAMDISK.FID expects copy_record_to_tpa at 0xF9B4"
-    assert copy_record_from_tpa == 0xF9BA, "RAMDISK.FID expects copy_record_from_tpa at 0xF9BA"
+    assert copy_record_to_tpa == 0xF9BF, "RAMDISK.FID expects copy_record_to_tpa at 0xF9BF"
+    assert copy_record_from_tpa == 0xF9C5, "RAMDISK.FID expects copy_record_from_tpa at 0xF9C5"
 
 
 ; ------------------------------------------------------------------
@@ -1047,7 +1052,7 @@ xfer_staging: ds 32
 ; so a large program cannot overwrite it while the stub is still reading.
 ccp_fcb: ds 36
     assert $ - ccp_fcb == 36, "ccp_fcb must be exactly 36 bytes (CP/M FCB format)"
-    assert ccp_fcb == 0xFB7F, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+    assert ccp_fcb == 0xFB8A, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
 
 
 ; BDOS stack (grows downward from bdos_stack label)
@@ -1137,12 +1142,14 @@ common_end equ f40_zero + 128
 
     assert common_end <= 0xFFFF, "Common stub overflows bank 3!"
 
-; USERF caller-A save.  The dispatcher reuses A for the function ID, but
-; some XBIOS calls (TE_SET_INK) take A as an input.  Keep it after the
-; fixed common layout so the RAMDISK.FID copy routines and the staged
-; CCP's FCB address do not move.
-xbios_arg_a: db 0
+; USERF/TE/disc state.  Keep it after the fixed common layout so the
+; RAMDISK.FID copy routines and the staged CCP's FCB address do not move.
+xbios_arg_a: db 0                  ; caller A (TE_SET_INK, DD_SEL_FORMAT)
+xbios_arg_af: dw 0                 ; caller AF (low=F, high=A) for calls
+                                   ; that preserve all registers/flags
 xbios_ret_ix: dw 0                 ; XBIOS IX result (caller IX by default)
 xbios_ret_iy: dw 0                 ; XBIOS IY result (caller IY by default)
 xbios_tmp_hl: dw 0                 ; scratch for SCR_RUN_ROUTINE's call
-    assert xbios_tmp_hl + 2 <= 0x10000, "USERF save area must fit in common memory"
+dd_results: db 0                   ; DD_READ_ID result count
+    ds 7                           ; ST0 ST1 ST2 C H R N
+    assert dd_results + 8 <= 0x10000, "USERF/disc save area must fit in common memory"

@@ -229,8 +229,8 @@ F664  ───────────────────┘
       bdos_stack_base
       bdos_stack equ bdos_stack_base + 128   ◄ SP loads point HERE (top)
       f40_zero equ bdos_stack                ◄ 128-byte zero record
-      xbios_arg_a / xbios_ret_ix / xbios_ret_iy / xbios_tmp_hl
-                                             USERF and TE state
+      xbios_arg_a / xbios_arg_af / xbios_ret_ix / xbios_ret_iy /
+      xbios_tmp_hl / dd_results             USERF, TE and disc state
 FFFF  ────────────────────  hard limit (assert common_end <= 0xFFFF)
 ```
 
@@ -238,9 +238,9 @@ FFFF  ────────────────────  hard limit (
 
 | Address  | What                          | Why pinned                                                       |
 |----------|-------------------------------|------------------------------------------------------------------|
-| `0xF9B4` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa.              |
-| `0xF9BA` | `copy_record_from_tpa`        | Same - assert at common.zpa.                                 |
-| `0xFB7F` | `ccp_fcb`                     | miniccp.zpa `CCP_FCB_ADDR`; assert at common.zpa.            |
+| `0xF9BF` | `copy_record_to_tpa`          | RAMDISK.FID hardcodes it; assert at common.zpa.              |
+| `0xF9C5` | `copy_record_from_tpa`        | Same - assert at common.zpa.                                 |
+| `0xFB8A` | `ccp_fcb`                     | miniccp.zpa `CCP_FCB_ADDR`; assert at common.zpa.            |
 | `bdos_vector` (F600) | itself            | Page zero 0005h/0006h target; (0006h) is the TPA memory ceiling. |
 | SCB offsets `0x05, 0x1A, 0x3A, 0x3C, 0x3E, 0x44, 0x58-0x5C, 0x62` | DRI documented | Programs index off scb_base.    |
 

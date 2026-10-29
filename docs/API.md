@@ -526,7 +526,7 @@ jump table directly:
 | 27 | BNKSEL | A=bank | — | Select bank (0=TPA, else system). |
 | 28 | SETBNK | A=bank | — | Set DMA bank for next I/O. |
 | 29 | XMOVE | B=dst,C=src | — | Set up cross-bank move. |
-| 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions).  Implements `TE_ASK`, `TE_RESET`, `TE_SET_INK`, `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`.  See [XBIOS/TE Interface](cpm-plus-xbios.md). |
+| 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions).  Implements the TE calls plus phase-1 disc calls (`DD_INIT`, `DD_SEL_FORMAT`, `DD_READ_ID`, motor on/off/timeout, `DD_L_SEEK`).  See [XBIOS/TE Interface](cpm-plus-xbios.md). |
 | 31 | — | — | — | Reserved (JP 0). |
 | 32 | SCRMODE | A=32, 51 or 64 | — | Set screen column count (clears screen). |
 
@@ -733,7 +733,7 @@ input_buf:
         ; A=character or 0 if none ready
 ```
 
-### XBIOS terminal-emulator calls
+### XBIOS calls
 
 BIOS function 30 (`USERF`) exposes the +3 extended jumpblock.  Place the
 entry address immediately after the `CALL`:
@@ -746,9 +746,12 @@ entry address immediately after the `CALL`:
 Implemented TE entries: `TE_ASK` (`0x00BF`), `TE_RESET` (`0x00C2`),
 `TE_STL_ASK` (`0x00C5`), `TE_STL_ON_OFF` (`0x00C8`), `TE_SET_INK`
 (`0x00CB`), `TE_SET_BORDER` (`0x00CE`), `TE_SET_SPEED` (`0x00D1`) and
-`SCR_RUN_ROUTINE` (`0x00E9`).  See
-[XBIOS/TE Interface](cpm-plus-xbios.md) for the register contracts,
-colour encoding and the `SCR_RUN_ROUTINE` common-memory limitation.
+`SCR_RUN_ROUTINE` (`0x00E9`).  Phase-1 disc entries: `DD_INIT` (`0x0080`),
+`DD_SEL_FORMAT` (`0x0095`), `DD_READ_ID` (`0x009B`), `DD_L_ON_MOTOR`
+(`0x00A4`), `DD_L_T_OFF_MOTOR` (`0x00A7`), `DD_OFF_MOTOR` (`0x00AA`) and
+`DD_L_SEEK` (`0x00B3`).  See [XBIOS/TE Interface](cpm-plus-xbios.md) for
+the register contracts, colour encoding and the `SCR_RUN_ROUTINE`
+common-memory limitation.
 
 ---
 

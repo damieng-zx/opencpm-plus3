@@ -19,6 +19,15 @@ TE_SET_BORDER   EQU 0x00CE
 TE_SET_SPEED    EQU 0x00D1
 SCR_RUN_ROUTINE EQU 0x00E9
 
+; Phase-1 XBIOS disc entries
+DD_INIT         EQU 0x0080
+DD_SEL_FORMAT   EQU 0x0095
+DD_READ_ID      EQU 0x009B
+DD_L_ON_MOTOR   EQU 0x00A4
+DD_L_T_OFF_MOTOR EQU 0x00A7
+DD_OFF_MOTOR    EQU 0x00AA
+DD_L_SEEK       EQU 0x00B3
+
 ; ============================================================
 ; Entry
 ; ============================================================
@@ -278,6 +287,138 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 8: phase-1 XBIOS disc calls ===
+    ld de, msg_t8
+    ld c, 9
+    call BDOS
+
+    xor a
+    ld (t8_ok), a
+
+    ; DD_INIT
+    ld hl, DD_INIT
+    ld (userf_dw), hl
+    call userf_trampoline
+
+    ; DD_SEL_FORMAT: format 0 (+3/PCW SS), XDPB at D200h
+    ld hl, DD_SEL_FORMAT
+    ld (userf_dw), hl
+    xor a
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t8_done
+
+    ; SPT=36, BSH=3, BLM=7 at D200h..D203h
+    ld a, (0xD200)
+    cp 36
+    jp nz, .t8_done
+    ld a, (0xD201)
+    or a
+    jp nz, .t8_done
+    ld a, (0xD202)
+    cp 3
+    jp nz, .t8_done
+    ld a, (0xD203)
+    cp 7
+    jp nz, .t8_done
+
+    ; DD_L_ON_MOTOR must preserve AF/BC/DE/HL
+    ld hl, DD_L_ON_MOTOR
+    ld (userf_dw), hl
+    ld bc, 0x1234
+    ld de, 0x5678
+    ld hl, 0x9ABC
+    ld a, 0x5A
+    scf
+    call userf_trampoline
+    jp nc, .t8_done
+    cp 0x5A
+    jp nz, .t8_done
+    ld a, b
+    cp 0x12
+    jp nz, .t8_done
+    ld a, d
+    cp 0x56
+    jp nz, .t8_done
+    ld a, h
+    cp 0x9A
+    jp nz, .t8_done
+
+    ; DD_L_SEEK: unit 0, head 0, track 0
+    ld hl, DD_L_SEEK
+    ld (userf_dw), hl
+    ld bc, 0
+    ld d, 0
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t8_done
+
+    ; DD_READ_ID: unit 0, logical track 0
+    ld hl, DD_READ_ID
+    ld (userf_dw), hl
+    ld bc, 0
+    ld d, 0
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t8_done
+    cp 1                        ; READ ID returns the first sector found
+    jp c, .t8_done
+    cp 10                       ; +3 sectors are numbered 1-9
+    jp nc, .t8_done
+    ld a, (hl)                  ; result count
+    cp 7
+    jp nz, .t8_done
+    ld de, 6
+    add hl, de
+    ld a, (hl)                  ; R
+    cp 1
+    jp c, .t8_done
+    cp 10
+    jp nc, .t8_done
+
+    ; DD_L_T_OFF_MOTOR must preserve AF/BC/DE/HL
+    ld hl, DD_L_T_OFF_MOTOR
+    ld (userf_dw), hl
+    ld bc, 0x1234
+    ld de, 0x5678
+    ld hl, 0x9ABC
+    ld a, 0x5A
+    scf
+    call userf_trampoline
+    jp nc, .t8_done
+    cp 0x5A
+    jp nz, .t8_done
+    ld a, b
+    cp 0x12
+    jp nz, .t8_done
+    ld a, d
+    cp 0x56
+    jp nz, .t8_done
+    ld a, h
+    cp 0x9A
+    jp nz, .t8_done
+
+    ld a, 1
+    ld (t8_ok), a
+
+.t8_done:
+    ; Always stop the motor, even after a failure.
+    ld hl, DD_L_T_OFF_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+    ld hl, DD_OFF_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+
+    ld a, (t8_ok)
+    or a
+    ld de, msg_fail
+    jr z, .t8_print
+    ld de, msg_ok
+.t8_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -409,6 +550,7 @@ res_w: db 0
 res_h: db 0
 res_r: db 0
 res_c: db 0
+t8_ok: db 0
 
 
 ; ============================================================
@@ -423,6 +565,7 @@ msg_t5:     db 0x0D, 0x0A, "5.BORDER blue..", '$'
 msg_t5b:    db "5b.SPEED..", '$'
 msg_t6:     db "6.RESET..", '$'
 msg_t7:     db "7.RUN..", '$'
+msg_t8:     db 0x0D, 0x0A, "8.DISK..", '$'
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

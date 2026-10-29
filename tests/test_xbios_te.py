@@ -185,6 +185,95 @@ class ScrRunRoutine(unittest.TestCase):
         self.assertIn("ld (0xD100), a", text)
 
 
+class DiscPhase1(unittest.TestCase):
+    def test_dispatch_ids(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        for entry, target in (
+            ("0x80", ".dd_init"),
+            ("0x95", ".dd_sel_format"),
+            ("0x9B", ".dd_read_id"),
+            ("0xA4", ".dd_l_on_motor"),
+            ("0xA7", ".dd_l_t_off_motor"),
+            ("0xAA", ".dd_off_motor"),
+            ("0xB3", ".dd_l_seek"),
+        ):
+            self.assertIn(f"cp {entry}", dispatch)
+            self.assertIn(f"jp z, {target}", dispatch)
+
+    def test_dd_init_resets_driver(self):
+        body = handler_body(".dd_init:", ".dd_sel_format:")
+        self.assertIn("call fdc_init", body)
+
+    def test_dd_sel_format_copies_standard_xdpb(self):
+        body = handler_body(".dd_sel_format:", ".dd_read_id:")
+        self.assertIn("ld a, (xbios_arg_a)", body)
+        self.assertIn("call xdpb_table_offset", body)
+        self.assertIn("ld de, xdpb_std_table", body)
+        self.assertIn("ld bc, 27", body)
+        self.assertIn("scf", body)
+        self.assertIn(".dsf_bad", body)
+
+    def test_dd_read_id_uses_xdpb_geometry(self):
+        body = handler_body(".dd_read_id:", ".dd_l_on_motor:")
+        self.assertIn("(ix + XDPB_SIDES)", body)
+        self.assertIn("FDC_READ_ID", body)
+        self.assertIn("ld hl, dd_results + 1", body)
+        self.assertIn("ld (dd_results), a", body)
+        self.assertIn("dd_results + 6", body)
+        self.assertIn(".dri_not_ready", body)
+        self.assertIn(".dri_seek_fail", body)
+
+    def test_motor_calls_preserve_registers_and_flags(self):
+        body = handler_body(".dd_l_on_motor:", ".dd_l_t_off_motor:")
+        self.assertIn("call motor_on", body)
+        self.assertIn("ld bc, (xbios_arg_af)", body)
+        self.assertIn("pop af", body)
+        self.assertIn("pop bc", body)
+
+        body = handler_body(".dd_l_t_off_motor:", ".dd_off_motor:")
+        self.assertIn("MOTOR_OFF_DELAY", body)
+        self.assertIn("ld (motor_countdown), a", body)
+        self.assertIn("ld bc, (xbios_arg_af)", body)
+        self.assertIn("pop af", body)
+
+    def test_dd_off_motor(self):
+        body = handler_body(".dd_off_motor:", ".dd_l_seek:")
+        self.assertIn("call motor_off", body)
+
+    def test_dd_l_seek_maps_unit_and_head(self):
+        body = handler_body(".dd_l_seek:", ".dd_drive_status:")
+        self.assertIn("and 0x03", body)
+        self.assertIn("ld (disk_drive), a", body)
+        self.assertIn("ld (disk_head), a", body)
+        self.assertIn("call fdc_seek", body)
+        self.assertIn("scf", body)
+        self.assertIn(".dls_not_ready", body)
+        self.assertIn(".dls_seek_fail", body)
+
+    def test_userf_saves_caller_af(self):
+        text = source("src/bios/common.zpa")
+        body = text[text.index("userf_stub:"):text.index("write_1ffd:")]
+        self.assertIn("push af", body)
+        self.assertIn("pop hl", body)
+        self.assertIn("ld (xbios_arg_af), hl", body)
+
+    def test_tester_covers_phase1(self):
+        text = source("src/test/xtetest.asm")
+        for name, addr in (
+            ("DD_INIT", "0x0080"),
+            ("DD_SEL_FORMAT", "0x0095"),
+            ("DD_READ_ID", "0x009B"),
+            ("DD_L_ON_MOTOR", "0x00A4"),
+            ("DD_L_T_OFF_MOTOR", "0x00A7"),
+            ("DD_OFF_MOTOR", "0x00AA"),
+            ("DD_L_SEEK", "0x00B3"),
+        ):
+            self.assertRegex(text, rf"{name}\s+EQU\s+{addr}")
+        self.assertIn("8.DISK", text)
+        self.assertIn("DD_READ_ID", text)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

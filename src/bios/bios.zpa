@@ -646,6 +646,20 @@ xbios_handler:
     jp z, .scr_run_routine
     cp 0x98
     jp z, .dd_drive_status
+    cp 0x80
+    jp z, .dd_init
+    cp 0x95
+    jp z, .dd_sel_format
+    cp 0x9B
+    jp z, .dd_read_id
+    cp 0xA4
+    jp z, .dd_l_on_motor
+    cp 0xA7
+    jp z, .dd_l_t_off_motor
+    cp 0xAA
+    jp z, .dd_off_motor
+    cp 0xB3
+    jp z, .dd_l_seek
     ld a, 0xFF                     ; unknown XBIOS ID
     ret
 
@@ -819,6 +833,200 @@ xbios_handler:
     pop hl
     pop de
     pop af
+    ret
+
+.dd_init:
+    ; DD_INIT (0x0080): reset the disc driver, motor off.
+    ;   Out: AF BC DE HL corrupt
+    call fdc_init
+    ret
+
+.dd_sel_format:
+    ; DD_SEL_FORMAT (0x0095): load a standard XDPB.
+    ;   In:  A = format 0-3, IX = destination XDPB in common memory
+    ;   Out: carry set + A = format, or carry clear + A = 6 (bad format)
+    ;        BC corrupt; DE/HL/IX/IY preserved
+    ld a, (xbios_arg_a)            ; A = caller's requested format
+    ld ix, (xbios_ret_ix)
+    cp 4
+    jr nc, .dsf_bad
+    push de
+    push hl
+    call xdpb_table_offset         ; HL = format * 27
+    ld de, xdpb_std_table
+    add hl, de
+    push ix
+    pop de
+    ld bc, 27
+    ldir
+    pop hl
+    pop de
+    ld a, (xbios_arg_a)
+    scf
+    ret
+.dsf_bad:
+    ld a, 6
+    or a
+    ret
+
+.dd_read_id:
+    ; DD_READ_ID (0x009B): read the first sector ID on a logical track.
+    ;   In:  C = unit, D = logical track, IX = XDPB
+    ;   Out: carry set + A = sector number, or carry clear + A = error
+    ;        (0 not ready, 2 seek fail, 3 data error, 5 missing address
+    ;        mark); HL = dd_results (count + ST0 ST1 ST2 C H R N)
+    xor a
+    ld (dd_results), a
+    ld a, c
+    and 0x03
+    jp nz, .dri_not_ready
+    ld ix, (xbios_ret_ix)
+    ld a, ixh
+    cp 0xC0
+    jp c, .dri_not_ready          ; XDPB must be in common memory
+    call motor_on
+    xor a
+    ld (disk_drive), a
+    ld a, (ix + XDPB_SIDES)
+    cp 1
+    jr z, .dri_alt_ds
+    xor a                         ; SS: head 0, cylinder = track
+    ld (disk_head), a
+    ld a, d
+    jr .dri_seek
+.dri_alt_ds:
+    ld a, d
+    and 1
+    ld (disk_head), a             ; head = track & 1
+    ld a, d
+    srl a                         ; cylinder = track / 2
+.dri_seek:
+    call fdc_seek
+    jr nz, .dri_seek_fail         ; lint: ignore - fdc_seek returns Z/NZ
+
+    ld a, FDC_READ_ID
+    call fdc_send_byte
+    ld a, (disk_head)
+    rlca
+    rlca
+    and 0x04
+    ld b, a
+    ld a, (disk_drive)
+    and 0x03
+    or b
+    call fdc_send_byte
+
+    ld hl, dd_results + 1
+    ld b, 7
+.dri_read:
+    push bc
+    push hl
+    call fdc_read_byte
+    pop hl
+    pop bc
+    ld (hl), a
+    inc hl
+    djnz .dri_read
+    ld a, 7
+    ld (dd_results), a
+
+    ld a, (dd_results + 1)        ; ST0
+    and 0xC0
+    cp 0x80
+    jr nc, .dri_data_error
+    ld a, (dd_results + 2)        ; ST1
+    and 0x3B
+    jr nz, .dri_data_error
+    ld a, (dd_results + 6)        ; R
+    scf
+    ld hl, dd_results
+    ret
+.dri_data_error:
+    ld a, (dd_results + 2)
+    and 0x01                      ; missing address mark?
+    ld a, 3
+    jr z, .dri_fail
+    ld a, 5
+    jr .dri_fail
+.dri_seek_fail:
+    ld a, 2
+.dri_fail:
+    or a                          ; clear carry
+    ld hl, dd_results
+    ret
+.dri_not_ready:
+    xor a                         ; A = 0, carry clear
+    ld hl, dd_results
+    ret
+
+.dd_l_on_motor:
+    ; DD_L_ON_MOTOR (0x00A4): motor on, wait for spin-up.
+    ;   Out: all registers and flags preserved
+    push bc
+    call motor_on
+    pop bc
+    push bc
+    ld bc, (xbios_arg_af)
+    push bc
+    pop af
+    pop bc
+    ret
+
+.dd_l_t_off_motor:
+    ; DD_L_T_OFF_MOTOR (0x00A7): arm the motor-off timeout.
+    ;   Out: all registers and flags preserved
+    ld a, MOTOR_OFF_DELAY
+    ld (motor_countdown), a
+    push bc
+    ld bc, (xbios_arg_af)
+    push bc
+    pop af
+    pop bc
+    ret
+
+.dd_off_motor:
+    ; DD_OFF_MOTOR (0x00AA): stop the motor now.
+    ;   Out: AF BC DE HL corrupt
+    call motor_off
+    ret
+
+.dd_l_seek:
+    ; DD_L_SEEK (0x00B3): seek to a physical track.
+    ;   In:  C = unit (bits 0-1) + head (bit 2), D = physical track,
+    ;        IX = XDPB (unused; geometry is already physical)
+    ;   Out: carry set OK, or carry clear + A = 0 (not ready) / 2 (seek)
+    ;        B corrupt; all other registers preserved
+    ld a, c
+    and 0x03
+    jr nz, .dls_not_ready
+    xor a
+    ld (disk_drive), a
+    ld a, c
+    and 0x04
+    jr z, .dls_head0
+    ld a, 1
+    jr .dls_set_head
+.dls_head0:
+    xor a
+.dls_set_head:
+    ld (disk_head), a
+    push bc
+    push de
+    push hl
+    ld a, d
+    call fdc_seek
+    pop hl
+    pop de
+    pop bc
+    jr nz, .dls_seek_fail         ; lint: ignore - fdc_seek returns Z/NZ
+    scf
+    ret
+.dls_seek_fail:
+    ld a, 2
+    or a
+    ret
+.dls_not_ready:
+    xor a                         ; A = 0, carry clear
     ret
 
 .dd_drive_status:
