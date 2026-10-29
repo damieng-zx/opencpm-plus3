@@ -17,8 +17,8 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
 `15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`,
-`19.KTAB..OK`, the `5Ah` marker somewhere in the screen attribute plane
-(bank 5, `5800h`-`5AFFh`)
+`19.KTAB..OK`, `20.EXP..OK`, the `5Ah` marker somewhere in the screen
+attribute plane (bank 5, `5800h`-`5AFFh`)
 and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
 `fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
@@ -274,6 +274,10 @@ with `KM_SET_KEY`, prints `19.KTAB..` and polls the keyboard without echo
 until a key arrives.  The runner waits for that marker, presses Z and then
 waits for `19.KTAB..OK`; the test restores the built-in mapping afterwards
 and the runner checks `KMTAB[4]` is `FFh`.
+
+Test 20 stores `HELLO` under expansion token `85h` with `KM_SET_EXPAND`,
+checks that token `7Fh` and a 32-character string are rejected, and the
+runner reads back the slot at `A9A0h + 5*32` (length 5 plus `HELLO`).
 
 ### BDOS file regression suite
 

@@ -37,6 +37,7 @@ DD_L_DPB        EQU 0x009E
 DD_L_XDPB       EQU 0x00A1
 DD_L_READ       EQU 0x00AD
 DD_L_WRITE      EQU 0x00B0
+KM_SET_EXPAND   EQU 0x00D4
 KM_SET_KEY      EQU 0x00D7
 KM_KT_GET       EQU 0x00DA
 KM_KT_PUT       EQU 0x00DD
@@ -1144,6 +1145,44 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 20: KM_SET_EXPAND ===
+    ld de, msg_t20
+    ld c, 9
+    call BDOS
+
+    ; String at DD00h (common memory).
+    ld hl, exp_string
+    ld de, 0xDD00
+    ld bc, 5
+    ldir
+
+    ld hl, KM_SET_EXPAND
+    ld (userf_dw), hl
+    ld hl, 0xDD00
+    ld bc, 0x8505               ; B = token 85h, C = 5 characters
+    call userf_trampoline
+    jp nc, .t20_fail
+
+    ; Token 7Fh is not an expansion token.
+    ld hl, 0xDD00
+    ld bc, 0x7F05
+    call userf_trampoline
+    jp c, .t20_fail
+
+    ; 32 characters is too long.
+    ld hl, 0xDD00
+    ld bc, 0x8520
+    call userf_trampoline
+    jp c, .t20_fail
+
+    ld de, msg_ok
+    jr .t20_print
+.t20_fail:
+    ld de, msg_fail
+.t20_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1326,6 +1365,8 @@ msg_t16:    db 0x0D, 0x0A, "16.KMSPD..", '$'
 msg_t17:    db 0x0D, 0x0A, "17.KTPUT..", '$'
 msg_t18:    db 0x0D, 0x0A, "18.KTGET..", '$'
 msg_t19:    db 0x0D, 0x0A, "19.KTAB..", '$'
+msg_t20:    db 0x0D, 0x0A, "20.EXP..", '$'
+exp_string: db "HELLO"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'

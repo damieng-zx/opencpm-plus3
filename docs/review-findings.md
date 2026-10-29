@@ -346,6 +346,14 @@ set.
   Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
   `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`;
   bank-6 map in `docs/boot.md` and `AGENTS.md`.
+- [x] **XBIOS KM_SET_EXPAND.** Stores an expansion string for tokens
+  `80h`-`9Eh` in a 31-slot bank-6 pool (`A9A0h`), rejecting invalid tokens
+  and strings longer than 31 characters without changing anything.
+  `XTETEST` test 20 stores `HELLO` under token `85h` and checks both
+  rejection paths; the smoke runner reads the slot back.
+  Files: `src/bios/bios.zpa`, `src/bios/keyboard.zpa`,
+  `src/test/xtetest.asm`, `tests/test_xbios_te.py`, `tools/zx84_smoke.py`;
+  bank-6 map in `docs/boot.md` and `AGENTS.md`.
 
 ## P3 - Remaining follow-ups
 
@@ -355,8 +363,9 @@ set.
   accept CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
 - `DD_LOGIN` falls back to the type-0 template if the probe fails; it does
   not yet return the documented 0/2/3/4/5 login errors.
-- `CD_SA_*` (no serial model), `KM_SET_EXPAND` and `FIND_FID` remain
-  unimplemented.  Unknown IDs return `A = 0xFF`.
+- `CD_SA_*` (no serial model) and `FIND_FID` remain unimplemented.
+  Unknown IDs return `A = 0xFF`.
 - `KM_KT_PUT`/`KM_KT_GET` maintain the token queue but the ASCII keyboard
   path (`kbd_getchar`) does not consume it, so tokens are only visible to
-  programs that poll `KM_KT_GET`.
+  programs that poll `KM_KT_GET`.  Likewise `KM_SET_EXPAND` stores strings
+  that nothing expands yet; keys map straight to ASCII characters.

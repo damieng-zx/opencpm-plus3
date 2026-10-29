@@ -707,6 +707,8 @@ xbios_handler:
     jp z, .dd_format
     cp 0x92
     jp z, .dd_login
+    cp 0xD4
+    jp z, .km_set_expand
     cp 0xD7
     jp z, .km_set_key
     cp 0xDA
@@ -1591,6 +1593,46 @@ xbios_handler:
     xor a
     ld (dd_results), a
     ld hl, dd_results
+    ret
+
+.km_set_expand:
+    ; KM_SET_EXPAND (0x00D4): set an expansion string.
+    ;   In:  B = expansion token (80h-9Eh), C = length,
+    ;        HL = string in common memory
+    ;   Out: carry set on success, carry clear if the token is invalid or
+    ;        the string is longer than 31 characters
+    ;   AF BC DE HL corrupt; all other registers preserved
+    ld a, b
+    cp 0x80
+    jr c, .kex_bad
+    cp 0x9F
+    jr nc, .kex_bad
+    ld a, c
+    cp KMEXP_MAX + 1
+    jr nc, .kex_bad
+    push hl                      ; save the source string
+    ld a, b
+    sub 0x80
+    add a, a
+    add a, a
+    add a, a
+    add a, a
+    add a, a                     ; (token - 80h) * 32
+    ld l, a
+    ld h, 0
+    ld de, KMEXP
+    add hl, de
+    ex de, hl                    ; DE = slot
+    ld a, c
+    ld (de), a                   ; slot length
+    inc de
+    pop hl                       ; restore the source string
+    ld b, 0
+    ldir                         ; BC = length
+    scf
+    ret
+.kex_bad:
+    or a                         ; clear carry
     ret
 
 .km_set_key:

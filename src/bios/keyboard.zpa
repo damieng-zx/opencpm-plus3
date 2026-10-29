@@ -68,6 +68,12 @@ kbd_repeat_rate:  dw REPEAT_RATE
 ; FFh means "use the built-in mapping".
 KMTAB       equ 0xA900
 KMTAB_SIZE  equ 160
+
+; KM_SET_EXPAND expansion strings (bank 6): 31 slots of 32 bytes,
+; [length][characters].  Stored in bank 6 so they cost no image space.
+KMEXP       equ 0xA9A0
+KMEXP_SLOT  equ 32
+KMEXP_MAX   equ 31
 km_speed_h: db 0
 km_speed_l: db 0
 

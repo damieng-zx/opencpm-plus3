@@ -677,6 +677,43 @@ class KmSetKey(unittest.TestCase):
         self.assertIn("0xA900", smoke)
 
 
+class KmSetExpand(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xD4", dispatch)
+        self.assertIn("jp z, .km_set_expand", dispatch)
+
+    def test_handler_validates_and_copies(self):
+        body = handler_body(".km_set_expand:", ".km_set_key:")
+        self.assertIn("cp 0x80", body)           # token low bound
+        self.assertIn("cp 0x9F", body)           # token high bound
+        self.assertIn("KMEXP_MAX + 1", body)     # length limit
+        self.assertIn("ld de, KMEXP", body)
+        self.assertIn("ex de, hl", body)
+        self.assertIn("push hl", body)           # keep the source
+        self.assertIn("pop hl", body)
+        self.assertIn("ld (de), a", body)        # slot length
+        self.assertIn("ldir", body)
+        self.assertIn("scf", body)
+        self.assertIn(".kex_bad", body)
+
+    def test_bank6_slots(self):
+        text = source("src/bios/keyboard.zpa")
+        self.assertIn("KMEXP       equ 0xA9A0", text)
+        self.assertIn("KMEXP_SLOT  equ 32", text)
+        self.assertIn("KMEXP_MAX   equ 31", text)
+
+    def test_tester_and_smoke_cover_expand(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("KM_SET_EXPAND", tester)
+        self.assertIn("20.EXP", tester)
+        self.assertIn('db "HELLO"', tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("20.EXP..OK", smoke)
+        self.assertIn("0xA9A0 + 5 * 32", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

@@ -66,6 +66,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | `0xCB` | `TE_SET_INK` | A = ink (0 = background/border, 1 = foreground), B = colour, C = flash colour | Sets the colours used by future characters.  Colour is 0-63: bits 0-1 blue, 2-3 red, 4-5 green, each pair `00` off, `01`/`10` normal, `11` high.  The cell is bright only when both inks are high.  If `C & 0x3F` differs from `B & 0x3F` the ink flashes; the hardware FLASH attribute is set only when both inks flash.  Inks above 1 are ignored. |
 | `0xCE` | `TE_SET_BORDER` | B = colour (0-63) | Sets the border colour using the same encoding as `TE_SET_INK`; the bright and flash bits are ignored.  `TE_SET_INK` ink 0 also changes the border. |
 | `0xD1` | `TE_SET_SPEED` | H = main flash time, L = alternate (50ths) | Accepted and ignored: the +3 flashes in hardware with a fixed rate. |
+| `0xD4` | `KM_SET_EXPAND` | B = expansion token (`0x80`-`0x9E`), C = length, HL = string in common memory | Stores the string in the token's bank-6 slot.  Carry set on success, or carry clear if the token is invalid or the string is longer than 31 characters (nothing is changed).  AF BC DE HL corrupt. |
 | `0xD7` | `KM_SET_KEY` | B = new translation, C = key number (0-39), D = table mask (bit 0 normal, 1 CAPS, 2 SYMB, 3 EXTEND) | Writes the translation into the 40-key × 4-shift override table in bank 6.  Invalid key numbers or a zero mask are ignored.  A translation of `0xFF` restores the built-in mapping.  AF and HL corrupt; all other registers preserved. |
 | `0xDA` | `KM_KT_GET` | - | Removes the oldest key token.  Carry set + B = shift state + C = key number, or carry clear + B = current lock state (C undefined).  The token's lock bits (3-6) update the reported lock state. |
 | `0xDD` | `KM_KT_PUT` | B = shift state, C = key number | Appends a key token to the 16-entry token queue (silently dropped when full).  All registers and flags preserved. |
@@ -85,8 +86,8 @@ the disc calls above are implemented: phase 1 (`DD_INIT`, `DD_SETUP`,
 `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_L_DPB`, `DD_L_XDPB`,
 `DD_L_READ`, `DD_L_WRITE`).
 
-Still unimplemented: the serial calls (`CD_SA_*`), `KM_SET_EXPAND` and
-`FIND_FID`.  Unknown IDs return `A = 0xFF`.
+Still unimplemented: the serial calls (`CD_SA_*`) and `FIND_FID`.  Unknown
+IDs return `A = 0xFF`.
 
 `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` currently
 accept only CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
@@ -117,7 +118,9 @@ the harness sets the `DC00h` magic byte, formats track 39 and checks the
 cover `DD_SETUP`, `DD_L_DPB`, `DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`,
 `KM_SET_SPEED`, `KM_KT_PUT` and `KM_KT_GET`.  Test 19 remaps the Z key to
 `Q` with `KM_SET_KEY` and waits for the harness to press Z, so the whole
-scanner-to-ASCII path is exercised end to end.
+scanner-to-ASCII path is exercised end to end.  Test 20 stores an expansion
+string with `KM_SET_EXPAND` and checks the invalid-token and over-long
+rejections.
 
 ## Calling from a .COM program
 

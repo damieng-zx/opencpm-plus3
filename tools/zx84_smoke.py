@@ -428,7 +428,7 @@ class Smoke:
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
                        "17.KTPUT..OK", "18.KTGET..OK", "19.KTAB..OK",
-                       "DONE"):
+                       "20.EXP..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + seen)
@@ -471,6 +471,11 @@ class Smoke:
         if kmtab[4] != 0xFF:
             raise SmokeError(
                 f"KM_SET_KEY table[4] {kmtab[4]:02X}, expected FF after reset")
+        # KM_SET_EXPAND slot for token 85h: length 5 + "HELLO".
+        slot = self.memory(6, 0xA9A0 + 5 * 32, 6)
+        if slot != bytes((5, ord("H"), ord("E"), ord("L"),
+                          ord("L"), ord("O"))):
+            raise SmokeError(f"KM_SET_EXPAND slot {slot!r}, expected HELLO")
         self.expect("XTETEST prompt", "A>")
 
     def run_xtetest_format(self) -> None:
