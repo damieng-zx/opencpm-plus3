@@ -6,7 +6,9 @@ zx84 MCP emulator.
 ## Automated runner
 
 `tools/zx84_smoke.py` boots the built image through the zx84 MCP server,
-runs `SYSTEST`, `XTETEST`, `DISKTEST`, `BDOSTEST`, and the main CCP flows,
+checks that the stage-2 loader staged the three fonts and `RAMDISK.FID`
+byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), then runs
+`SYSTEST`, `XTETEST`, `DISKTEST`, `BDOSTEST`, and the main CCP flows,
 and asserts the 51x24 character buffer plus an empty FDC retry log:
 
 `XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry, `TE_RESET`,

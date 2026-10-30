@@ -68,6 +68,15 @@ class LoaderStaging(unittest.TestCase):
         self.assertIn("ld (LF_CCP_LEN), hl", body)
         self.assertIn("or 0x08", body)
 
+    def test_smoke_verifies_staged_bytes(self):
+        smoke = source("tools/zx84_smoke.py")
+        for token in ('"FONT51", 0x8000', '"FONT32", 0x8800',
+                      '"FONT64", 0x9400', "0x9000, len(fid)",
+                      'label_address("LF_FLAGS")',
+                      'label_address("LF_CCP_LEN")',
+                      "self.run_loader_stage()"):
+            self.assertIn(token, smoke)
+
     def test_loader_stages_fonts_and_fid(self):
         loader = source("src/boot/loader.asm")
         self.assertIn('NAME_51:    db "FONT51  BIN"', loader)

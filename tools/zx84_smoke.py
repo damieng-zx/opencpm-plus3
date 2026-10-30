@@ -406,6 +406,32 @@ class Smoke:
         self.wait_for(["A>"], frames=500, attempts=8)
         self.expect("boot signon", "Open CP/M +3", "A>")
 
+    def run_loader_stage(self) -> None:
+        """The stage-2 loader stages fonts, FID and CCP in bank 6."""
+        self.log("loader staging")
+        for name, addr, path in (
+                ("FONT51", 0x8000, ROOT / "src" / "bios" / "font51.bin"),
+                ("FONT32", 0x8800, ROOT / "src" / "bios" / "font32.bin"),
+                ("FONT64", 0x9400, ROOT / "src" / "bios" / "font64.bin")):
+            data = path.read_bytes()
+            got = self.memory(6, addr, len(data))
+            if got != data:
+                raise SmokeError(
+                    f"{name} not staged at {addr:04X} in bank 6")
+        fid = (ROOT / "build" / "RAMDISK.FID").read_bytes()
+        if self.memory(6, 0x9000, len(fid)) != fid:
+            raise SmokeError("RAMDISK.FID not staged at 9000 in bank 6")
+
+        flags = self.memory(6, label_address("LF_FLAGS"), 1)[0]
+        if flags != 0x1F:
+            raise SmokeError(
+                f"loader LF_FLAGS {flags:02X}, expected 1F (all staged)")
+        clen = int.from_bytes(
+            self.memory(6, label_address("LF_CCP_LEN"), 2), "little")
+        if clen != 4 * 1024:
+            raise SmokeError(
+                f"loader LF_CCP_LEN {clen}, expected {4 * 1024}")
+
     def run_systest(self) -> None:
         self.command("SYSTEST", 2500)
         screen = self.text()
@@ -929,6 +955,7 @@ class Smoke:
 
     def run(self) -> None:
         self.boot()
+        self.run_loader_stage()
         self.run_systest()
         self.run_xtetest()
         # SYSTEST deliberately changes and restores the delimiter; DIR must
