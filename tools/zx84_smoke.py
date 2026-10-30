@@ -437,7 +437,7 @@ class Smoke:
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
                        "17.KTPUT..OK", "18.KTGET..OK", "19.KTAB..OK",
-                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "DONE"):
+                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + seen)

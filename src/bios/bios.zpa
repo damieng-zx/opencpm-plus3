@@ -2118,8 +2118,10 @@ xbios_handler:
     and 0x03                       ; isolate unit number
     or a
     jr nz, .drive_absent
-    ; Unit 0 (drive A): Ready | Track0 | unit-0
-    ld a, 0x30                     ; bit 5 = Ready, bit 4 = Track 0
+    ; Unit 0 (drive A): Ready | Track0 | requested head
+    ld a, c
+    and 0x04                       ; bit 2 = head
+    or 0x30                        ; bit 5 = Ready, bit 4 = Track 0
     ret
 .drive_absent:
     ; Unit 1 (or higher): drive not fitted.

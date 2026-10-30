@@ -44,6 +44,7 @@ KM_KT_PUT       EQU 0x00DD
 KM_SET_SPEED    EQU 0x00E0
 CD_VERSION      EQU 0x00E3
 CD_INFO         EQU 0x00E6
+DD_DRIVE_STATUS EQU 0x0098
 
 ; ============================================================
 ; Entry
@@ -1267,6 +1268,51 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 23: DD_DRIVE_STATUS ===
+    ld de, msg_t23
+    ld c, 9
+    call BDOS
+
+    ; Drive A, head 0: Ready + Track0, and B/DE must survive.
+    ld hl, DD_DRIVE_STATUS
+    ld (userf_dw), hl
+    ld bc, 0x1200               ; B = 12h, C = unit 0 head 0
+    ld de, 0x3456
+    call userf_trampoline
+    cp 0x30
+    jp nz, .t23_fail
+    ld a, b
+    cp 0x12
+    jp nz, .t23_fail
+    ld a, d
+    cp 0x34
+    jp nz, .t23_fail
+    ld a, e
+    cp 0x56
+    jp nz, .t23_fail
+
+    ; Drive A, head 1: ST3 bit 2 mirrors the requested head.
+    ld bc, 0x1204
+    ld de, 0x3456
+    call userf_trampoline
+    cp 0x34
+    jp nz, .t23_fail
+
+    ; Unit 1: not fitted, unit bit set, Ready/WP clear.
+    ld bc, 0x1201
+    ld de, 0x3456
+    call userf_trampoline
+    cp 0x01
+    jp nz, .t23_fail
+
+    ld de, msg_ok
+    jr .t23_print
+.t23_fail:
+    ld de, msg_fail
+.t23_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1452,6 +1498,7 @@ msg_t19:    db 0x0D, 0x0A, "19.KTAB..", '$'
 msg_t20:    db 0x0D, 0x0A, "20.EXP..", '$'
 msg_t21:    db 0x0D, 0x0A, "21.CDVER..", '$'
 msg_t22:    db 0x0D, 0x0A, "22.CDINFO..", '$'
+msg_t23:    db 0x0D, 0x0A, "23.DRIVESTAT..", '$'
 exp_string: db "HELLO"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'

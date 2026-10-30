@@ -829,6 +829,28 @@ class CdInfo(unittest.TestCase):
         self.assertIn("22.CDINFO..OK", smoke)
 
 
+class DdDriveStatus(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0x98", dispatch)
+        self.assertIn("jp z, .dd_drive_status", dispatch)
+
+    def test_handler_reports_ready_and_head(self):
+        body = handler_body(".dd_drive_status:", "; ==========================================================================\n; Utility")
+        self.assertIn("and 0x03", body)          # unit number
+        self.assertIn("and 0x04", body)          # head bit
+        self.assertIn("or 0x30", body)           # Ready + Track 0
+        self.assertIn(".drive_absent", body)
+
+    def test_tester_and_smoke_cover_status(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("DD_DRIVE_STATUS", tester)
+        self.assertIn("23.DRIVESTAT", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("23.DRIVESTAT..OK", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")
