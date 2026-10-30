@@ -42,6 +42,7 @@ KM_SET_KEY      EQU 0x00D7
 KM_KT_GET       EQU 0x00DA
 KM_KT_PUT       EQU 0x00DD
 KM_SET_SPEED    EQU 0x00E0
+CD_VERSION      EQU 0x00E3
 
 ; ============================================================
 ; Entry
@@ -1201,6 +1202,31 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 21: CD_VERSION ===
+    ld de, msg_t21
+    ld c, 9
+    call BDOS
+
+    ld hl, CD_VERSION
+    ld (userf_dw), hl
+    call userf_trampoline
+    cp 3                        ; machine type 3 (+3)
+    jp nz, .t21_fail
+    ld a, b
+    cp 1                        ; major version 1
+    jp nz, .t21_fail
+    ld a, c
+    or a                        ; minor version 0
+    jp nz, .t21_fail
+
+    ld de, msg_ok
+    jr .t21_print
+.t21_fail:
+    ld de, msg_fail
+.t21_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1384,6 +1410,7 @@ msg_t17:    db 0x0D, 0x0A, "17.KTPUT..", '$'
 msg_t18:    db 0x0D, 0x0A, "18.KTGET..", '$'
 msg_t19:    db 0x0D, 0x0A, "19.KTAB..", '$'
 msg_t20:    db 0x0D, 0x0A, "20.EXP..", '$'
+msg_t21:    db 0x0D, 0x0A, "21.CDVER..", '$'
 exp_string: db "HELLO"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'

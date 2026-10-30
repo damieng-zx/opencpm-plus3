@@ -783,6 +783,26 @@ class Bank6Scratch(unittest.TestCase):
         self.assertIn('self.memory(6, self.cursor_col, 1)', smoke)
 
 
+class CdVersion(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xE3", dispatch)
+        self.assertIn("jp z, .cd_version", dispatch)
+
+    def test_handler_returns_machine_and_version(self):
+        body = handler_body(".cd_version:", ".cd_info:")
+        self.assertIn("ld a, 3", body)
+        self.assertIn("ld bc, 0x0100", body)
+
+    def test_tester_and_smoke_cover_version(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("CD_VERSION", tester)
+        self.assertIn("21.CDVER", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("21.CDVER..OK", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")
