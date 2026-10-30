@@ -8,6 +8,7 @@ XTETEST.COM through tools/zx84_smoke.py.
 
 from __future__ import annotations
 
+import re
 import unittest
 
 from .layout import source
@@ -849,6 +850,25 @@ class DdDriveStatus(unittest.TestCase):
         self.assertIn("23.DRIVESTAT", tester)
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("23.DRIVESTAT..OK", smoke)
+
+
+class XbiosCoverage(unittest.TestCase):
+    def test_every_dispatch_id_has_a_tester_case(self):
+        bios = source("src/bios/bios.zpa")
+        dispatch = bios[bios.index("xbios_handler:"):bios.index(".cd_version:")]
+        ids = set(re.findall(r"cp 0x([0-9A-F]{2})", dispatch))
+        self.assertGreaterEqual(len(ids), 30, "dispatch parse found too few IDs")
+
+        tester = source("src/test/xtetest.asm")
+        cases = dict(re.findall(r"^(\w+) +EQU 0x00([0-9A-F]{2})", tester, re.M))
+        by_id = {value: name for name, value in cases.items()}
+        missing = sorted(i for i in ids if i not in by_id)
+        self.assertEqual([], missing,
+                         f"XBIOS IDs without XTETEST coverage: {missing}")
+
+        # A defined constant that is never called would not exercise anything.
+        unused = [name for name in by_id.values() if tester.count(name) < 2]
+        self.assertEqual([], unused, f"XTETEST constants never called: {unused}")
 
 
 class TesterConstants(unittest.TestCase):

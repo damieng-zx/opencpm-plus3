@@ -178,6 +178,14 @@ start:
     ld c, 9
     call BDOS
 
+    ; TE_STL_ON_OFF is accepted and ignored; it must return with Z set.
+    ld hl, TE_STL_ON_OFF
+    ld (userf_dw), hl
+    call userf_trampoline
+    jr z, .stl_ask
+    ld de, msg_nz
+    jr .stl_print
+.stl_ask:
     ld hl, TE_STL_ASK
     ld (userf_dw), hl
     call userf_trampoline
