@@ -437,7 +437,7 @@ class Smoke:
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
                        "17.KTPUT..OK", "18.KTGET..OK", "19.KTAB..OK",
-                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "DONE"):
+                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + seen)
@@ -466,16 +466,16 @@ class Smoke:
             if value != expected:
                 raise SmokeError(
                     f"KM_SET_SPEED {name} {value}, expected {expected}")
-        tokens = self.memory(6, label_address("kbd_token_buf"), 4)
-        if tokens != bytes((0x08, 0x2B, 0x00, 0x1F)):
-            raise SmokeError(
-                f"KM_KT_PUT tokens {tokens!r}, expected [08, 2B, 00, 1F]")
+        # Tests 17/18 queue and drain two tokens, then test 24 fills the
+        # queue to 16 and runs 20 put/get cycles: head/tail end at 6.
         count = self.memory(6, label_address("kbd_token_count"), 1)[0]
         if count != 0:
             raise SmokeError(f"KM_KT_GET token count {count}, expected 0")
-        head = self.memory(6, label_address("kbd_token_head"), 1)[0]
-        if head != 2:
-            raise SmokeError(f"KM_KT_GET head {head}, expected 2")
+        for name, expected in (("kbd_token_head", 6), ("kbd_token_tail", 6)):
+            value = self.memory(6, label_address(name), 1)[0]
+            if value != expected:
+                raise SmokeError(
+                    f"KM_KT queue {name} {value}, expected {expected}")
         # Test 19 restored the built-in translation for Z after checking it.
         kmtab = self.memory(6, 0xA900, 8)
         if kmtab[4] != 0xFF:

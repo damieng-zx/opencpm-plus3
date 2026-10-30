@@ -605,7 +605,7 @@ class KmKtPut(unittest.TestCase):
         self.assertIn("17.KTPUT", tester)
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("17.KTPUT..OK", smoke)
-        self.assertIn("kbd_token_buf", smoke)
+        self.assertIn("kbd_token_count", smoke)
 
 
 class KmKtGet(unittest.TestCase):
@@ -779,7 +779,7 @@ class Bank6Scratch(unittest.TestCase):
 
     def test_smoke_reads_moved_state_from_bank6(self):
         smoke = source("tools/zx84_smoke.py")
-        self.assertIn('self.memory(6, label_address("kbd_token_buf"), 4)', smoke)
+        self.assertIn('self.memory(6, label_address("kbd_token_count"), 1)', smoke)
         self.assertIn('self.memory(6, self.cursor_row, 1)', smoke)
         self.assertIn('self.memory(6, self.cursor_col, 1)', smoke)
 
@@ -869,6 +869,20 @@ class XbiosCoverage(unittest.TestCase):
         # A defined constant that is never called would not exercise anything.
         unused = [name for name in by_id.values() if tester.count(name) < 2]
         self.assertEqual([], unused, f"XTETEST constants never called: {unused}")
+
+
+class KmKtWrap(unittest.TestCase):
+    def test_tester_fills_drops_and_wraps(self):
+        tester = source("src/test/xtetest.asm")
+        body = tester[tester.index("; === Test 24"):tester.index("; === Done ===")]
+        self.assertIn("ld ix, 17", body)          # overflow
+        self.assertIn("ld ix, 16", body)          # drain depth
+        self.assertIn("ld ix, 20", body)          # wrap cycles
+        self.assertIn("24.KTWRAP", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("24.KTWRAP..OK", smoke)
+        self.assertIn('("kbd_token_head", 6)', smoke)
+        self.assertIn('("kbd_token_tail", 6)', smoke)
 
 
 class TesterConstants(unittest.TestCase):

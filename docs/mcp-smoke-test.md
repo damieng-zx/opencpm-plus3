@@ -17,7 +17,8 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
 `15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`,
-`19.KTAB..OK`, `20.EXP..OK`, `21.CDVER..OK`, `22.CDINFO..OK`, `23.DRIVESTAT..OK`, the `5Ah` marker somewhere in the screen
+`19.KTAB..OK`, `20.EXP..OK`, `21.CDVER..OK`, `22.CDINFO..OK`, `23.DRIVESTAT..OK`, `24.KTWRAP..OK`,
+the `5Ah` marker somewhere in the screen
 attribute plane (bank 5, `5800h`-`5AFFh`)
 and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
@@ -279,6 +280,14 @@ and the runner checks `KMTAB[4]` is `FFh`.
 Test 20 stores `HELLO` under expansion token `85h` with `KM_SET_EXPAND`,
 checks that token `7Fh` and a 32-character string are rejected, and the
 runner reads back the slot at `A9A0h + 5*32` (length 5 plus `HELLO`).
+
+Tests 21-23 cover the remaining dispatched IDs: `CD_VERSION` (machine 3,
+version 1.0), `CD_INFO` (one drive, 8 banks, no serial/B:, SS 40-track
+3-inch, HL pointing at the `0xFF` buffer table in common memory) and
+`DD_DRIVE_STATUS` (unit 0 ready/track 0 with the head bit, unit 1 not
+fitted, B/DE preserved).  Test 24 fills the key queue to 16, checks the
+17th token is dropped, drains it in order, then runs 20 put/get cycles to
+exercise head/tail wrap; the runner checks count 0 and head/tail 6.
 
 ### BDOS file regression suite
 

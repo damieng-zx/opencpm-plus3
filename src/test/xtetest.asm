@@ -1321,6 +1321,76 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 24: KM_KT queue overflow and wrap ===
+    ld de, msg_t24
+    ld c, 9
+    call BDOS
+
+    ; Put 17 tokens: the queue is 16 deep, so the last one is dropped.
+    ld hl, KM_KT_PUT
+    ld (userf_dw), hl
+    ld ix, 17
+    ld c, 0x40
+.t24_fill:
+    ld b, 0
+    call userf_trampoline
+    inc c
+    dec ix
+    ld a, ixh
+    or ixl
+    jr nz, .t24_fill
+
+    ; Drain 16 in order and check the 17th (0x50) was discarded.
+    ld hl, KM_KT_GET
+    ld (userf_dw), hl
+    ld ix, 16
+    ld e, 0x40
+.t24_drain:
+    call userf_trampoline
+    jp nc, .t24_fail
+    ld a, c
+    cp e
+    jp nz, .t24_fail
+    inc e
+    dec ix
+    ld a, ixh
+    or ixl
+    jr nz, .t24_drain
+
+    ; Queue must be empty now (the 17th put was dropped).
+    call userf_trampoline
+    jp c, .t24_fail
+
+    ; 20 put/get cycles exercise head/tail wrap past 16.
+    ld ix, 20
+    ld e, 0x60
+.t24_wrap:
+    ld hl, KM_KT_PUT
+    ld (userf_dw), hl
+    ld b, 0
+    ld c, e
+    call userf_trampoline
+    ld hl, KM_KT_GET
+    ld (userf_dw), hl
+    call userf_trampoline
+    jp nc, .t24_fail
+    ld a, c
+    cp e
+    jp nz, .t24_fail
+    inc e
+    dec ix
+    ld a, ixh
+    or ixl
+    jr nz, .t24_wrap
+
+    ld de, msg_ok
+    jr .t24_print
+.t24_fail:
+    ld de, msg_fail
+.t24_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1507,6 +1577,7 @@ msg_t20:    db 0x0D, 0x0A, "20.EXP..", '$'
 msg_t21:    db 0x0D, 0x0A, "21.CDVER..", '$'
 msg_t22:    db 0x0D, 0x0A, "22.CDINFO..", '$'
 msg_t23:    db 0x0D, 0x0A, "23.DRIVESTAT..", '$'
+msg_t24:    db 0x0D, 0x0A, "24.KTWRAP..", '$'
 exp_string: db "HELLO"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
