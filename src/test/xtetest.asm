@@ -43,6 +43,7 @@ KM_KT_GET       EQU 0x00DA
 KM_KT_PUT       EQU 0x00DD
 KM_SET_SPEED    EQU 0x00E0
 CD_VERSION      EQU 0x00E3
+CD_INFO         EQU 0x00E6
 
 ; ============================================================
 ; Entry
@@ -1227,6 +1228,45 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 22: CD_INFO ===
+    ld de, msg_t22
+    ld c, 9
+    call BDOS
+
+    ld hl, CD_INFO
+    ld (userf_dw), hl
+    call userf_trampoline
+    or a                        ; A = 0 (one drive)
+    jp nz, .t22_fail
+    ld a, b
+    cp 8                        ; 128K = 8 x 16K banks
+    jp nz, .t22_fail
+    ld a, c
+    or a                        ; no serial
+    jp nz, .t22_fail
+    ld a, d
+    or a                        ; no B: drive
+    jp nz, .t22_fail
+    ld a, e
+    cp 0x15                     ; SS 40-track 3-inch
+    jp nz, .t22_fail
+
+    ; HL must point into common memory and hold the 0xFF terminator.
+    ld a, h
+    cp 0xC0
+    jp c, .t22_fail
+    ld a, (hl)
+    inc a                       ; 0xFF + 1 = 0
+    jp nz, .t22_fail
+
+    ld de, msg_ok
+    jr .t22_print
+.t22_fail:
+    ld de, msg_fail
+.t22_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1411,6 +1451,7 @@ msg_t18:    db 0x0D, 0x0A, "18.KTGET..", '$'
 msg_t19:    db 0x0D, 0x0A, "19.KTAB..", '$'
 msg_t20:    db 0x0D, 0x0A, "20.EXP..", '$'
 msg_t21:    db 0x0D, 0x0A, "21.CDVER..", '$'
+msg_t22:    db 0x0D, 0x0A, "22.CDINFO..", '$'
 exp_string: db "HELLO"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'

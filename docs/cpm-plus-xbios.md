@@ -72,7 +72,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | `0xDD` | `KM_KT_PUT` | B = shift state, C = key number | Appends a key token to the 16-entry token queue (silently dropped when full).  All registers and flags preserved. |
 | `0xE0` | `KM_SET_SPEED` | H = start-up delay, L = repeat speed (50 Hz scans; 0 = 256) | Sets the keyboard repeat timings.  AF corrupt; all other registers preserved. |
 | `0xE3` | `CD_VERSION` | - | A = 3 (machine type), BC = `0x0100` (version 1.0). |
-| `0xE6` | `CD_INFO` | - | A = 0, B = 8 (16K banks), C = 0 (no serial), D = 0 (no B: drive), E = `0x15` (SS 40-track 3-inch), HL = empty buffer table (`0xFF`). |
+| `0xE6` | `CD_INFO` | - | A = 0, B = 8 (16K banks), C = 0 (no serial), D = 0 (no B: drive), E = `0x15` (SS 40-track 3-inch), HL = empty buffer table in common memory (single `0xFF` terminator). |
 | `0xE9` | `SCR_RUN_ROUTINE` | BC = routine address, DE/HL/IX/IY = arguments | Runs the routine with the screen (bank 5) paged in at 4000h.  Returns AF/DE/HL/IX/IY as the routine left them and BC corrupt.  The routine must live in common memory (`C000-F5FF`) and must not call BDOS/BIOS: those switch back to TPA/system mode and page the screen out. |
 | other | - | - | A = `0xFF` (unknown). |
 

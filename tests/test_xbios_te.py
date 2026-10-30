@@ -803,6 +803,32 @@ class CdVersion(unittest.TestCase):
         self.assertIn("21.CDVER..OK", smoke)
 
 
+class CdInfo(unittest.TestCase):
+    def test_dispatch(self):
+        text = source("src/bios/bios.zpa")
+        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
+        self.assertIn("cp 0xE6", dispatch)
+        self.assertIn("jp z, .cd_info", dispatch)
+
+    def test_handler_reports_machine_and_common_buffer_table(self):
+        body = handler_body(".cd_info:", ".te_stl_ask:")
+        self.assertIn("ld bc, 0x0800", body)
+        self.assertIn("ld de, 0x0015", body)
+        self.assertIn("ld hl, cd_buf_tab", body)
+        self.assertIn("xor a", body)
+        common = source("src/bios/common.zpa")
+        self.assertIn("cd_buf_tab: db 0xFF", common)
+        # The table must be in common memory, not bank 4.
+        self.assertIn("CD_INFO buffer-descriptor table", common)
+
+    def test_tester_and_smoke_cover_info(self):
+        tester = source("src/test/xtetest.asm")
+        self.assertIn("CD_INFO", tester)
+        self.assertIn("22.CDINFO", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("22.CDINFO..OK", smoke)
+
+
 class TesterConstants(unittest.TestCase):
     def test_tester_uses_real_jumpblock_entries(self):
         text = source("src/test/xtetest.asm")

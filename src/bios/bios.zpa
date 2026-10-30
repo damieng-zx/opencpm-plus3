@@ -748,10 +748,10 @@ xbios_handler:
     ;   C = 0x00 (no serial)
     ;   D = 0x00 (drive B absent)
     ;   E = 0x15 (drive A: SS, 40-track, 3-inch)
-    ;   HL = address of a buffer-descriptor table terminated by 0xFF
+    ;   HL = address of an empty buffer table in common memory (0xFF)
     ld bc, 0x0800
     ld de, 0x0015
-    ld hl, .buftab
+    ld hl, cd_buf_tab              ; empty table in common memory
     xor a
     ret
 
@@ -2126,8 +2126,7 @@ xbios_handler:
     ld a, 0x01                     ; unit bit set, Ready=0, WP=0
     ret
 
-.buftab:
-    db 0xFF                        ; empty buffer-table terminator
+
 
 
 ; ==========================================================================
