@@ -7,7 +7,9 @@ zx84 MCP emulator.
 
 `tools/zx84_smoke.py` boots the built image through the zx84 MCP server,
 checks that the stage-2 loader staged the three fonts and `RAMDISK.FID`
-byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), then runs
+byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), fills the remaining
+free bank-6 gaps with a sentinel and verifies they survive the app runs,
+then runs
 `SYSTEST`, `XTETEST`, `DISKTEST`, `BDOSTEST`, and the main CCP flows,
 and asserts the 51x24 character buffer plus an empty FDC retry log:
 

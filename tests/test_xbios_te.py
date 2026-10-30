@@ -777,6 +777,17 @@ class Bank6Scratch(unittest.TestCase):
         self.assertIn("REPEAT_DELAY", init)
         self.assertIn("REPEAT_RATE", init)
 
+    def test_smoke_sentinels_free_bank6_gaps(self):
+        smoke = source("tools/zx84_smoke.py")
+        for token in ("BANK6_GAPS", "(0xA6FC, 4)", "(0xA83D, 3)",
+                      "(0xA870, 0x90)", "(0xADA4, 0x25C)",
+                      "self.run_bank6_sentinels()",
+                      "self.check_bank6_sentinels()"):
+            self.assertIn(token, smoke)
+        # The check must run before the scratch-image test reboots.
+        self.assertLess(smoke.index("self.check_bank6_sentinels()"),
+                        smoke.index("self.run_xtetest_format()"))
+
     def test_smoke_reads_moved_state_from_bank6(self):
         smoke = source("tools/zx84_smoke.py")
         self.assertIn('self.memory(6, label_address("kbd_token_count"), 1)', smoke)

@@ -432,6 +432,32 @@ class Smoke:
             raise SmokeError(
                 f"loader LF_CCP_LEN {clen}, expected {4 * 1024}")
 
+    # Free bank-6 gaps.  Nothing should touch these once the loader has
+    # handed over, so a sentinel across the app tests catches accidental
+    # overlaps (the fcb_buf/alv_c type of bug).
+    BANK6_GAPS = ((0xA6FC, 4), (0xA83D, 3), (0xA870, 0x90),
+                  (0xADA4, 0x25C))
+
+    def run_bank6_sentinels(self) -> None:
+        self.sentinels: list[tuple[int, bytes]] = []
+        for addr, length in self.BANK6_GAPS:
+            pattern = bytes(0xA5 ^ (i & 0xFF) for i in range(length))
+            self.mcp.call("write_memory", {
+                "address": hex(addr), "hex_bytes": pattern.hex(), "bank": 6})
+            self.sentinels.append((addr, pattern))
+        self.log("bank-6 sentinels")
+
+    def check_bank6_sentinels(self) -> None:
+        for addr, pattern in self.sentinels:
+            got = self.memory(6, addr, len(pattern))
+            if got != pattern:
+                for i, (a, b) in enumerate(zip(got, pattern)):
+                    if a != b:
+                        raise SmokeError(
+                            f"bank-6 gap {addr + i:04X} was {a:02X}, "
+                            f"expected {b:02X}")
+                raise SmokeError(f"bank-6 gap {addr:04X} is short")
+
     def run_systest(self) -> None:
         self.command("SYSTEST", 2500)
         screen = self.text()
@@ -956,6 +982,7 @@ class Smoke:
     def run(self) -> None:
         self.boot()
         self.run_loader_stage()
+        self.run_bank6_sentinels()
         self.run_systest()
         self.run_xtetest()
         # SYSTEST deliberately changes and restores the delimiter; DIR must
@@ -973,6 +1000,8 @@ class Smoke:
         self.run_pagination()
         self.run_block16()
         self.run_ccp_external()
+        # Check before the scratch-image format test reboots the machine.
+        self.check_bank6_sentinels()
         self.run_xtetest_format()
         self.check_fdc()
         self.log("all checks passed")
