@@ -72,6 +72,11 @@ Cases: missing/deleted `CPM3.SYS`, truncated allocation map, block number
 past the end of the disk, corrupted boot-sector checksum, deleted `CCP.COM`
 (boots, prints `CCP.COM missing`, no prompt), and no disk in drive A:.
 
+Optional-file cases (the boot must still reach `A>`): deleted `FONT64.BIN`
+(and `SCREEN 64` is refused, width stays 51), deleted `FONT51.BIN`, deleted
+`RAMDISK.FID`, and a corrupted `OCFID` magic.  The two FID cases also check
+that `drive_table_c_slot` stays zero, i.e. C: is not registered.
+
 Both scripts exit 0 on success and 1 on a failed assertion. Set `ZX84_DIR`
 or pass `--zx84` when the emulator checkout is not next to this repository.
 The manual flow below remains useful for interactive debugging.

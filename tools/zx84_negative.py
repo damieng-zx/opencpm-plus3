@@ -42,6 +42,22 @@ def entry_offset(entry: int) -> int:
     return sector_offset(1, entry // 16) + (entry % 16) * 32
 
 
+def find_entry(data: bytearray, name: bytes) -> int:
+    for i in range(64):
+        off = entry_offset(i)
+        if bytes(data[off + 1:off + 12]) == name:
+            return off
+    raise SmokeError(f"{name.decode()} directory entry not found")
+
+
+def block_sector_offset(data: bytearray, block: int) -> int:
+    """Disk byte offset of the first sector of a 1K CP/M block."""
+    abs_sector = block * 2           # 1K block = 2 x 512-byte sectors
+    track = abs_sector // 9 + 1      # OFF=1
+    sector = abs_sector % 9
+    return sector_offset(track, sector)
+
+
 def make_images(src: Path, outdir: Path) -> dict[str, Path]:
     outdir.mkdir(parents=True, exist_ok=True)
     base = bytearray(src.read_bytes())
@@ -72,14 +88,29 @@ def make_images(src: Path, outdir: Path) -> dict[str, Path]:
     # CCP.COM is loaded from the disk at cold boot; without it the system
     # must say so instead of jumping into a half-built TPA.
     noccp = bytearray(base)
-    for i in range(64):
-        off = entry_offset(i)
-        if bytes(noccp[off + 1:off + 12]) == b"CCP     COM":
-            noccp[off] = 0xE5                # mark the entry deleted
-            break
-    else:
-        raise SmokeError("CCP.COM directory entry not found")
+    noccp[find_entry(noccp, b"CCP     COM")] = 0xE5   # mark deleted
     images["noccp"] = write("noccp", noccp)
+
+    # Optional files: the loader must skip them and the system must still
+    # boot.  FONT64 is gated on LF_FLAGS bit 4, so SCREEN 64 must be refused.
+    nofont64 = bytearray(base)
+    nofont64[find_entry(nofont64, b"FONT64  BIN")] = 0xE5
+    images["nofont64"] = write("nofont64", nofont64)
+
+    nofont51 = bytearray(base)
+    nofont51[find_entry(nofont51, b"FONT51  BIN")] = 0xE5
+    images["nofont51"] = write("nofont51", nofont51)
+
+    nofid = bytearray(base)
+    nofid[find_entry(nofid, b"RAMDISK FID")] = 0xE5
+    images["nofid"] = write("nofid", nofid)
+
+    # Corrupt the OCFID magic in the FID's first block: the loader stages
+    # the bytes but load_fid must refuse to register C:.
+    badfid = bytearray(base)
+    off = find_entry(badfid, b"RAMDISK FID")
+    badfid[block_sector_offset(badfid, badfid[off + 16])] ^= 0xFF
+    images["badfid"] = write("badfid", badfid)
 
     return images
 
@@ -89,6 +120,16 @@ class Negative:
         self.mcp = mcp
         self.cb = label_address("char_buffer")
         self.cb_bank = bank_for_address(self.cb)
+
+    def memory(self, bank: int, addr: int, length: int) -> bytes:
+        txt = self.mcp.call("read_memory", {
+            "address": hex(addr), "length": length, "bank": bank})
+        data = bytearray()
+        for line in txt.splitlines():
+            m = re.match(r"^([0-9A-F]{4})\s+((?:[0-9A-F]{2} )+)", line)
+            if m:
+                data.extend(bytes.fromhex(m.group(2)))
+        return bytes(data[:length])
 
     def screen(self) -> str:
         txt = self.mcp.call("read_memory", {
@@ -126,6 +167,38 @@ class Negative:
         if "CCP.COM missing" not in screen:
             raise SmokeError(f"noccp: no diagnostic on screen:\n{screen}")
         print("[negative] noccp: reports missing CCP.COM, no prompt (ok)")
+
+    def boots(self, name: str, path: Path) -> None:
+        """An optional file is missing: boot must still reach the prompt."""
+        self.reset()
+        self.mcp.call("load", {"file": str(path)})
+        self.mcp.call("disk_boot", {})
+        self.mcp.call("run", {"frames": 1500})
+        screen = self.screen()
+        if "A>" not in screen or "Open CP/M +3" not in screen:
+            raise SmokeError(f"{name}: did not boot cleanly:\n{screen}")
+        print(f"[negative] {name}: boots (ok)")
+
+    def c_absent(self, name: str, path: Path) -> None:
+        """No usable FID: C: must not be registered."""
+        self.boots(name, path)
+        slot = label_address("drive_table_c_slot")
+        raw = self.memory(3, slot, 2)
+        if raw != b"\x00\x00":
+            raise SmokeError(f"{name}: C: registered with a bad FID ({raw.hex()})")
+        print(f"[negative] {name}: C: absent (ok)")
+
+    def font64_missing(self, path: Path) -> None:
+        """Without FONT64.BIN, SCREEN 64 must be refused."""
+        self.boots("nofont64", path)
+        self.mcp.call("type", {"text": "SCREEN 64"})
+        self.mcp.call("key", {"name": "enter"})
+        self.mcp.call("run", {"frames": 800})
+        cols = self.memory(4, label_address("scr_cols"), 1)[0]
+        if cols != 51:
+            raise SmokeError(
+                f"nofont64: SCREEN 64 changed width to {cols}, expected 51")
+        print("[negative] nofont64: SCREEN 64 refused (ok)")
 
     def nodisk(self) -> None:
         self.reset()
@@ -167,6 +240,12 @@ def main() -> int:
             for name, path in images.items():
                 if name == "noccp":
                     neg.no_ccp(path)
+                elif name == "nofont64":
+                    neg.font64_missing(path)
+                elif name == "nofont51":
+                    neg.boots(name, path)
+                elif name in ("nofid", "badfid"):
+                    neg.c_absent(name, path)
                 else:
                     neg.no_boot(name, path)
             neg.nodisk()

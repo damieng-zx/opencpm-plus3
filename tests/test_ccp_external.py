@@ -77,6 +77,13 @@ class LoaderStaging(unittest.TestCase):
                       "self.run_loader_stage()"):
             self.assertIn(token, smoke)
 
+    def test_negative_cases_cover_optional_files(self):
+        neg = source("tools/zx84_negative.py")
+        for token in ("nofont64", "nofont51", "nofid", "badfid",
+                      "find_entry", "block_sector_offset",
+                      "drive_table_c_slot", "scr_cols"):
+            self.assertIn(token, neg)
+
     def test_loader_stages_fonts_and_fid(self):
         loader = source("src/boot/loader.asm")
         self.assertIn('NAME_51:    db "FONT51  BIN"', loader)
