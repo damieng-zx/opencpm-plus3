@@ -1488,7 +1488,21 @@ start:
 .t26_print:
     ld c, 9
     call BDOS
-.t26_done:
+
+    ; === Test 27: KM_SET_SPEED 0 means 256 ===
+    ; Leave 0/0 in place; the smoke runner reads the stored words.
+    ld de, msg_t27
+    ld c, 9
+    call BDOS
+
+    ld hl, KM_SET_SPEED
+    ld (userf_dw), hl
+    ld hl, 0x0000
+    call userf_trampoline
+
+    ld de, msg_ok
+    ld c, 9
+    call BDOS
 
     ; === Done ===
     ld de, msg_done
@@ -1679,6 +1693,7 @@ msg_t23:    db 0x0D, 0x0A, "23.DRIVESTAT..", '$'
 msg_t24:    db 0x0D, 0x0A, "24.KTWRAP..", '$'
 msg_t25:    db 0x0D, 0x0A, "25.SETKEY..", '$'
 msg_t26:    db 0x0D, 0x0A, "26.EXPMAX..", '$'
+msg_t27:    db 0x0D, 0x0A, "27.KMZERO..", '$'
 exp_string: db "HELLO"
 exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'

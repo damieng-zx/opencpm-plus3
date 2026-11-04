@@ -489,7 +489,7 @@ class Smoke:
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
                        "17.KTPUT..OK", "18.KTGET..OK", "19.KTAB..OK",
-                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "DONE"):
+                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "27.KMZERO..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + seen)
@@ -511,13 +511,14 @@ class Smoke:
             if value != expected:
                 raise SmokeError(
                     f"DD_SETUP {name} {value:02X}, expected {expected:02X}")
-        # Keyboard state lives in bank 6 (A63F+).
-        for name, expected in (("kbd_repeat_delay", 10),
-                               ("kbd_repeat_rate", 5)):
-            value = self.memory(6, label_address(name), 1)[0]
-            if value != expected:
+        # Keyboard state lives in bank 6 (A63F+).  Test 27 leaves 0/0,
+        # which the handler must store as 256 scans.
+        for name in ("kbd_repeat_delay", "kbd_repeat_rate"):
+            value = int.from_bytes(
+                self.memory(6, label_address(name), 2), "little")
+            if value != 256:
                 raise SmokeError(
-                    f"KM_SET_SPEED {name} {value}, expected {expected}")
+                    f"KM_SET_SPEED {name} {value}, expected 256")
         # Tests 17/18 queue and drain two tokens, then test 24 fills the
         # queue to 16 and runs 20 put/get cycles: head/tail end at 6.
         count = self.memory(6, label_address("kbd_token_count"), 1)[0]

@@ -565,8 +565,11 @@ class KmSetSpeed(unittest.TestCase):
         tester = source("src/test/xtetest.asm")
         self.assertIn("KM_SET_SPEED", tester)
         self.assertIn("16.KMSPD", tester)
+        self.assertIn("27.KMZERO", tester)
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("16.KMSPD..OK", smoke)
+        self.assertIn("27.KMZERO..OK", smoke)
+        self.assertIn("value != 256", smoke)
         self.assertIn("kbd_repeat_delay", smoke)
 
 

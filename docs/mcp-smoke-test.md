@@ -22,7 +22,7 @@ runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
 `15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`,
 `19.KTAB..OK`, `20.EXP..OK`, `21.CDVER..OK`, `22.CDINFO..OK`, `23.DRIVESTAT..OK`, `24.KTWRAP..OK`,
-`25.SETKEY..OK`, `26.EXPMAX..OK`, the `5Ah` marker somewhere in the screen
+`25.SETKEY..OK`, `26.EXPMAX..OK`, `27.KMZERO..OK`, the `5Ah` marker somewhere in the screen
 attribute plane (bank 5, `5800h`-`5AFFh`)
 and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
@@ -270,8 +270,10 @@ into `D300h` and returns a clean result phase.
 Test 15 uses `DD_L_WRITE` with WRITE DATA to write the same boot sector
 back unchanged, then re-reads it with `DD_L_READ` and checks the prefix.
 
-Test 16 calls `KM_SET_SPEED` with H=10, L=5; the smoke runner checks the
-stored `kbd_repeat_delay`/`kbd_repeat_rate` values.
+Test 16 calls `KM_SET_SPEED` with H=10, L=5 (exercising the setter), then
+test 27 sets 0/0: the runner checks both stored words are 256 scans, the
+documented meaning of zero.  The repeat path itself reads those variables
+(`_kbd_scan`).
 
 Test 17 calls `KM_KT_PUT` twice (shift 08h/key 2Bh, then 00h/1Fh) and
 verifies BC survives.  Test 18 then drains both with `KM_KT_GET`, checks
