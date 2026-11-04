@@ -460,8 +460,11 @@ class DdLDpb(unittest.TestCase):
         tester = source("src/test/xtetest.asm")
         self.assertIn("DD_L_DPB", tester)
         self.assertIn("12.DPB", tester)
+        self.assertIn("29.BADSPEC", tester)
+        self.assertIn("bad_specs:", tester)
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("12.DPB..OK", smoke)
+        self.assertIn("29.BADSPEC..OK", smoke)
 
 
 class DdLRead(unittest.TestCase):

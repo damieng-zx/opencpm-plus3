@@ -1626,6 +1626,67 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 29: invalid DPB/XDPB specs ===
+    ld de, msg_t29
+    ld c, 9
+    call BDOS
+
+    ld ix, bad_specs
+    ld b, 8
+.t29_loop:
+    push bc
+    push ix
+    push ix
+    pop hl
+    ld de, 0xD700
+    ld bc, 10
+    ldir
+    ld hl, DD_L_XDPB
+    ld (userf_dw), hl
+    ld hl, 0xD700
+    ld ix, 0xD800
+    call userf_trampoline
+    pop ix
+    pop bc
+    jp c, .t29_fail
+    cp 6
+    jp nz, .t29_fail
+    ld de, 10
+    add ix, de
+    djnz .t29_loop
+
+    ; DD_L_DPB must reject the same way (type 4 for a single check).
+    ld hl, bad_specs
+    ld de, 0xD700
+    ld bc, 10
+    ldir
+    ld hl, DD_L_DPB
+    ld (userf_dw), hl
+    ld hl, 0xD700
+    ld ix, 0xD800
+    call userf_trampoline
+    jp c, .t29_fail
+    cp 6
+    jp nz, .t29_fail
+
+    ; DD_SEL_FORMAT rejects format 4.
+    ld hl, DD_SEL_FORMAT
+    ld (userf_dw), hl
+    ld a, 4
+    ld ix, 0xD800
+    call userf_trampoline
+    jp c, .t29_fail
+    cp 6
+    jp nz, .t29_fail
+
+    ld de, msg_ok
+    jr .t29_print
+.t29_fail:
+    ld de, msg_fail
+.t29_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1777,6 +1838,15 @@ lread_data_pb:
     dw 512
     db 9
     db 0x46, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x2A, 0xFF
+bad_specs:
+    db 4, 0, 40, 9, 2, 1, 3, 2, 42, 82    ; bad disc type
+    db 0, 3, 40, 9, 2, 1, 3, 2, 42, 82    ; bad arrangement
+    db 0, 0, 0, 9, 2, 1, 3, 2, 42, 82     ; zero tracks
+    db 0, 0, 40, 0, 2, 1, 3, 2, 42, 82    ; zero sectors
+    db 0, 0, 40, 9, 3, 1, 3, 2, 42, 82    ; bad sector size
+    db 0, 0, 40, 9, 2, 1, 8, 2, 42, 82    ; bad block size
+    db 0, 0, 40, 9, 2, 1, 3, 0, 42, 82    ; zero directory blocks
+    db 0, 0, 40, 9, 2, 1, 3, 17, 42, 82   ; too many directory blocks
 lread_multi_pb:
     db 1
     dw 0xD400
@@ -1842,6 +1912,7 @@ msg_t25:    db 0x0D, 0x0A, "25.SETKEY..", '$'
 msg_t26:    db 0x0D, 0x0A, "26.EXPMAX..", '$'
 msg_t27:    db 0x0D, 0x0A, "27.KMZERO..", '$'
 msg_t28:    db 0x0D, 0x0A, "28.LREADX..", '$'
+msg_t29:    db 0x0D, 0x0A, "29.BADSPEC..", '$'
 exp_string: db "HELLO"
 exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
