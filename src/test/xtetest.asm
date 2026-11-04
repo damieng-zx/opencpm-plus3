@@ -587,7 +587,7 @@ start:
     ; normal boot-disk self-test never formats anything.
     ld a, (0xDC00)
     cp 0xA5
-    jr nz, .t10_skip
+    jp nz, .t10_skip
     ld de, msg_t10
     ld c, 9
     call BDOS
@@ -639,9 +639,88 @@ start:
 .t10_check:
     ld a, (hl)
     cp 0xE5
-    jr nz, .t10_fail
+    jp nz, .t10_fail
     inc hl
     djnz .t10_check
+
+    ; READ ID on the freshly formatted 9-sector track.
+    ld hl, DD_READ_ID
+    ld (userf_dw), hl
+    ld bc, 0
+    ld d, 39
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t10_fail
+    cp 1
+    jp c, .t10_fail
+    cp 10
+    jp nc, .t10_fail
+
+    ; Copy the XDPB and change it to 8 sectors/track.
+    ld hl, 0xD200
+    ld de, 0xD220
+    ld bc, 27
+    ldir
+    ld a, 8
+    ld (0xD220 + 19), a
+
+    ; Header table at D520h: track 38, head 0, sectors 1-8.
+    ld hl, 0xD520
+    ld b, 1
+.t10_hdr8:
+    ld a, 38
+    ld (hl), a
+    inc hl
+    xor a
+    ld (hl), a
+    inc hl
+    ld a, b
+    ld (hl), a
+    inc hl
+    ld a, 2
+    ld (hl), a
+    inc hl
+    inc b
+    ld a, b
+    cp 9
+    jr nz, .t10_hdr8
+
+    ; DD_FORMAT track 38 with the 8-sector XDPB.
+    ld hl, DD_FORMAT
+    ld (userf_dw), hl
+    ld bc, 0x0100
+    ld de, 0x26E5
+    ld hl, 0xD520
+    ld ix, 0xD220
+    call userf_trampoline
+    jp nc, .t10_fail
+
+    ; READ ID must report one of the eight sectors, never 9.
+    ld hl, DD_READ_ID
+    ld (userf_dw), hl
+    ld bc, 0
+    ld d, 38
+    ld ix, 0xD220
+    call userf_trampoline
+    jp nc, .t10_fail
+    cp 1
+    jp c, .t10_fail
+    cp 9
+    jp nc, .t10_fail
+
+    ; Logical sector 7 (the eighth physical sector) is present and filled.
+    ld hl, DD_READ_SECTOR
+    ld (userf_dw), hl
+    ld bc, 0x0100
+    ld de, 0x2607
+    ld hl, 0xD300
+    ld ix, 0xD220
+    call userf_trampoline
+    jp nc, .t10_fail
+    ld a, (0xD300)
+    cp 0xE5
+    jp nz, .t10_fail
+
     ld de, msg_ok
     jr .t10_print
 .t10_fail:

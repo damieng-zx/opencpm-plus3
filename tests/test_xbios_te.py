@@ -360,6 +360,10 @@ class DiscPhase2(unittest.TestCase):
             self.assertRegex(text, rf"{name}\s+EQU\s+{addr}")
         self.assertIn("9.RW", text)
         self.assertIn("10.FMT", text)
+        # 8-sector format + READ ID checks in the destructive test.
+        self.assertIn("0xD220 + 19", text)
+        self.assertIn("0xD520", text)
+        self.assertIn("0x26E5", text)
 
     def test_smoke_runs_format_on_scratch(self):
         text = source("tools/zx84_smoke.py")

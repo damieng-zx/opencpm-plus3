@@ -247,8 +247,11 @@ unsupported bank without formatting.
 Test 10 is the destructive format check.  It only runs when the harness
 sets the `DC00h` magic byte.  It builds a standard 9-sector header table at
 `D500h`, formats track 39 with filler `E5h`, reads the track back and
-checks the data area.  The smoke runner does this on a scratch copy and
-uses `sector_read` to confirm the filler.
+checks the data area, then reads the sector ID.  It then copies the XDPB,
+sets 8 sectors/track, formats track 38 with an 8-entry header at `D520h`,
+checks `READ ID` never reports sector 9 and reads the eighth sector back.
+The smoke runner does this on a scratch copy and uses `sector_read` to
+confirm the filler.
 
 Test 11 applies the default `DD_SETUP` parameter block at `D600h`.  The
 smoke runner then checks the translated fields: `motor_off_ticks=250`
