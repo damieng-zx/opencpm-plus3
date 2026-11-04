@@ -1253,6 +1253,52 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 19b: KM_SET_KEY CAPS table end-to-end ===
+    ; Remap X (raw key 2) in the CAPS table to 'Q', then wait for the
+    ; harness to press CAPS+X and check the translated character.
+    ld hl, KM_SET_KEY
+    ld (userf_dw), hl
+    ld bc, 0x5102               ; B = 'Q', C = key 2 (X)
+    ld de, 0x0200               ; D = CAPS table, E = unchanged
+    call userf_trampoline
+    ld a, c
+    cp 2
+    jp nz, .t19c_fail
+    ld a, b
+    cp 0x51
+    jp nz, .t19c_fail
+    ld a, d
+    cp 0x02
+    jp nz, .t19c_fail
+
+    ld de, msg_t19c
+    ld c, 9
+    call BDOS
+
+.t19c_wait:
+    ld c, 6                     ; direct console input, no echo
+    ld e, 0xFF
+    call BDOS
+    or a
+    jr z, .t19c_wait
+    cp 0x51                     ; 'Q' from the CAPS table
+    jp nz, .t19c_fail
+
+    ; Restore the built-in CAPS translation for key 2.
+    ld hl, KM_SET_KEY
+    ld (userf_dw), hl
+    ld bc, 0xFF02
+    ld de, 0x0200
+    call userf_trampoline
+
+    ld de, msg_ok
+    jr .t19c_print
+.t19c_fail:
+    ld de, msg_fail
+.t19c_print:
+    ld c, 9
+    call BDOS
+
     ; === Test 20: KM_SET_EXPAND ===
     ld de, msg_t20
     ld c, 9
@@ -2022,6 +2068,7 @@ msg_t16:    db 0x0D, 0x0A, "16.KMSPD..", '$'
 msg_t17:    db 0x0D, 0x0A, "17.KTPUT..", '$'
 msg_t18:    db 0x0D, 0x0A, "18.KTGET..", '$'
 msg_t19:    db 0x0D, 0x0A, "19.KTAB..", '$'
+msg_t19c:   db 0x0D, 0x0A, "19.CAPS..", '$'
 msg_t20:    db 0x0D, 0x0A, "20.EXP..", '$'
 msg_t21:    db 0x0D, 0x0A, "21.CDVER..", '$'
 msg_t22:    db 0x0D, 0x0A, "22.CDINFO..", '$'

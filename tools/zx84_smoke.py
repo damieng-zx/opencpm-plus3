@@ -487,6 +487,13 @@ class Smoke:
             raise SmokeError(
                 f"SCR_RUN_ROUTINE input flag {flag:02X}, expected 01")
         self.key("z")
+        # Test 19 then remaps X in the CAPS table and blocks again: press
+        # CAPS+X (the emulator's "shift+") and expect the remapped letter.
+        self.wait_for(["19.CAPS.."], frames=100, attempts=40)
+        self.key("shift+x", frames=5)
+        # Poll in short bursts: once the key arrives the test races on to 20+
+        # and would scroll this line away inside a single 100-frame step.
+        self.wait_for(["19.CAPS..OK"], frames=15, attempts=200)
         self.wait_for(["DONE"], frames=100, attempts=40)
         screen = self.text()
         # The full run scrolls off the 24-line screen, so check every frame
@@ -497,7 +504,7 @@ class Smoke:
         for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK",
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
-                       "17.KTPUT..OK", "18.KTGET..OK",
+                       "17.KTPUT..OK", "18.KTGET..OK", "19.CAPS..OK",
                        "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "27.KMZERO..OK", "28.LREADX..OK", "29.BADSPEC..OK", "30.SETUPX..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
@@ -589,7 +596,8 @@ class Smoke:
         if maxslot != expect31:
             raise SmokeError(
                 f"KM_SET_EXPAND 9Eh slot {maxslot.hex()}, expected {expect31.hex()}")
-        self.expect("XTETEST prompt", "A>")
+        # DONE can appear a few frames before the CCP redraws its prompt.
+        self.wait_for(["A>"], frames=50, attempts=40)
 
     def run_xtetest_format(self) -> None:
         """Run the destructive DD_FORMAT test on a scratch disk copy."""
@@ -610,8 +618,10 @@ class Smoke:
             if "E5 E5 E5" not in dump:
                 raise SmokeError(
                     "DD_FORMAT did not fill track 39 with 0xE5:\n" + dump)
-            # Let the run finish (test 19 waits for a key).
+            # Let the run finish (test 19 waits for two keys).
             self.key("z")
+            self.wait_for(["19.CAPS.."], frames=100, attempts=40)
+            self.key("shift+x", frames=5)
             self.wait_for(["DONE"], frames=500, attempts=10)
         finally:
             self.dsk = old_dsk

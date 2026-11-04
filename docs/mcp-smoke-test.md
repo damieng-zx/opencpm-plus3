@@ -296,6 +296,12 @@ until a key arrives.  The runner waits for that marker, presses Z and then
 waits for `19.KTAB..OK`; the test restores the built-in mapping afterwards
 and the runner checks `KMTAB[4]` is `FFh`.
 
+It then repeats the exercise on the CAPS table: X (raw key 2) is remapped to
+`Q`, the runner presses CAPS+X (`shift+x` in the MCP) and waits for
+`19.CAPS..OK`, which proves the CAPS-shift index and mask work through the
+real scanner, not just the setter.  Short polling steps are used because the
+run races on to tests 20-30 once the key arrives.
+
 Test 20 stores `HELLO` under expansion token `85h` with `KM_SET_EXPAND`,
 checks that token `7Fh` and a 32-character string are rejected, and the
 runner reads back the slot at `A9A0h + 5*32` (length 5 plus `HELLO`).
