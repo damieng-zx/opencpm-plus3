@@ -494,6 +494,11 @@ class Smoke:
         # Poll in short bursts: once the key arrives the test races on to 20+
         # and would scroll this line away inside a single 100-frame step.
         self.wait_for(["19.CAPS..OK"], frames=15, attempts=200)
+        # Test 31 holds a key at fast and slow repeat speeds.
+        self.wait_for(["31.KREPEAT.."], frames=100, attempts=40)
+        self.key("a", frames=60)
+        self.wait_for(["31.SLOWX.."], frames=100, attempts=40)
+        self.key("b", frames=60)
         self.wait_for(["DONE"], frames=100, attempts=40)
         screen = self.text()
         # The full run scrolls off the 24-line screen, so check every frame
@@ -505,7 +510,7 @@ class Smoke:
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
                        "17.KTPUT..OK", "18.KTGET..OK", "19.CAPS..OK",
-                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "27.KMZERO..OK", "28.LREADX..OK", "29.BADSPEC..OK", "30.SETUPX..OK", "DONE"):
+                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "27.KMZERO..OK", "28.LREADX..OK", "29.BADSPEC..OK", "30.SETUPX..OK", "31.KREPEAT..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + seen)
@@ -618,10 +623,15 @@ class Smoke:
             if "E5 E5 E5" not in dump:
                 raise SmokeError(
                     "DD_FORMAT did not fill track 39 with 0xE5:\n" + dump)
-            # Let the run finish (test 19 waits for two keys).
+            # Let the run finish: tests 19 and 19b wait for keys, then 31
+            # holds two more for the repeat-cadence check.
             self.key("z")
             self.wait_for(["19.CAPS.."], frames=100, attempts=40)
             self.key("shift+x", frames=5)
+            self.wait_for(["31.KREPEAT.."], frames=100, attempts=40)
+            self.key("a", frames=60)
+            self.wait_for(["31.SLOWX.."], frames=100, attempts=40)
+            self.key("b", frames=60)
             self.wait_for(["DONE"], frames=500, attempts=10)
         finally:
             self.dsk = old_dsk

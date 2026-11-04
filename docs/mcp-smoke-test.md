@@ -283,6 +283,14 @@ test 27 sets 0/0: the runner checks both stored words are 256 scans, the
 documented meaning of zero.  The repeat path itself reads those variables
 (`_kbd_scan`).
 
+Test 31 proves the timings actually drive auto-repeat.  It sets delay 1 /
+rate 1, the runner holds a key for 60 frames, and the test counts the
+characters until 2000 empty reads (at least three must arrive).  It then
+sets delay 250, holds another key for the same 60 frames and requires
+exactly one character: the start-up delay outlasts the hold, so a repeat
+that ignored the stored timings would fail the second half.  It leaves 0/0
+in place so the test-27 read-back still sees 256.
+
 Test 17 calls `KM_KT_PUT` twice (shift 08h/key 2Bh, then 00h/1Fh) and
 verifies BC survives.  Test 18 then drains both with `KM_KT_GET`, checks
 the returned shift/key pairs, that an empty queue returns carry clear, and

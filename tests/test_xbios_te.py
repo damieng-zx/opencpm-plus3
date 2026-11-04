@@ -600,9 +600,13 @@ class KmSetSpeed(unittest.TestCase):
         self.assertIn("KM_SET_SPEED", tester)
         self.assertIn("16.KMSPD", tester)
         self.assertIn("27.KMZERO", tester)
+        self.assertIn("31.KREPEAT", tester)
+        self.assertIn("0x00FA", tester)          # slow start-up delay
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("16.KMSPD..OK", smoke)
         self.assertIn("27.KMZERO..OK", smoke)
+        self.assertIn("31.KREPEAT..OK", smoke)
+        self.assertIn('self.key("a", frames=60)', smoke)
         self.assertIn("value != 256", smoke)
         self.assertIn("kbd_repeat_delay", smoke)
 

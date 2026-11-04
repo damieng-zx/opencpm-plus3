@@ -1845,6 +1845,116 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 31: KM_SET_SPEED repeat cadence ===
+    ; Fast (delay 1, rate 1) while the harness holds a key must repeat;
+    ; slow (delay 250) over the same hold must deliver exactly one character.
+    ld de, msg_t31
+    ld c, 9
+    call BDOS
+
+    ld hl, KM_SET_SPEED
+    ld (userf_dw), hl
+    ld hl, 0x0101               ; H = delay 1, L = rate 1
+    call userf_trampoline
+
+    ; Wait for the key, then count until 2000 consecutive empty reads.
+.t31_fast_wait:
+    ld c, 6
+    ld e, 0xFF
+    call BDOS
+    or a
+    jr z, .t31_fast_wait
+
+    ld bc, 1                    ; one character already received
+    ld de, 2000
+.t31_fast_loop:
+    push bc
+    push de
+    ld c, 6
+    ld e, 0xFF
+    call BDOS
+    pop de
+    pop bc
+    or a
+    jr z, .t31_fast_miss
+    inc bc
+    ld de, 2000
+    jr .t31_fast_loop
+.t31_fast_miss:
+    dec de
+    ld a, d
+    or e
+    jr nz, .t31_fast_loop
+
+    ; At least three characters means the repeat fired while held.
+    ld a, b
+    or a
+    jr nz, .t31_fast_ok
+    ld a, c
+    cp 3
+    jp c, .t31_fail
+
+.t31_fast_ok:
+    ; Slow: the start-up delay outlasts the harness hold.
+    ld hl, KM_SET_SPEED
+    ld (userf_dw), hl
+    ld hl, 0x00FA               ; H = 250 scans, L = 250
+    call userf_trampoline
+
+    ld de, msg_t31b
+    ld c, 9
+    call BDOS
+
+.t31_slow_wait:
+    ld c, 6
+    ld e, 0xFF
+    call BDOS
+    or a
+    jr z, .t31_slow_wait
+
+    ld bc, 1
+    ld de, 2000
+.t31_slow_loop:
+    push bc
+    push de
+    ld c, 6
+    ld e, 0xFF
+    call BDOS
+    pop de
+    pop bc
+    or a
+    jr z, .t31_slow_miss
+    inc bc
+    ld de, 2000
+    jr .t31_slow_loop
+.t31_slow_miss:
+    dec de
+    ld a, d
+    or e
+    jr nz, .t31_slow_loop
+
+    ; Exactly one character: no repeat inside the hold.
+    ld a, b
+    or a
+    jp nz, .t31_fail
+    ld a, c
+    cp 1
+    jp nz, .t31_fail
+
+    ; Leave 0/0 (256 scans) as test 27 did, for the smoke read-back.
+    ld hl, KM_SET_SPEED
+    ld (userf_dw), hl
+    ld hl, 0x0000
+    call userf_trampoline
+
+    ld de, msg_t31ok
+    jr .t31_print
+.t31_fail:
+    ld de, msg_fail
+.t31_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -2080,6 +2190,9 @@ msg_t27:    db 0x0D, 0x0A, "27.KMZERO..", '$'
 msg_t28:    db 0x0D, 0x0A, "28.LREADX..", '$'
 msg_t29:    db 0x0D, 0x0A, "29.BADSPEC..", '$'
 msg_t30:    db 0x0D, 0x0A, "30.SETUPX..", '$'
+msg_t31:    db 0x0D, 0x0A, "31.KREPEAT..", '$'
+msg_t31b:   db 0x0D, 0x0A, "31.SLOWX..", '$'
+msg_t31ok:  db "31.KREPEAT..OK", 0x0D, 0x0A, '$'
 exp_string: db "HELLO"
 exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'

@@ -124,9 +124,13 @@ the harness sets the `DC00h` magic byte, formats track 39 and checks the
 cover `DD_SETUP`, `DD_L_DPB`, `DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`,
 `KM_SET_SPEED`, `KM_KT_PUT` and `KM_KT_GET`.  Test 19 remaps the Z key to
 `Q` with `KM_SET_KEY` and waits for the harness to press Z, so the whole
-scanner-to-ASCII path is exercised end to end.  Test 20 stores an expansion
-string with `KM_SET_EXPAND` and checks the invalid-token and over-long
-rejections.
+scanner-to-ASCII path is exercised end to end; it repeats the exercise on
+the CAPS table (X remapped, harness presses CAPS+X).  Test 20 stores an
+expansion string with `KM_SET_EXPAND` and checks the invalid-token and
+over-long rejections.  Test 31 holds a key at delay 1/rate 1 and again at
+delay 250, requiring several repeats in the first case and exactly one
+character in the second, so the stored timings are proven to drive the
+scanner.
 
 ## Calling from a .COM program
 
