@@ -1667,6 +1667,19 @@ start:
     or a
     jp nz, .t28_off
 
+    ; DD_L_WRITE with bank 0 must not transfer either.
+    ld hl, lwrite_bank0_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_WRITE
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    or a
+    jp nz, .t28_off
+
     ; Missing sector: the result phase must still come back (ND/MA set).
     ld hl, lread_bad_pb
     ld de, 0xD900
@@ -1971,6 +1984,12 @@ lread_bad_pb:
     dw 0
     db 9
     db 0x46, 0x00, 0x00, 0x00, 0x14, 0x02, 0x14, 0x2A, 0xFF
+lwrite_bank0_pb:
+    db 0
+    dw 0xD400
+    dw 512
+    db 9
+    db 0x45, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x2A, 0xFF
 lwrite_data_pb:
     db 1
     dw 0xD300

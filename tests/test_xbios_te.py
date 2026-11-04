@@ -522,6 +522,7 @@ class DdLRead(unittest.TestCase):
         self.assertIn("lread_multi_pb", tester)   # EOT > R
         self.assertIn("lread_bank0_pb", tester)   # bank rejection
         self.assertIn("lread_bad_pb", tester)     # missing sector
+        self.assertIn("lwrite_bank0_pb", tester)  # write bank rejection
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("14.LREAD..OK", smoke)
         self.assertIn("28.LREADX..OK", smoke)
