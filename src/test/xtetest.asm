@@ -1391,6 +1391,58 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 25: KM_SET_KEY masks and bounds ===
+    ; The smoke runner reads the table back from bank 6; these calls just
+    ; set entries in the non-normal tables plus the no-op cases, so later
+    ; smoke commands are not affected by remapped letters.
+    ld de, msg_t25
+    ld c, 9
+    call BDOS
+
+    ld hl, KM_SET_KEY
+    ld (userf_dw), hl
+
+    ; Key 2 (X) -> 'A' in CAPS only.
+    ld bc, 0x4102
+    ld de, 0x0200
+    call userf_trampoline
+
+    ; Key 3 (C) -> 'B' in SYMB only.
+    ld bc, 0x4203
+    ld de, 0x0400
+    call userf_trampoline
+
+    ; Key 4 (V) -> 'C' in EXTEND only.
+    ld bc, 0x4304
+    ld de, 0x0800
+    call userf_trampoline
+
+    ; Key 5 (A) -> 'F' in CAPS, SYMB and EXTEND (combined mask, no normal).
+    ld bc, 0x4605
+    ld de, 0x0E00
+    call userf_trampoline
+
+    ; Key 6 (S) -> 'G' in CAPS...
+    ld bc, 0x4706
+    ld de, 0x0200
+    call userf_trampoline
+    ; ...then an invalid key number (40) and a zero mask must not change it.
+    ld bc, 0x4828
+    ld de, 0x0200
+    call userf_trampoline
+    ld bc, 0x4906
+    ld de, 0x0000
+    call userf_trampoline
+
+    ; Boundary key 39 (B) -> 'J' in CAPS.
+    ld bc, 0x4A27
+    ld de, 0x0200
+    call userf_trampoline
+
+    ld de, msg_ok
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1578,6 +1630,7 @@ msg_t21:    db 0x0D, 0x0A, "21.CDVER..", '$'
 msg_t22:    db 0x0D, 0x0A, "22.CDINFO..", '$'
 msg_t23:    db 0x0D, 0x0A, "23.DRIVESTAT..", '$'
 msg_t24:    db 0x0D, 0x0A, "24.KTWRAP..", '$'
+msg_t25:    db 0x0D, 0x0A, "25.SETKEY..", '$'
 exp_string: db "HELLO"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'

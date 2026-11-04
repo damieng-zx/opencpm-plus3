@@ -679,8 +679,12 @@ class KmSetKey(unittest.TestCase):
         self.assertIn("KM_SET_KEY", tester)
         self.assertIn("19.KTAB", tester)
         self.assertIn("ld c, 6", tester)         # non-echoing read
+        self.assertIn("25.SETKEY", tester)
+        self.assertIn("0x0E00", tester)          # combined non-normal mask
+        self.assertIn("0x4828", tester)          # invalid key 40
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("19.KTAB..OK", smoke)
+        self.assertIn("25.SETKEY..OK", smoke)
         self.assertIn('self.key("z")', smoke)
         self.assertIn("0xA900", smoke)
 

@@ -489,7 +489,7 @@ class Smoke:
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
                        "17.KTPUT..OK", "18.KTGET..OK", "19.KTAB..OK",
-                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "DONE"):
+                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + seen)
@@ -533,6 +533,30 @@ class Smoke:
         if kmtab[4] != 0xFF:
             raise SmokeError(
                 f"KM_SET_KEY table[4] {kmtab[4]:02X}, expected FF after reset")
+        # Test 25 entries: key*4 + shift (normal, CAPS, SYMB, EXTEND).
+        # It only touches the non-normal tables, so normal typing still works.
+        for index, expected in ((2 * 4 + 1, ord("A")),
+                                (3 * 4 + 2, ord("B")),
+                                (4 * 4 + 3, ord("C")),
+                                (5 * 4 + 1, ord("F")),
+                                (5 * 4 + 2, ord("F")),
+                                (5 * 4 + 3, ord("F")),
+                                (5 * 4 + 0, 0xFF),
+                                (6 * 4 + 1, ord("G")),
+                                (6 * 4 + 0, 0xFF),
+                                (39 * 4 + 1, ord("J"))):
+            value = self.memory(6, 0xA900 + index, 1)[0]
+            if value != expected:
+                raise SmokeError(
+                    f"KM_SET_KEY table[{index}] {value:02X}, "
+                    f"expected {expected:02X}")
+        # The emulator types upper-case letters with CAPS SHIFT, so restore
+        # the test overrides before the remaining commands are typed.
+        for index in (2 * 4 + 1, 3 * 4 + 2, 4 * 4 + 3,
+                      5 * 4 + 1, 5 * 4 + 2, 5 * 4 + 3,
+                      6 * 4 + 1, 39 * 4 + 1):
+            self.mcp.call("write_memory", {
+                "address": hex(0xA900 + index), "hex_bytes": "FF", "bank": 6})
         # KM_SET_EXPAND slot for token 85h: length 5 + "HELLO".
         slot = self.memory(6, 0xA9A0 + 5 * 32, 6)
         if slot != bytes((5, ord("H"), ord("E"), ord("L"),

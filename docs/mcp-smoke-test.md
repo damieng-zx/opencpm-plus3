@@ -22,7 +22,7 @@ runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
 `15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`,
 `19.KTAB..OK`, `20.EXP..OK`, `21.CDVER..OK`, `22.CDINFO..OK`, `23.DRIVESTAT..OK`, `24.KTWRAP..OK`,
-the `5Ah` marker somewhere in the screen
+`25.SETKEY..OK`, the `5Ah` marker somewhere in the screen
 attribute plane (bank 5, `5800h`-`5AFFh`)
 and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
@@ -297,6 +297,11 @@ version 1.0), `CD_INFO` (one drive, 8 banks, no serial/B:, SS 40-track
 fitted, B/DE preserved).  Test 24 fills the key queue to 16, checks the
 17th token is dropped, drains it in order, then runs 20 put/get cycles to
 exercise head/tail wrap; the runner checks count 0 and head/tail 6.
+
+Test 25 sets `KM_SET_KEY` entries in the CAPS, SYMB and EXTEND tables
+(single and combined masks), then checks that an invalid key number (40)
+and a zero mask leave the entry unchanged.  The runner reads the table
+back, then restores those entries so later upper-case typing is unaffected.
 
 ### BDOS file regression suite
 
