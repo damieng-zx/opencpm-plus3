@@ -1955,6 +1955,41 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 32: DD_FORMAT rejects bad banks and unfitted units ===
+    ; These return before any FDC access, so this runs on the boot disk.
+    ld de, msg_t32
+    ld c, 9
+    call BDOS
+
+    ld hl, DD_FORMAT
+    ld (userf_dw), hl
+
+    ; Bank 1 but the XDPB is below C000h -> A = 9 (test 9 covers bank 0).
+    ld bc, 0x0100
+    ld de, 0x26E5
+    ld hl, 0xD520
+    ld ix, 0xB000
+    call userf_trampoline
+    jp c, .t32_fail
+    cp 9
+    jp nz, .t32_fail
+
+    ; Unit 1 is not fitted -> A = 0.
+    ld bc, 0x0101
+    ld ix, 0xD220
+    call userf_trampoline
+    jp c, .t32_fail
+    or a
+    jp nz, .t32_fail
+
+    ld de, msg_ok
+    jr .t32_print
+.t32_fail:
+    ld de, msg_fail
+.t32_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -2193,6 +2228,7 @@ msg_t30:    db 0x0D, 0x0A, "30.SETUPX..", '$'
 msg_t31:    db 0x0D, 0x0A, "31.KREPEAT..", '$'
 msg_t31b:   db 0x0D, 0x0A, "31.SLOWX..", '$'
 msg_t31ok:  db "31.KREPEAT..OK", 0x0D, 0x0A, '$'
+msg_t32:    db 0x0D, 0x0A, "32.FMTBAD..", '$'
 exp_string: db "HELLO"
 exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'

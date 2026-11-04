@@ -22,8 +22,9 @@ and asserts the 51x24 character buffer plus an empty FDC retry log:
 runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
 `15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`,
-`19.KTAB..OK`, `20.EXP..OK`, `21.CDVER..OK`, `22.CDINFO..OK`, `23.DRIVESTAT..OK`, `24.KTWRAP..OK`,
-`25.SETKEY..OK`, `26.EXPMAX..OK`, `27.KMZERO..OK`, `28.LREADX..OK`, `29.BADSPEC..OK`, `30.SETUPX..OK`, the `5Ah` marker somewhere in the screen
+`19.KTAB..OK`, `19.CAPS..OK`, `20.EXP..OK`, `21.CDVER..OK`, `22.CDINFO..OK`, `23.DRIVESTAT..OK`, `24.KTWRAP..OK`,
+`25.SETKEY..OK`, `26.EXPMAX..OK`, `27.KMZERO..OK`, `28.LREADX..OK`, `29.BADSPEC..OK`, `30.SETUPX..OK`,
+`31.KREPEAT..OK`, `32.FMTBAD..OK`, the `5Ah` marker somewhere in the screen
 attribute plane (bank 5, `5800h`-`5AFFh`)
 and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced the edge values above and then the restored
@@ -290,6 +291,11 @@ sets delay 250, holds another key for the same 60 frames and requires
 exactly one character: the start-up delay outlasts the hold, so a repeat
 that ignored the stored timings would fail the second half.  It leaves 0/0
 in place so the test-27 read-back still sees 256.
+
+Test 32 checks the two remaining `DD_FORMAT` guards: an XDPB below `C000h`
+(bank 1 still) and an unfitted unit 1.  Both return before any FDC access,
+so the boot disk is untouched: A=9 with carry clear for the low XDPB, A=0
+for the unit.  Bank 0 is already covered by test 9.
 
 Test 17 calls `KM_KT_PUT` twice (shift 08h/key 2Bh, then 00h/1Fh) and
 verifies BC survives.  Test 18 then drains both with `KM_KT_GET`, checks

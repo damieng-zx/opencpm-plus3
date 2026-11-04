@@ -364,6 +364,9 @@ class DiscPhase2(unittest.TestCase):
         self.assertIn("0xD220 + 19", text)
         self.assertIn("0xD520", text)
         self.assertIn("0x26E5", text)
+        # Non-destructive rejection cases: bad bank, low XDPB, unit 1.
+        self.assertIn("32.FMTBAD", text)
+        self.assertIn("0xB000", text)
 
     def test_smoke_runs_format_on_scratch(self):
         text = source("tools/zx84_smoke.py")

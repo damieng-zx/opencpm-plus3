@@ -130,7 +130,8 @@ expansion string with `KM_SET_EXPAND` and checks the invalid-token and
 over-long rejections.  Test 31 holds a key at delay 1/rate 1 and again at
 delay 250, requiring several repeats in the first case and exactly one
 character in the second, so the stored timings are proven to drive the
-scanner.
+scanner.  Test 32 checks the `DD_FORMAT` argument guards that return before
+any FDC access: an XDPB below `C000h` (A=9) and the unfitted unit 1 (A=0).
 
 ## Calling from a .COM program
 
