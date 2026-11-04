@@ -76,10 +76,13 @@ emulator.
 | Microsoft FORTRAN-80 3.44 | Pass | compile → link → run |
 | Microsoft BASIC Compiler 5.3 | Pass | compile → link → stand-alone `.COM` |
 | Aztec C 1.06D | Pass | cc → asm → object → link → run |
+| InterSystems Pascal/Z 4.0 | Pass | compile → assemble → link → run |
+| muLISP-80 | Pass | LISP read-eval-print loop |
+| APL/Z 1.1 | Pass | APL expressions in a 30 KB workspace |
 | Microsoft ZSID 1.4 | Pass | debugger: load, dump, `G0` |
 | SLR Z80ASM 1.32 | Pass | direct-to-`.COM` assembler; exercises F44 multi-sector reads |
 
-All 16 packages pass (some rows above group several packages). The suite is
+All 19 packages pass (some rows above group several packages). The suite is
 run on demand rather than in CI because it downloads third-party software.
 
 Two display caveats, both from the same root cause — the default screen is 51

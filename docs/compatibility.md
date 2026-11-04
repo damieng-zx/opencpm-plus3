@@ -33,6 +33,9 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **Microsoft FORTRAN-80** | 3.44 | `F80 CHELLO=CHELLO` compiles, `L80 CHELLO,FORLIB,CHELLO/N/E` links, `CHELLO` prints `HELLO, WORLD` | Library search, larger REL files |
 | **Microsoft BASIC Compiler** | 5.3 | `BASCOM =CHELLO/O` compiles, `L80 CHELLO,OBSLIB,CHELLO/N/E` links, `CHELLO` prints `HELLO, WORLD` | Stand-alone `/O` output links the 48 KB OBSLIB runtime. `BASCOM53.ZIP` is an OEM build that probes banked memory and exits; use `BASCOM.ZIP` |
 | **Aztec C** | 1.06D | `CC CHELLO`, `AS CHELLO`, `LN CHELLO.O C.LIB`, then `CHELLO` prints `HELLO, WORLD` | Compiler, assembler, linker and C.LIB. Keep `LIBC.REL` off the image: with it the disk is too full for the `.O` file |
+| **Pascal/Z** | 4.0 | `PASCAL54 HELLO`, `ASMBL MAIN,HELLO/REL`, `LINK /N:A:HELLO A:HELLO /G` prints `HELLO, WORLD` | Overlaying 54K compiler with PAS254, assembler, linker and LIB.REL. The source needs the `{$i+ }` I/O-check directive |
+| **muLISP-80** | 10/06/80 | `MULISP`, `(PLUS 2 3)` → `5`, `(TIMES 6 7)` → `42` | The Soft Warehouse LISP read-eval-print loop at the `$` prompt |
+| **APL/Z** | 1.1 | `APL`, date `010180`, `2+2` → `4`, `1 2 3 + 4 5 6` → `5 7 9` | Start-up asks for `mmddyy`; 30 KB workspace |
 | **SUBMIT** (our build) | — | Explicit `SUBMIT SMOKE.SUB`, implicit `SMOKE`, `$1`/`$2` substitution, missing-file/missing-parameter paths | Project tool, not third-party |
 
 ## ❌ Doesn’t work yet

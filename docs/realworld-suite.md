@@ -59,6 +59,9 @@ separate, explicitly triggered workflow.
 | `f80344` | Microsoft FORTRAN-80 3.44 | Compiler → REL → link with FORLIB → run | Pass |
 | `bascom53` | Microsoft BASIC Compiler 5.3 | BASIC-80 → OBSLIB → stand-alone `.COM`, then run | Pass |
 | `aztec106` | Aztec C 1.06D | cc → asm → object → link with C.LIB → run | Pass |
+| `pascalz` | InterSystems Pascal/Z 4.0 | Compile -> assemble -> link with LIB.REL -> run | Pass |
+| `mulisp` | muLISP-80 | LISP read-eval-print arithmetic | Pass |
+| `aplz` | APL/Z 1.1 | APL vector/arithmetic expressions, 30 KB workspace | Pass |
 | `z80asm` | SLR Z80ASM 1.32 | Direct-to-`.COM` macro assembler (F44 multi-sector read) | Pass |
 | `zsid` | Microsoft ZSID 1.4 | Debugger: load, memory dump, `G0` | Pass |
 | `zork2` | Zork II | Large `.DAT`, save-file write | Pass |
@@ -98,6 +101,17 @@ recorded known issue; the others are history):
   moved in H, so the source buffer is complete and the package passes.  An
   invalid count resets to 1: PIP asks for 128, falls back, and its buffered
   copy and RAM-disk transfers still work.
+
+- **Pascal/Z 4.0** compiles HELLO.PAS with `PASCAL54 HELLO` (the 54K
+  compiler loads the PAS254 overlay), assembles with
+  `ASMBL MAIN,HELLO/REL` (MAIN.SRC is the run-time interface), and links
+  with `LINK /N:A:HELLO A:HELLO /G`, which also runs the program.  The
+  fixture keeps the `{$i+ }` I/O-check directive Pascal/Z expects.
+- **muLISP-80** is an interpreter: `MULISP` enters the `$` read-eval-print
+  loop, and `(PLUS 2 3)`/`(TIMES 6 7)` must return `5`/`42`.
+- **APL/Z 1.1** asks for the date as `mmddyy` before starting; the harness
+  enters `010180` so the screen is deterministic, then checks `2+2` and a
+  vector sum in the 30 KB workspace.
 
 - **WordMaster 1.07A** edits and saves.  Leaving its insert mode needs
   `ESC`, which on the +3 is the BREAK key (`Caps Shift + Space`) per the
@@ -189,10 +203,10 @@ need conversion first.
 | Software Toolworks C80 3.1 | [C80V31.ZIP](http://www.retroarchive.org/cpm/lang/c80v31.zip) |
 | Tiny C | [TINY_C.ZIP](http://www.retroarchive.org/cpm/lang/TINY_C.ZIP) |
 | JRT Pascal 3.0 | [JRTPAS30.ZIP](http://www.retroarchive.org/cpm/lang/JRTPAS30.ZIP) |
-| Pascal/Z 4.0 | [PASCALZ4.ZIP](http://www.retroarchive.org/cpm/lang/PASCALZ4.ZIP) |
+| Pascal/Z 4.0 | [PASCALZ4.ZIP](http://www.retroarchive.org/cpm/lang/PASCALZ4.ZIP) - automated as `pascalz` |
 | FTL Modula-2 1.30 | [FTL-MODULA2-V130.ZIP](http://www.retroarchive.org/cpm/lang/FTL-MODULA2-V130.zip) |
-| APL/Z 1.1 | [APLZ11.ZIP](http://www.retroarchive.org/cpm/lang/aplz11.zip) |
-| LISP/80 | [LISP80.ZIP](http://www.retroarchive.org/cpm/lang/lisp80.zip) |
+| APL/Z 1.1 | [APLZ11.ZIP](http://www.retroarchive.org/cpm/lang/aplz11.zip) - automated as `aplz` |
+| LISP/80 | [LISP80.ZIP](http://www.retroarchive.org/cpm/lang/lisp80.zip) - automated as `mulisp` (muLISP-80) |
 | M80 + L80 | [M80.COM](http://www.retroarchive.org/cpm/lang/m80.com), [L80.COM](http://www.retroarchive.org/cpm/lang/l80.com) |
 | Microsoft MACRO-80 package | [MASM-80.ZIP](http://www.retroarchive.org/cpm/lang/MASM-80.ZIP) - automated as `m80l80` |
 | SLR Z80 assembler | [Z80ASM.ZIP](http://www.retroarchive.org/cpm/lang/Z80ASM.ZIP) - automated as `z80asm` |

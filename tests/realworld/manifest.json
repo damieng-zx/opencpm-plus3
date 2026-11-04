@@ -611,6 +611,117 @@
         }
       ],
       "notes": "SuperCalc 1.05, the pre-installed Hazeltine build (SCHAZ15.COM; SC.COM in this archive wants a missing SC.HLP). Spreadsheet start-up, cell entry and quit. Saving a .CAL aborts with 'program diskette MUST remain' - SuperCalc's media check does not accept the image."
+    },
+    {
+      "id": "pascalz",
+      "title": "Pascal/Z 4.0",
+      "url": "http://www.retroarchive.org/cpm/lang/PASCALZ4.ZIP",
+      "archive": "zip",
+      "members": [
+        "D1/PASCAL54.COM",
+        "D1/PAS254",
+        "D1/ASMBL.COM",
+        "D1/LINK.COM",
+        "D1/MAIN.SRC",
+        "D1/LIB.REL"
+      ],
+      "fixtures": [
+        "HELLO.PAS"
+      ],
+      "command": "PASCAL54 HELLO",
+      "expect": [
+        "0 compilation error(s)."
+      ],
+      "frames": 3500,
+      "steps": [
+        {
+          "text": "ASMBL MAIN,HELLO/REL",
+          "frames": 3500,
+          "expect": [
+            "0 errors."
+          ]
+        },
+        {
+          "text": "LINK /N:A:HELLO A:HELLO /G",
+          "frames": 3000,
+          "expect": [
+            "HELLO, WORLD"
+          ]
+        }
+      ],
+      "notes": "InterSystems Pascal/Z 4.0: PASCAL54 (54K compiler, PAS254 overlay) compiles HELLO.PAS to SRC, ASMBL MAIN,HELLO/REL builds the REL, and LINK /N:A:HELLO A:HELLO /G links and runs it.  The fixture keeps the {$i+ } I/O-check directive the compiler expects."
+    },
+    {
+      "id": "mulisp",
+      "title": "muLISP-80",
+      "url": "http://www.retroarchive.org/cpm/lang/lisp80.zip",
+      "archive": "zip",
+      "members": [
+        "MULISP.COM"
+      ],
+      "command": "MULISP",
+      "expect": [
+        "muLISP-80"
+      ],
+      "frames": 1500,
+      "steps": [
+        {
+          "text": "(PLUS 2 3)",
+          "frames": 800,
+          "expect": [
+            "(PLUS 2 3)",
+            "\n5\n"
+          ]
+        },
+        {
+          "text": "(TIMES 6 7)",
+          "frames": 800,
+          "expect": [
+            "(TIMES 6 7)",
+            "\n42\n"
+          ]
+        }
+      ],
+      "notes": "The Soft Warehouse muLISP-80 interpreter; evaluates arithmetic at the $ prompt."
+    },
+    {
+      "id": "aplz",
+      "title": "APL/Z 1.1",
+      "url": "http://www.retroarchive.org/cpm/lang/aplz11.zip",
+      "archive": "zip",
+      "members": [
+        "APL.COM"
+      ],
+      "command": "APL",
+      "expect": [
+        "mmddyy-"
+      ],
+      "frames": 1500,
+      "steps": [
+        {
+          "text": "010180",
+          "frames": 1500,
+          "expect": [
+            "apl/z",
+            "ws size="
+          ]
+        },
+        {
+          "text": "2+2",
+          "frames": 800,
+          "expect": [
+            "\n4\n"
+          ]
+        },
+        {
+          "text": "1 2 3 + 4 5 6",
+          "frames": 800,
+          "expect": [
+            "5 7 9"
+          ]
+        }
+      ],
+      "notes": "APL/Z 1.1 asks for the date as mmddyy at start-up; 010180 keeps the screen deterministic.  Workspace size is 30 KB."
     }
   ]
 }
