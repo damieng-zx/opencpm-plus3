@@ -31,6 +31,24 @@ The same rule applies to any other utility you drop into that folder: the
 test harness may use it locally, but do not add it to the repository, the
 DSK images or a release.
 
+## PIP
+
+`PIP` is Copyright Digital Research.  Like DISCKIT it is not included or
+redistributed; the harness reads your own copy from
+`references/binaries/PIP.COM` (git-ignored) or `--bin DIR`.  Then run:
+
+```text
+python tools/zx84_pip.py
+python tools/zx84_pip.py --bin /path/to/your/cpm/tools
+```
+
+The tool copies the built image to `build/pip-test.dsk`, adds your
+`PIP.COM`, boots it, runs the interactive copy
+`A:COPY.TXT=A:SMOKE.TXT`, exits with a blank line and types the copy back,
+requiring `SMOKE OK`.  PIP is a real F44 multi-sector caller, so this also
+checks the BDOS read/write path with a third-party program.  Without a
+local copy the tool prints the notice and exits 0.
+
 ## Other local utilities
 
 `references/binaries/` may also contain tools with different provenance
