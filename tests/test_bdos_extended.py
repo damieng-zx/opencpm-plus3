@@ -29,6 +29,19 @@ class ExtendedDispatch(unittest.TestCase):
 
 
 class MultiSectorCount(unittest.TestCase):
+    def test_partial_transfer_contract_is_locked(self):
+        # F44 accepts a count, but multi_read/multi_write deliberately move
+        # one record and report H=1 (PIP compatibility; Z80ASM is known).
+        text = source("src/bdos/bdos.zpa")
+        read = text[text.index("multi_read:"):text.index("multi_write:")]
+        write = text[text.index("multi_write:"):text.index("sync_page0_du:")]
+        self.assertIn("ld h, 1", read)
+        self.assertIn("ld h, 1", write)
+        self.assertIn("single-record contract", text)
+        # The on-disk test asserts the same H=1 contract.
+        tester = source("src/test/disktest.asm")
+        self.assertIn("one record per call; H reports the count", tester)
+
     def test_f44_validates_and_stores(self):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index("bf_f44:"):text.index("; F45: Set BDOS Error Mode")]

@@ -241,11 +241,14 @@ Programs should close any open files before exiting (BDOS F16).
 - **In**: DE=FCB address
 - **Out**: A=0 (OK), 1 (EOF), 0xFF (error)
 - **Note**: Reads 128 bytes to DMA. Advances CR. Auto-extends to next extent.
+  Returns `H=1` because this BDOS transfers one record per call even when
+  F44 set a larger count (see F44).
 
 #### F21 — Write Sequential
 - **In**: DE=FCB address
 - **Out**: A=0 (OK), 1 (directory full), 2 (disk full or write-protected), 0xFF (write error)
 - **Note**: Writes 128 bytes from DMA. Advances CR. Allocates blocks as needed.
+  Returns `H=1` for the same single-record contract as F20.
 
 #### F22 — Make File
 - **In**: DE=FCB address
@@ -299,7 +302,9 @@ Programs should close any open files before exiting (BDOS F16).
   is reset to 1 by warm boot, but this BDOS transfers **one record per
   call** and reports it in `H`. CP/M 3 permits a partial transfer, so
   programs that honour `H` (PIP does) call again for the rest, while
-  programs that ignore `H` keep the single-record behaviour.
+  programs that ignore `H` keep the single-record behaviour.  A prototype
+  that transferred the full count broke PIP, so this is intentional;
+  Z80ASM 1.32 is the documented real-world failure in the suite.
 
 #### F45 — Set BDOS Error Mode
 - **In**: E=mode

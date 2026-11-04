@@ -2479,9 +2479,13 @@ bf_f19:
 
 ; F20: Read Sequential
 ;   In:  DE = FCB
-;   Out: A = 0 (OK), 1 (EOF), 0xFF (error); H = records transferred
-;   Transfers scb_multi records from the DMA address, advancing it by 128
-;   bytes per record (CP/M 3 multi-sector count set by F44).
+;   Out: A = 0 (OK), 1 (EOF), 0xFF (error); H = 1 (records transferred)
+;   Transfers one 128-byte record per call and reports H=1.  F44's count is
+;   accepted and stored in the SCB, but the full count is deliberately not
+;   transferred: CP/M 3 permits a partial transfer and programs must honour
+;   H and call again.  A prototype that transferred the whole count broke
+;   PIP's copy, so the single-record contract is retained (Z80ASM 1.32 is
+;   the documented real-world casualty).
 ; @proc bf_f20
 ; @param %fcb:u16   de
 ; @param %func:u8   c
@@ -2716,7 +2720,9 @@ f20_body:
 
 ; F21: Write Sequential
 ;   In:  DE = FCB
-;   Out: HL = 0 (OK), 1 (disk full), 0xFF (write error)
+;   Out: HL = 0 (OK), 1 (disk full), 0xFF (write error); H = 1 on success
+;   Writes one 128-byte record per call (F44's count is reported, not
+;   applied) for the same PIP-compatibility reason as F20.
 ;   Clobbers: AF, BC, DE, HL
 ; @proc bf_f21
 ; @param %fcb:u16   de
