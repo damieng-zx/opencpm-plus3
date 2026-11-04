@@ -489,7 +489,7 @@ class Smoke:
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
                        "17.KTPUT..OK", "18.KTGET..OK", "19.KTAB..OK",
-                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "DONE"):
+                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + seen)
@@ -562,6 +562,17 @@ class Smoke:
         if slot != bytes((5, ord("H"), ord("E"), ord("L"),
                           ord("L"), ord("O"))):
             raise SmokeError(f"KM_SET_EXPAND slot {slot!r}, expected HELLO")
+        # Test 26: token 80h stays empty after the over-long write; token
+        # 9Eh holds the maximum 31-byte string.
+        empty = self.memory(6, 0xA9A0, 1)[0]
+        if empty != 0:
+            raise SmokeError(
+                f"KM_SET_EXPAND 80h length {empty}, expected 0")
+        maxslot = self.memory(6, 0xA9A0 + 30 * 32, 32)
+        expect31 = bytes((31,)) + b"0123456789ABCDEFGHIJKLMNOPQRSTU"
+        if maxslot != expect31:
+            raise SmokeError(
+                f"KM_SET_EXPAND 9Eh slot {maxslot.hex()}, expected {expect31.hex()}")
         self.expect("XTETEST prompt", "A>")
 
     def run_xtetest_format(self) -> None:

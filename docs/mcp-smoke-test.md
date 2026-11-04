@@ -22,7 +22,7 @@ runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
 `15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`,
 `19.KTAB..OK`, `20.EXP..OK`, `21.CDVER..OK`, `22.CDINFO..OK`, `23.DRIVESTAT..OK`, `24.KTWRAP..OK`,
-`25.SETKEY..OK`, the `5Ah` marker somewhere in the screen
+`25.SETKEY..OK`, `26.EXPMAX..OK`, the `5Ah` marker somewhere in the screen
 attribute plane (bank 5, `5800h`-`5AFFh`)
 and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
@@ -302,6 +302,12 @@ Test 25 sets `KM_SET_KEY` entries in the CAPS, SYMB and EXTEND tables
 (single and combined masks), then checks that an invalid key number (40)
 and a zero mask leave the entry unchanged.  The runner reads the table
 back, then restores those entries so later upper-case typing is unaffected.
+
+Test 26 exercises `KM_SET_EXPAND` boundaries: token `80h` with length 0
+(no-op copy), the same token with an over-long 32-byte string (rejected,
+slot stays empty), token `9Eh` with the maximum 31 bytes, and invalid
+token `9Fh`.  The runner checks the empty slot and the full 31-byte slot
+at `A9A0h + 30*32`.
 
 ### BDOS file regression suite
 

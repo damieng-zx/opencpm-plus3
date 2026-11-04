@@ -716,14 +716,24 @@ class KmSetExpand(unittest.TestCase):
         self.assertIn("KMEXP_SLOT  equ 32", text)
         self.assertIn("KMEXP_MAX   equ 31", text)
 
+    def test_handler_handles_zero_and_16bit_offsets(self):
+        body = handler_body(".km_set_expand:", ".km_set_key:")
+        self.assertIn("jr z, .kex_ok", body)     # length 0: no 64K LDIR
+        self.assertIn(".kex_ok", body)
+        self.assertIn("add hl, hl", body)        # 16-bit (token-80h)*32
+        self.assertNotIn("add a, a\n    add a, a", body)
+
     def test_tester_and_smoke_cover_expand(self):
         tester = source("src/test/xtetest.asm")
         self.assertIn("KM_SET_EXPAND", tester)
         self.assertIn("20.EXP", tester)
+        self.assertIn("26.EXPMAX", tester)
         self.assertIn('db "HELLO"', tester)
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("20.EXP..OK", smoke)
+        self.assertIn("26.EXPMAX..OK", smoke)
         self.assertIn("0xA9A0 + 5 * 32", smoke)
+        self.assertIn("0xA9A0 + 30 * 32", smoke)
 
 
 class Bank6Scratch(unittest.TestCase):

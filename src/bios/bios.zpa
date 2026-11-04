@@ -1628,13 +1628,13 @@ xbios_handler:
     push hl                      ; save the source string
     ld a, b
     sub 0x80
-    add a, a
-    add a, a
-    add a, a
-    add a, a
-    add a, a                     ; (token - 80h) * 32
     ld l, a
     ld h, 0
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl                   ; (token - 80h) * 32 in 16 bits
     ld de, KMEXP
     add hl, de
     ex de, hl                    ; DE = slot
@@ -1643,7 +1643,11 @@ xbios_handler:
     inc de
     pop hl                       ; restore the source string
     ld b, 0
+    ld a, c
+    or a
+    jr z, .kex_ok                ; LDIR with BC=0 would copy 64K
     ldir                         ; BC = length
+.kex_ok:
     scf
     ret
 .kex_bad:

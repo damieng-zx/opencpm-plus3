@@ -1443,6 +1443,53 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 26: KM_SET_EXPAND boundaries ===
+    ld de, msg_t26
+    ld c, 9
+    call BDOS
+
+    ; 31-byte string in common memory.
+    ld hl, exp31
+    ld de, 0xDD20
+    ld bc, 31
+    ldir
+
+    ld hl, KM_SET_EXPAND
+    ld (userf_dw), hl
+
+    ; Token 80h, length 0 (empty string).
+    ld hl, 0xDD20
+    ld bc, 0x8000
+    call userf_trampoline
+    jp nc, .t26_fail
+
+    ; Token 80h, length 32: too long, slot must stay empty.
+    ld hl, 0xDD20
+    ld bc, 0x8020
+    call userf_trampoline
+    jp c, .t26_fail
+
+    ; Token 9Eh, length 31 (maximum).
+    ld hl, 0xDD20
+    ld bc, 0x9E1F
+    call userf_trampoline
+    jp nc, .t26_fail
+
+    ; Token 9Fh is not an expansion token.
+    ld hl, 0xDD20
+    ld bc, 0x9F01
+    call userf_trampoline
+    jp c, .t26_fail
+
+    ld de, msg_ok
+    jr .t26_print
+.t26_fail:
+    ld de, msg_fail
+.t26_print:
+    ld c, 9
+    call BDOS
+.t26_done:
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1631,7 +1678,9 @@ msg_t22:    db 0x0D, 0x0A, "22.CDINFO..", '$'
 msg_t23:    db 0x0D, 0x0A, "23.DRIVESTAT..", '$'
 msg_t24:    db 0x0D, 0x0A, "24.KTWRAP..", '$'
 msg_t25:    db 0x0D, 0x0A, "25.SETKEY..", '$'
+msg_t26:    db 0x0D, 0x0A, "26.EXPMAX..", '$'
 exp_string: db "HELLO"
+exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
 msg_t6ok:   db "6.RESET OK", 0x0D, 0x0A, '$'
 msg_ok:     db "OK", 0x0D, 0x0A, '$'
