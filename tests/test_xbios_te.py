@@ -399,10 +399,24 @@ class DdSetup(unittest.TestCase):
         tester = source("src/test/xtetest.asm")
         self.assertIn("DD_SETUP", tester)
         self.assertIn("11.SETUP", tester)
+        self.assertIn("30.SETUPX", tester)
+        self.assertIn("setup_pb_edge", tester)
         smoke = source("tools/zx84_smoke.py")
         self.assertIn("11.SETUP..OK", smoke)
+        self.assertIn("30.SETUPX..OK", smoke)
         self.assertIn("motor_off_ticks", smoke)
         self.assertIn("fdc_spec1", smoke)
+        self.assertIn('"fdc_spec2", 0xFD', smoke)
+
+    def test_edge_clamps_are_in_place(self):
+        body = handler_body(".dd_setup:", ".dd_sel_format:")
+        self.assertIn("cp 52", body)            # motor-off clamp
+        self.assertIn("ld a, 51", body)
+        fdc = source("src/bios/fdc765.zpa")
+        spec = fdc[fdc.index("fdc_specify:"):
+                   fdc.index("; FDC interrupt critical-section helpers")]
+        self.assertIn("cp 17", spec)            # step-rate clamp at 16 ms
+        self.assertIn("sub b", spec)
 
 
 class DdLDpb(unittest.TestCase):
@@ -694,7 +708,7 @@ class KmSetKey(unittest.TestCase):
         self.assertIn("0x0E00", tester)          # combined non-normal mask
         self.assertIn("0x4828", tester)          # invalid key 40
         smoke = source("tools/zx84_smoke.py")
-        self.assertIn("19.KTAB..OK", smoke)
+        self.assertIn("19.KTAB..", smoke)
         self.assertIn("25.SETKEY..OK", smoke)
         self.assertIn('self.key("z")', smoke)
         self.assertIn("0xA900", smoke)

@@ -1687,6 +1687,26 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 30: DD_SETUP edge values ===
+    ; Motor-off 0 (never), step rate 0 (clamped to 16 ms), HUT 15,
+    ; head-load 0x7F with non-DMA set.  Left in place for the smoke to read.
+    ld de, msg_t30
+    ld c, 9
+    call BDOS
+
+    ld hl, setup_pb_edge
+    ld de, 0xD600
+    ld bc, 7
+    ldir
+    ld hl, DD_SETUP
+    ld (userf_dw), hl
+    ld hl, 0xD600
+    call userf_trampoline
+
+    ld de, msg_ok
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1838,6 +1858,7 @@ lread_data_pb:
     dw 512
     db 9
     db 0x46, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x2A, 0xFF
+setup_pb_edge: db 10, 0, 175, 30, 0, 15, 0xFF
 bad_specs:
     db 4, 0, 40, 9, 2, 1, 3, 2, 42, 82    ; bad disc type
     db 0, 3, 40, 9, 2, 1, 3, 2, 42, 82    ; bad arrangement
@@ -1913,6 +1934,7 @@ msg_t26:    db 0x0D, 0x0A, "26.EXPMAX..", '$'
 msg_t27:    db 0x0D, 0x0A, "27.KMZERO..", '$'
 msg_t28:    db 0x0D, 0x0A, "28.LREADX..", '$'
 msg_t29:    db 0x0D, 0x0A, "29.BADSPEC..", '$'
+msg_t30:    db 0x0D, 0x0A, "30.SETUPX..", '$'
 exp_string: db "HELLO"
 exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'

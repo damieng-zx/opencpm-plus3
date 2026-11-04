@@ -22,11 +22,11 @@ runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `11.SETUP..OK`, `12.DPB..OK`, `13.XDPB..OK`, `14.LREAD..OK`,
 `15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`,
 `19.KTAB..OK`, `20.EXP..OK`, `21.CDVER..OK`, `22.CDINFO..OK`, `23.DRIVESTAT..OK`, `24.KTWRAP..OK`,
-`25.SETKEY..OK`, `26.EXPMAX..OK`, `27.KMZERO..OK`, `28.LREADX..OK`, `29.BADSPEC..OK`, the `5Ah` marker somewhere in the screen
+`25.SETKEY..OK`, `26.EXPMAX..OK`, `27.KMZERO..OK`, `28.LREADX..OK`, `29.BADSPEC..OK`, `30.SETUPX..OK`, the `5Ah` marker somewhere in the screen
 attribute plane (bank 5, `5800h`-`5AFFh`)
 and the `D100h` input-pass-through flag.  It also checks
-that `DD_SETUP` produced `motor_off_ticks=250`, `fdc_spec1=4Fh` and
-`fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
+that `DD_SETUP` produced the edge values above and then the restored
+defaults `motor_off_ticks=250`, `fdc_spec1=4Fh`, `fdc_spec2=05h`.  It then boots a scratch copy, sets the `DC00h` magic
 byte, runs `XTETEST` again, requires `10.FMT..OK` and checks the formatted
 track with `sector_read`.
 

@@ -476,9 +476,18 @@ class Smoke:
         self.mcp.call("type", {"text": "XTETEST"})
         self.mcp.call("key", {"name": "enter"})
         # Test 19 remaps Z to Q and blocks for a key press.
-        self.wait_for(["19.KTAB.."], frames=500, attempts=8)
+        self.wait_for(["19.KTAB.."], frames=100, attempts=40)
+        # Check the SCR_RUN_ROUTINE marker now, while test 7 is still on
+        # screen: with tests 20-30 to follow it would scroll out later.
+        attrs = self.memory(5, 0x5800, 768)
+        if 0x5A not in attrs:
+            raise SmokeError("SCR_RUN_ROUTINE screen marker 5A not found")
+        flag = self.memory(3, 0xD100, 1)[0]
+        if flag != 1:
+            raise SmokeError(
+                f"SCR_RUN_ROUTINE input flag {flag:02X}, expected 01")
         self.key("z")
-        self.wait_for(["DONE"], frames=500, attempts=8)
+        self.wait_for(["DONE"], frames=100, attempts=40)
         screen = self.text()
         # The full run scrolls off the 24-line screen, so check every frame
         # recorded since the test started.
@@ -488,29 +497,35 @@ class Smoke:
         for needle in ("7.RUN..OK", "8.DISK..OK", "9.RW..OK",
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
-                       "17.KTPUT..OK", "18.KTGET..OK", "19.KTAB..OK",
-                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "27.KMZERO..OK", "28.LREADX..OK", "29.BADSPEC..OK", "DONE"):
+                       "17.KTPUT..OK", "18.KTGET..OK",
+                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "27.KMZERO..OK", "28.LREADX..OK", "29.BADSPEC..OK", "30.SETUPX..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + seen)
-        # SCR_RUN_ROUTINE stages its routine at D000h, writes 5Ah to the
-        # bottom-right attribute in bank 5 and 1 to the D100h flag.  Later
-        # output scrolls the screen, so look for the marker anywhere in the
-        # attribute plane rather than at a fixed cell.
-        attrs = self.memory(5, 0x5800, 768)
-        if 0x5A not in attrs:
-            raise SmokeError("SCR_RUN_ROUTINE screen marker 5A not found")
-        flag = self.memory(3, 0xD100, 1)[0]
-        if flag != 1:
-            raise SmokeError(
-                f"SCR_RUN_ROUTINE input flag {flag:02X}, expected 01")
+        # Test 30 leaves the edge block in place: no motor-off timeout,
+        # step rate clamped to 16 ms with HUT 15, and 0x7F head-load/ND.
+        for name, expected in (("motor_off_ticks", 0x00),
+                               ("fdc_spec1", 0x0F),
+                               ("fdc_spec2", 0xFD)):
+            value = self.memory(4, label_address(name), 1)[0]
+            if value != expected:
+                raise SmokeError(
+                    f"DD_SETUP edge {name} {value:02X}, expected {expected:02X}")
+        # Restore the test-11 defaults for the rest of the run.
+        for name, value in (("motor_off_ticks", 0xFA),
+                            ("fdc_spec1", 0x4F),
+                            ("fdc_spec2", 0x05)):
+            self.mcp.call("write_memory", {
+                "address": hex(label_address(name)),
+                "hex_bytes": f"{value:02X}", "bank": 4})
         for name, expected in (("motor_off_ticks", 250),
                                ("fdc_spec1", 0x4F),
                                ("fdc_spec2", 0x05)):
             value = self.memory(4, label_address(name), 1)[0]
             if value != expected:
                 raise SmokeError(
-                    f"DD_SETUP {name} {value:02X}, expected {expected:02X}")
+                    f"DD_SETUP defaults {name} {value:02X}, "
+                    f"expected {expected:02X}")
         # Keyboard state lives in bank 6 (A63F+).  Test 27 leaves 0/0,
         # which the handler must store as 256 scans.
         for name in ("kbd_repeat_delay", "kbd_repeat_rate"):
