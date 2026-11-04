@@ -676,6 +676,9 @@ class Smoke:
             raise SmokeError("BDOSTEST failures:\n" + "\n".join(failures))
         if not any("F59 LOADOVL" in l for l in self.history):
             raise SmokeError("BDOSTEST did not reach F59")
+        if not any("F111 PRTBLK" in l and "F111OK" in l
+                   for l in self.history):
+            raise SmokeError("BDOSTEST F111 did not print its block")
         if not any("F104 SETDATE" in l for l in self.history):
             raise SmokeError("BDOSTEST did not reach F104")
 

@@ -113,6 +113,21 @@ class LoadOverlay(unittest.TestCase):
         self.assertIn("F59 LOADOVL", smoke)
 
 
+class PrintBlock(unittest.TestCase):
+    def test_f111_prints_from_a_control_block(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f111:"):text.index("; F112: Send Block")]
+        self.assertIn("f111_addr", body)
+        self.assertIn("f111_len", body)
+        self.assertIn("bdos_con_out", body)
+
+        tester = source("src/test/bdostest.asm")
+        self.assertIn("ld c, 111", tester)
+        self.assertIn("F111OK", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("F111 PRTBLK", smoke)
+
+
 class DiskTestScreenWidth(unittest.TestCase):
     def test_t18_accepts_every_supported_width(self):
         # conwidth is columns - 1, so 31/50/63 for the 32/51/64 modes.  The

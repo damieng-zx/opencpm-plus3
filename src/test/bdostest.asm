@@ -55,6 +55,7 @@ start:
     call tst_f34        ; F34 WRRAND   — write random
     call tst_f35        ; F35 FILSIZ   — compute file size
     call tst_f59        ; F59 LOADOVL - load an overlay file
+    call tst_f111       ; F111 PRINTBLK - print a block
     call tst_f104       ; F104 SETDATE — set date/time + F105 round-trip
 
     ld de, msg_done
@@ -1707,6 +1708,20 @@ tst_f59:
     call BDOS
     jp print_crlf
 
+; ============================================================
+; F111: Print Block
+;   CB = text address + length; the block must appear on the console.
+; ============================================================
+tst_f111:
+    ld de, lbl_f111
+    call print_label
+
+    ld de, f111_cb
+    ld c, 111                   ; Print Block
+    call BDOS
+
+    jp print_crlf
+
 tst_f104:
     ld de, lbl_f104
     call print_label
@@ -1862,6 +1877,10 @@ lbl_f33:    DB "F33 RDRAND   : $"
 lbl_f34:    DB "F34 WRRAND   : $"
 lbl_f35:    DB "F35 FILSIZ   : $"
 lbl_f59:    DB "F59 LOADOVL  : $"
+lbl_f111:   DB "F111 PRTBLK  : ["
+f111_cb:    DW f111_text
+            DW 6
+f111_text:  DB "F111OK"
 lbl_f104:   DB "F104 SETDATE: $"
 
 f09_test_str:   DB "TEST$"
