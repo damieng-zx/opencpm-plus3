@@ -102,6 +102,7 @@ out_delim:  db '$'             ; F110: F9 output delimiter
 ms_active:  equ 0xA6B7         ; 1 = inner record handlers return to caller
 ms_left:    equ 0xA6B8         ; records left to transfer
 ms_done:    equ 0xA6B9         ; records transferred so far
+ms_adv:     equ 0xA6BD         ; 1 = advance DMA for this call
 ms_result:  equ 0xA6BA         ; non-zero result from the inner handler
 ms_fcb:     equ 0xA6BB         ; user FCB pointer across iterations
 
@@ -122,7 +123,7 @@ f40_rec:    equ 0xA6C8         ; next absolute record in that block
 f59_fcb:    equ 0xA6CA         ; FCB passed to F59
 f59_dest:   equ 0xA6CC         ; load address from FCB+21h
 f59_dma:    equ 0xA6CE         ; saved DMA address
-f111_addr:  equ 0xA6D0         ; F111 text address
+f111_addr:  equ 0xA880         ; F111 text address
 f111_len:   equ 0xA6D2         ; F111 text length
 f111_cb:    equ 0xA6D4         ; F111 control block pointer
 f99_target: equ 0xA6D6         ; F99 requested length in records
@@ -334,14 +335,19 @@ bdos_efail_x:
 
 
 ; ==========================================================================
-; F44 single-record pass-through
+; F44 multi-sector transfer (F20/F21)
 ; ==========================================================================
 ;
-; The multi-sector count is accepted and kept in the SCB, but this BDOS
-; transfers one record per call and reports it in H.  CP/M 3 allows a
-; partial transfer, so programs that honour H (PIP does) just call again
-; for the rest, and programs that ignore H see exactly the single-record
-; behaviour they expect.
+; F44 stores a count (1..127) in the SCB.  Each F20/F21 call then moves up
+; to that many 128-byte records.  With a count above 1 the DMA advances by
+; 128 per record, as CP/M 3 specifies; a count of 1 keeps the CP/M 2.2
+; fixed-buffer behaviour.  H reports how many records actually moved, so a
+; short transfer at EOF or a disk-full error is visible to the caller.
+; CP/M 3 permits short transfers; this implementation completes the whole
+; count when the data is available.  PIP asks for 128, is rejected (the
+; range is 1..127) and falls back to single-record transfers until it sets a
+; smaller count; Z80ASM asks for 8 and gets its whole source block in one
+; call.
 
 ; @proc multi_read
 ; @param %fcb:u16 de
@@ -352,18 +358,42 @@ bdos_efail_x:
 multi_read:
     ; lint-exempt: stack  ; returns through bdos_ret
     ld (ms_fcb), de
+    call multi_init
     ld a, 1
     ld (ms_active), a
+.mr_loop:
     ld de, (ms_fcb)
     call f20_body
-    push af
+    or a
+    jr nz, .mr_stop
+    call multi_record_done
+    jr c, .mr_loop
+    xor a
+    jr .mr_ret
+.mr_stop:
+    ; A = 1 (EOF) or 0xFF (error); H still reports the records moved.
+.mr_ret:
+    ld b, a
     xor a
     ld (ms_active), a
-    pop af
+    ld a, (ms_done)
+    ld h, a
+    ld l, 0
+    ld a, b
+    cp 1
+    jr nz, .mr_chk_err
+    ld a, h
     or a
-    jr nz, .mr_out
-    ld h, 1
-.mr_out:
+    jr nz, .mr_status
+    ld l, 1                    ; EOF with no records: HL=0001 (PIP reads L)
+    jr .mr_status
+.mr_chk_err:
+    cp 0xFF
+    jr nz, .mr_status
+    ld h, 0xFF
+    ld l, 0xFF
+.mr_status:
+    ld a, b
     jp bdos_ret
 
 ; @proc multi_write
@@ -375,19 +405,87 @@ multi_read:
 multi_write:
     ; lint-exempt: stack  ; returns through bdos_ret
     ld (ms_fcb), de
+    call multi_init
     ld a, 1
     ld (ms_active), a
+.mw_loop:
     ld de, (ms_fcb)
     call f21_body
-    push af
+    or a
+    jr nz, .mw_stop
+    call multi_record_done
+    jr c, .mw_loop
+    xor a
+    jr .mw_ret
+.mw_stop:
+.mw_ret:
+    ld b, a
     xor a
     ld (ms_active), a
-    pop af
+    ld a, (ms_done)
+    ld h, a
+    ld l, 0
+    ld a, b
     or a
-    jr nz, .mw_out
-    ld h, 1
-.mw_out:
+    jr z, .mw_status
+    ld l, b
+.mw_status:
+    ld a, b
     jp bdos_ret
+
+; multi_init - Seed the per-call record counters from the SCB
+;   Out: ms_left = count (at least 1), ms_done = 0
+;   Clobbers: AF
+; @proc multi_init
+; @clobbers af
+; @end
+multi_init:
+    ld a, (scb_multi)
+    or a
+    jr nz, .mi_ok
+    ld a, 1
+.mi_ok:
+    ld (ms_left), a
+    xor a
+    ld (ms_done), a
+    ld (ms_adv), a             ; assume a fixed buffer
+    ld a, (ms_left)
+    cp 1
+    ret z                      ; count 1: do not advance the DMA
+    ld a, 1
+    ld (ms_adv), a
+    ret
+
+; multi_record_done - Account for one transferred record
+;   For a true multi-sector count (>1) the DMA advances by 128 bytes, as
+;   CP/M 3 specifies.  Count 1 deliberately leaves the DMA alone so CP/M 2.2
+;   programs that reuse one buffer keep working.
+;   Out: carry set = more records remain, clear = count exhausted
+;   Clobbers: AF, DE, HL
+; @proc multi_record_done
+; @clobbers af,de,hl
+; @end
+multi_record_done:
+    ld a, (ms_done)
+    inc a
+    ld (ms_done), a
+    ld a, (ms_left)
+    dec a
+    ld (ms_left), a
+    ld a, (ms_adv)
+    or a
+    jr z, .mrd_no_dma
+    ld hl, (bdos_dma)
+    ld de, 128
+    add hl, de
+    ld (bdos_dma), hl
+    ld (scb_dma), hl
+.mrd_no_dma:
+    ld a, (ms_left)
+    or a
+    ret z
+    scf
+    ret
 
 
 ; sync_page0_du — Keep page zero 0004 = (user << 4) | drive
@@ -2479,13 +2577,10 @@ bf_f19:
 
 ; F20: Read Sequential
 ;   In:  DE = FCB
-;   Out: A = 0 (OK), 1 (EOF), 0xFF (error); H = 1 (records transferred)
-;   Transfers one 128-byte record per call and reports H=1.  F44's count is
-;   accepted and stored in the SCB, but the full count is deliberately not
-;   transferred: CP/M 3 permits a partial transfer and programs must honour
-;   H and call again.  A prototype that transferred the whole count broke
-;   PIP's copy, so the single-record contract is retained (Z80ASM 1.32 is
-;   the documented real-world casualty).
+;   Out: A = 0 (OK), 1 (EOF), 0xFF (error); H = records transferred
+;   Reads up to F44's count records (default 1), advancing the DMA by 128
+;   per record.  At EOF A=1 and H reports how many records arrived before
+;   the end, so a short transfer is visible to the caller.
 ; @proc bf_f20
 ; @param %fcb:u16   de
 ; @param %func:u8   c
@@ -2720,9 +2815,11 @@ f20_body:
 
 ; F21: Write Sequential
 ;   In:  DE = FCB
-;   Out: HL = 0 (OK), 1 (disk full), 0xFF (write error); H = 1 on success
-;   Writes one 128-byte record per call (F44's count is reported, not
-;   applied) for the same PIP-compatibility reason as F20.
+;   Out: A = 0 (OK), 1 (directory full), 2 (disk full), 0xFF (error);
+;        H = records transferred
+;   Writes up to F44's count records (default 1), advancing the DMA by 128
+;   per record.  A failure stops the transfer and H reports how many records
+;   were written before it.
 ;   Clobbers: AF, BC, DE, HL
 ; @proc bf_f21
 ; @param %fcb:u16   de
@@ -3997,8 +4094,10 @@ div_hl_bc:
 ;   In:  E = record count (1..127)
 ;   Out: A = 0 (accepted) or 0xFF (invalid)
 ;   The count lives in the SCB (scb_multi, offset 0x4A) so that F49
-;   reads and writes the same byte.  F20/F21 honour it; the random
-;   functions always transfer a single record.
+;   reads and writes the same byte.  F20/F21 apply it; the random
+;   functions always transfer a single record.  An invalid count falls
+;   back to one record rather than leaving a stale larger value: PIP asks
+;   for 128, is rejected, and must then use single-record transfers.
 ; @proc bf_f44
 ; @param %param:u16 de
 ; @param %func:u8   c
@@ -4012,11 +4111,16 @@ bf_f44:
     ld a, e
     or a
     jr z, .f44_bad
-    cp 128
+    cp 128                     ; 1..127
     jr nc, .f44_bad
     ld (scb_multi), a
     jp bdos_eok
 .f44_bad:
+    ; An invalid count falls back to one record.  PIP asks for 128, gets
+    ; 0xFF and then expects single-record transfers; leaving a stale larger
+    ; count would corrupt its buffer bookkeeping.
+    ld a, 1
+    ld (scb_multi), a
     jp bdos_efail
 
 

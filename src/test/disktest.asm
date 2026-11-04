@@ -2223,7 +2223,8 @@ test23:
     ld c, 9
     call BDOS
 
-    ; Reject 0 and 128.
+    ; Reject 0 and 128 (PIP's 128 is rejected so it falls back to
+    ; single-record transfers; 127 is the maximum accepted count).
     ld e, 0
     ld c, 44
     call BDOS
@@ -2233,6 +2234,11 @@ test23:
     ld c, 44
     call BDOS
     cp 0xFF
+    jp nz, .t23_fail
+    ld e, 127
+    ld c, 44
+    call BDOS
+    or a
     jp nz, .t23_fail
 
     ; Set four records.
@@ -2259,15 +2265,60 @@ test23:
     or a
     jp nz, .t23_fail
     ld a, h
-    cp 1                       ; one record per call; H reports the count
+    cp 4                       ; the whole F44 count was transferred
     jp nz, .t23_fail
 
-    ; Back to one record and close.
+    ; Back to one record; reopen and read the same four records separately.
     ld e, 1
     ld c, 44
     call BDOS
     or a
     jp nz, .t23_fail
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+    ld hl, fn_cpm3
+    call set_fcb
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    jp z, .t23_fail
+    ld hl, t27_buf
+    ld (t23_ptr), hl
+    ld b, 4
+.t23_single:
+    push bc
+    ld de, (t23_ptr)
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 20
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t23_fail
+    ld hl, (t23_ptr)
+    ld de, 128
+    add hl, de
+    ld (t23_ptr), hl
+    djnz .t23_single
+
+    ; The multi read and the four single reads must agree.
+    ld hl, t23_buf
+    ld de, t27_buf
+    ld bc, 512
+.t23_cmp:
+    ld a, (de)
+    cp (hl)
+    jp nz, .t23_fail
+    inc hl
+    inc de
+    dec bc
+    ld a, b
+    or c
+    jr nz, .t23_cmp
+
     ld de, FCB1
     ld c, 16
     call BDOS
@@ -2452,30 +2503,17 @@ test27:
     or a
     jp nz, .t27_fail
 
-    ld hl, t27_buf
-    ld (t27_ptr), hl
-    ld b, 4
-.t27_wr:
-    push bc
-    ld hl, (t27_ptr)
-    ld d, h
-    ld e, l
+    ld de, t27_buf
     ld c, 26
     call BDOS
     ld de, FCB1
-    ld c, 21                   ; write sequential
+    ld c, 21                   ; write sequential (multi, count = 4)
     call BDOS
-    pop bc
     or a
     jp nz, .t27_fail
     ld a, h
-    cp 1                       ; one record per call; H reports the count
+    cp 4                       ; all four records moved in one call
     jp nz, .t27_fail
-    ld hl, (t27_ptr)
-    ld de, 128
-    add hl, de
-    ld (t27_ptr), hl
-    djnz .t27_wr
 
     ld e, 1
     ld c, 44
@@ -2585,30 +2623,17 @@ test28:
     or a
     jp nz, .t28_fail
 
-    ld hl, t28_buf
-    ld (t28_ptr), hl
-    ld b, 4
-.t28_wr:
-    push bc
-    ld hl, (t28_ptr)
-    ld d, h
-    ld e, l
+    ld de, t28_buf
     ld c, 26
     call BDOS
     ld de, FCB1
-    ld c, 21                   ; write sequential
+    ld c, 21                   ; write sequential (multi, count = 4)
     call BDOS
-    pop bc
     or a
     jp nz, .t28_fail
     ld a, h
-    cp 1                       ; one record per call; H reports the count
+    cp 4                       ; all four records moved in one call
     jp nz, .t28_fail
-    ld hl, (t28_ptr)
-    ld de, 128
-    add hl, de
-    ld (t28_ptr), hl
-    djnz .t28_wr
 
     ld e, 1
     ld c, 44
@@ -3042,6 +3067,7 @@ t27_buf:  ds 512
 t27_chk:  ds 128
 t28_buf:  ds 512
 t28_chk:  ds 128
+t23_ptr:  dw 0
 t27_ptr:  dw 0
 t28_ptr:  dw 0
 t29_before: dw 0

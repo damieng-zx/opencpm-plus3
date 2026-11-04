@@ -240,15 +240,18 @@ Programs should close any open files before exiting (BDOS F16).
 #### F20 — Read Sequential
 - **In**: DE=FCB address
 - **Out**: A=0 (OK), 1 (EOF), 0xFF (error)
-- **Note**: Reads 128 bytes to DMA. Advances CR. Auto-extends to next extent.
-  Returns `H=1` because this BDOS transfers one record per call even when
-  F44 set a larger count (see F44).
+- **Note**: Reads up to F44's count records (default 1) to consecutive
+  128-byte DMA buffers. Advances CR and the DMA address, and auto-extends to
+  the next extent. `H` reports the records actually read; at EOF the return
+  is 1 with a possibly short count (see F44).
 
 #### F21 — Write Sequential
 - **In**: DE=FCB address
 - **Out**: A=0 (OK), 1 (directory full), 2 (disk full or write-protected), 0xFF (write error)
-- **Note**: Writes 128 bytes from DMA. Advances CR. Allocates blocks as needed.
-  Returns `H=1` for the same single-record contract as F20.
+- **Note**: Writes up to F44's count records (default 1) from consecutive
+  128-byte DMA buffers. Advances CR and the DMA address, and allocates
+  blocks as needed. `H` reports the records actually written; a disk-full or
+  directory-full error can leave a short count.
 
 #### F22 — Make File
 - **In**: DE=FCB address
@@ -299,12 +302,15 @@ Programs should close any open files before exiting (BDOS F16).
 - **In**: E=count (1..127)
 - **Out**: A=0 (accepted) or 0xFF (invalid)
 - **Note**: The count is stored in the SCB (`scb_multi`, offset 0x4A) and
-  is reset to 1 by warm boot, but this BDOS transfers **one record per
-  call** and reports it in `H`. CP/M 3 permits a partial transfer, so
-  programs that honour `H` (PIP does) call again for the rest, while
-  programs that ignore `H` keep the single-record behaviour.  A prototype
-  that transferred the full count broke PIP, so this is intentional;
-  Z80ASM 1.32 is the documented real-world failure in the suite.
+  is reset to 1 by warm boot.  The next F20/F21 transfers up to that many
+  128-byte records, advancing the DMA by 128 per record, and sets `H` to the
+  number actually moved; a count of 1 keeps the CP/M 2.2 fixed-buffer
+  behaviour.  A read stops early at EOF (A=1) with the short count in `H`.
+  The count applies only to sequential I/O; the random functions always move
+  one record.  The valid range is 1..127.  An invalid count resets it to 1
+  rather than leaving a stale larger value: PIP asks for 128, is rejected,
+  and falls back to single-record transfers; Z80ASM asks for 8 and gets its
+  whole source block in one read.
 
 #### F45 — Set BDOS Error Mode
 - **In**: E=mode

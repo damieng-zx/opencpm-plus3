@@ -42,7 +42,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **WordStar 3.0 display** | The program runs and draws its menu, but WordStar is an 80×24 program and the character buffer is 51 columns, so each 80-column line wraps and overlaps the next. | The crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: an 80-column screen mode (3px font) or a WordStar install with a ≤51-column terminal. |
 | **Turbo Pascal display** | Runs correctly; the 80-column IDE frames wrap on screen. | Same root cause as WordStar's display: no 80-column mode. |
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
-| **SLR Z80ASM 1.32** | Reads part of its source, reports `Line Too Long`, and assembles a corrupt `.COM`. | Z80ASM sets a multi-sector count with F44 and assumes one F20 transferred the whole block. This BDOS transfers one record per call (a legal partial transfer, H reports the count), so the rest of the source buffer is stale. Needs full multi-sector transfers, which broke PIP's copy in the prototype. |
+| ~~SLR Z80ASM 1.32~~ | Fixed: F20 now transfers the whole F44 count in one call. | Z80ASM sets a multi-sector count with F44 and assumes one F20 transferred the whole block. The BDOS now applies the count for reads (1..127), so the source buffer is complete. F21 deliberately keeps the single-record partial-write contract PIP and the RAM disk rely on; Z80ASM only needed the read side. |
 
 ## WordStar 3.0 display width
 
@@ -105,7 +105,7 @@ It does not help WordStar, whose 80-column layout is unchanged.
 - [ ] LISP/80
 - [x] Microsoft M80 / L80 - works (automated)
 - [x] Microsoft MACRO-80 package - same binaries as M80 / L80 (automated)
-- [x] SLR Z80 assembler - known issue (needs multi-sector F20)
+- [x] SLR Z80 assembler - works (multi-sector F20; automated)
 - [x] ZSID debugger - works (automated)
 
 ### Spreadsheets, business and databases

@@ -29,24 +29,51 @@ class ExtendedDispatch(unittest.TestCase):
 
 
 class MultiSectorCount(unittest.TestCase):
-    def test_partial_transfer_contract_is_locked(self):
-        # F44 accepts a count, but multi_read/multi_write deliberately move
-        # one record and report H=1 (PIP compatibility; Z80ASM is known).
+    def test_reads_transfer_the_full_count(self):
+        # F20 applies F44's count: the loop moves up to ms_left records,
+        # advances the DMA and reports H = records moved.
         text = source("src/bdos/bdos.zpa")
         read = text[text.index("multi_read:"):text.index("multi_write:")]
-        write = text[text.index("multi_write:"):text.index("sync_page0_du:")]
-        self.assertIn("ld h, 1", read)
-        self.assertIn("ld h, 1", write)
-        self.assertIn("single-record contract", text)
-        # The on-disk test asserts the same H=1 contract.
+        self.assertIn("call multi_init", read)
+        self.assertIn("call multi_record_done", read)
+        self.assertIn("jr c,", read)
+        self.assertIn("ld h, a", read)          # H = ms_done
+        self.assertIn("ld l, 0", read)
+        done = text[text.index("multi_record_done:"):
+                    text.index("sync_page0_du:")]
+        self.assertIn("ld (bdos_dma), hl", done)
+        self.assertIn("ld (scb_dma), hl", done)
+        self.assertIn("ld de, 128", done)
+        # The DMA only advances for a true multi-sector call.
+        self.assertIn("ms_adv", done)
+        self.assertIn(".mrd_no_dma", done)
+
+    def test_writes_transfer_the_full_count(self):
+        # F21 applies the same count as F20: the loop moves up to ms_left
+        # records, advances the DMA and reports H = records moved.
+        text = source("src/bdos/bdos.zpa")
+        write = text[text.index("multi_write:"):text.index("multi_init:")]
+        self.assertIn("call multi_init", write)
+        self.assertIn("call f21_body", write)
+        self.assertIn("call multi_record_done", write)
+        self.assertIn("jr c, .mw_loop", write)
+        self.assertIn("ld h, a", write)
+        # Invalid counts fall back to one record (PIP asks for 128).
+        f44 = text[text.index("bf_f44:"):text.index("; F45: Set BDOS Error Mode")]
+        self.assertIn("cp 128", f44)
+        bad = f44[f44.index(".f44_bad:"):]
+        self.assertIn("ld (scb_multi), a", bad)
+        # The on-disk tests expect four records in one call each way.
         tester = source("src/test/disktest.asm")
-        self.assertIn("one record per call; H reports the count", tester)
+        self.assertIn("the whole F44 count was transferred", tester)
+        self.assertIn("all four records moved in one call", tester)
+        self.assertIn(".t23_cmp", tester)
 
     def test_f44_validates_and_stores(self):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index("bf_f44:"):text.index("; F45: Set BDOS Error Mode")]
         self.assertIn("ld (scb_multi), a", body)
-        self.assertIn("cp 128", body)
+        self.assertIn("cp 128", body)            # 1..127; PIP's 128 falls back
         self.assertIn(".f44_bad", body)
 
     def test_warm_boot_resets_count(self):
@@ -55,11 +82,15 @@ class MultiSectorCount(unittest.TestCase):
         body = text[start:start + 1200]
         self.assertIn("ld (scb_multi), a", body)
 
-    def test_single_record_transfer_reports_one(self):
+    def test_count_is_seeded_from_the_scb(self):
         text = source("src/bdos/bdos.zpa")
-        body = text[text.index("multi_read:"):text.index("multi_write:")]
-        self.assertIn("call f20_body", body)
-        self.assertIn("ld h, 1", body)
+        body = text[text.index("multi_init:"):
+                    text.index("multi_record_done:")]
+        self.assertIn("(scb_multi)", body)
+        self.assertIn("ld (ms_left), a", body)
+        self.assertIn("ld (ms_done), a", body)
+        # A corrupt zero count is treated as one, never as 256.
+        self.assertIn("jr nz, .mi_ok", body)
 
 
 class ChainAndReturnCode(unittest.TestCase):

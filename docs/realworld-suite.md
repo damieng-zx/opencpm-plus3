@@ -59,15 +59,15 @@ separate, explicitly triggered workflow.
 | `f80344` | Microsoft FORTRAN-80 3.44 | Compiler → REL → link with FORLIB → run | Pass |
 | `bascom53` | Microsoft BASIC Compiler 5.3 | BASIC-80 → OBSLIB → stand-alone `.COM`, then run | Pass |
 | `aztec106` | Aztec C 1.06D | cc → asm → object → link with C.LIB → run | Pass |
-| `z80asm` | SLR Z80ASM 1.32 | Direct-to-`.COM` macro assembler | Known issue |
+| `z80asm` | SLR Z80ASM 1.32 | Direct-to-`.COM` macro assembler (F44 multi-sector read) | Pass |
 | `zsid` | Microsoft ZSID 1.4 | Debugger: load, memory dump, `G0` | Pass |
 | `zork2` | Zork II | Large `.DAT`, save-file write | Pass |
 | `zork3` | Zork III | Paged intro, large `.DAT`, save-file write | Pass |
 | `wordmaster` | MicroPro WordMaster 1.07A | Full-screen edit, BREAK/ESC, save, TYPE | Pass |
 | `supercalc1` | SuperCalc 1.05 | Spreadsheet start, cell entry, quit | Pass |
 
-Notes on individual packages (only Z80ASM is recorded as a known issue in
-the manifest; the others are history or display caveats):
+Notes on individual packages (WordStar's display caveat is the only
+recorded known issue; the others are history):
 
 - **WordStar 3.0** starts and draws its no-file menu, and the automated
   check (banner and menu) passes.  It is an 80-column program, so on the
@@ -93,12 +93,10 @@ the manifest; the others are history or display caveats):
   block, so `AS` created a zero-length `CHELLO.O`.  With `LIBC.REL`
   omitted, `LN CHELLO.O C.LIB` links and the program runs.
 - **Z80ASM 1.32** sets a multi-sector count with F44 and then reads its
-  source once, assuming the whole block was transferred.  This BDOS
-  deliberately transfers one record per call and reports it in `H` (a
-  legal partial transfer), so the rest of Z80ASM's source buffer is stale
-  and it reports `Line Too Long`.  Full multi-sector F20 transfers would
-  fix it; the prototype that did so broke PIP's copy, so the documented
-  single-record behaviour stands for now.
+  source once, assuming the whole block was transferred.  F20 now applies
+  the F44 count (1..127), so the source buffer is complete and the package
+  passes.  F21 keeps the single-record partial-write contract PIP and the
+  RAM disk need; Z80ASM only required the read side.
 
 - **WordMaster 1.07A** edits and saves.  Leaving its insert mode needs
   `ESC`, which on the +3 is the BREAK key (`Caps Shift + Space`) per the

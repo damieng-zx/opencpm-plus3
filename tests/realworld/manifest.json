@@ -332,7 +332,6 @@
         "0 Error(s) Detected"
       ],
       "frames": 2000,
-      "known_issue": "Z80ASM sets a multi-sector count with F44 (8 records), then reads its source once and assumes the BDOS transferred the whole block. This BDOS deliberately transfers one record per call and reports it in H (a legal partial transfer), so the second half of Z80ASM's source buffer is stale and the assembler reports 'Line Too Long' and assembles garbage. Making it pass needs full multi-sector F20 transfers; a prototype that did so broke PIP's copy, so the single-record behaviour is retained for now.",
       "notes": "SLR Systems Z80ASM, a direct-to-.COM macro assembler.",
       "steps": [
         {
