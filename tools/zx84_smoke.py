@@ -435,8 +435,10 @@ class Smoke:
     # Free bank-6 gaps.  Nothing should touch these once the loader has
     # handed over, so a sentinel across the app tests catches accidental
     # overlaps (the fcb_buf/alv_c type of bug).
-    BANK6_GAPS = ((0xA6FC, 4), (0xA83D, 3), (0xA870, 0x90),
-                  (0xADA4, 0x25C))
+    # A880-A881 is f111_addr (BDOS F111 text pointer), so the gap is split
+    # around it.
+    BANK6_GAPS = ((0xA6FC, 4), (0xA83D, 3), (0xA870, 0x10),
+                  (0xA882, 0x7E), (0xADA4, 0x25C))
 
     def run_bank6_sentinels(self) -> None:
         self.sentinels: list[tuple[int, bytes]] = []
