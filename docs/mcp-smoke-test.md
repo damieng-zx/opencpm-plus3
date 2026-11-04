@@ -10,7 +10,8 @@ checks that the stage-2 loader staged the three fonts and `RAMDISK.FID`
 byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), fills the remaining
 free bank-6 gaps with a sentinel and verifies they survive the app runs,
 then runs
-`SYSTEST`, `XTETEST`, `DISKTEST`, `BDOSTEST`, and the main CCP flows,
+`SYSTEST`, `XTETEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
+`F59` overlay load), and the main CCP flows,
 and asserts the 51x24 character buffer plus an empty FDC retry log:
 
 `XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry, `TE_RESET`,

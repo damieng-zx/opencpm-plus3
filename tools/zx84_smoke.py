@@ -674,6 +674,8 @@ class Smoke:
         failures = [l for l in lines if "FAIL" in l]
         if failures:
             raise SmokeError("BDOSTEST failures:\n" + "\n".join(failures))
+        if not any("F59 LOADOVL" in l for l in self.history):
+            raise SmokeError("BDOSTEST did not reach F59")
         if not any("F104 SETDATE" in l for l in self.history):
             raise SmokeError("BDOSTEST did not reach F104")
 

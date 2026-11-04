@@ -54,6 +54,7 @@ start:
     call tst_f33        ; F33 RDRAND   — read random
     call tst_f34        ; F34 WRRAND   — write random
     call tst_f35        ; F35 FILSIZ   — compute file size
+    call tst_f59        ; F59 LOADOVL - load an overlay file
     call tst_f104       ; F104 SETDATE — set date/time + F105 round-trip
 
     ld de, msg_done
@@ -1614,6 +1615,98 @@ tst_f35:
 ;   got clobbered by the hour*60 computation and scb_minute
 ;   was written from a byte at (hour*4) in the TPA.
 ; ============================================================
+; ============================================================
+; F59: Load Overlay
+;   Create a one-record file, open it, point R0/R1 at E000h and call
+;   F59; the 128 bytes must land there.
+; ============================================================
+tst_f59:
+    ld de, lbl_f59
+    call print_label
+
+    ; Create TEMP.$$$ and write a 128-byte pattern (128..1).
+    call clear_test_fcb
+    ld hl, fn_temp
+    ld de, 0x005D
+    ld bc, 11
+    ldir
+    ld de, 0x005C
+    ld c, 22                    ; Make
+    call BDOS
+    cp 0xFF
+    jp z, .f59_fail
+
+    ld hl, 0x0080
+    ld b, 128
+.f59_fill:
+    ld a, b
+    ld (hl), a
+    inc hl
+    djnz .f59_fill
+
+    ld de, 0x0080
+    ld c, 26                    ; Set DMA
+    call BDOS
+    ld de, 0x005C
+    ld c, 21                    ; Write Sequential
+    call BDOS
+    or a
+    jp nz, .f59_fail
+
+    ld de, 0x005C
+    ld c, 16                    ; Close
+    call BDOS
+
+    ; Reopen and load it to E000h.
+    call clear_test_fcb
+    ld hl, fn_temp
+    ld de, 0x005D
+    ld bc, 11
+    ldir
+    ld de, 0x005C
+    ld c, 15                    ; Open
+    call BDOS
+    cp 0xFF
+    jp z, .f59_fail
+
+    xor a
+    ld (0x005C + 33), a          ; R0 = E000h (load address low)
+    ld a, 0xE0
+    ld (0x005C + 34), a          ; R1 = load address high
+    ld de, 0x005C
+    ld c, 59                    ; Load Overlay
+    call BDOS
+
+    ; Verify all 128 bytes.
+    ld hl, 0xE000
+    ld b, 128
+.f59_check:
+    ld a, b
+    cp (hl)
+    jp nz, .f59_fail
+    inc hl
+    djnz .f59_check
+
+    ; Cleanup.
+    call clear_test_fcb
+    ld hl, fn_temp
+    ld de, 0x005D
+    ld bc, 11
+    ldir
+    ld de, 0x005C
+    ld c, 19                    ; Delete
+    call BDOS
+
+    ld de, msg_pass_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+.f59_fail:
+    ld de, msg_fail_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+
 tst_f104:
     ld de, lbl_f104
     call print_label
@@ -1768,6 +1861,7 @@ lbl_f32:    DB "F32 USRCOD   : $"
 lbl_f33:    DB "F33 RDRAND   : $"
 lbl_f34:    DB "F34 WRRAND   : $"
 lbl_f35:    DB "F35 FILSIZ   : $"
+lbl_f59:    DB "F59 LOADOVL  : $"
 lbl_f104:   DB "F104 SETDATE: $"
 
 f09_test_str:   DB "TEST$"

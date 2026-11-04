@@ -102,6 +102,16 @@ class LoadOverlay(unittest.TestCase):
         self.assertIn("call f20_body", body)
         self.assertIn("ld a, 0xFE", body)
 
+    def test_bdostest_loads_a_real_overlay(self):
+        tester = source("src/test/bdostest.asm")
+        body = tester[tester.index("tst_f59:"):tester.index("tst_f104:")]
+        self.assertIn("ld c, 59", body)
+        self.assertIn("0x005C + 33", body)
+        self.assertIn("0xE000", body)
+        self.assertIn("F59 LOADOVL", tester)
+        smoke = source("tools/zx84_smoke.py")
+        self.assertIn("F59 LOADOVL", smoke)
+
 
 class DiskTestScreenWidth(unittest.TestCase):
     def test_t18_accepts_every_supported_width(self):
