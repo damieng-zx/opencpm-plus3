@@ -309,8 +309,8 @@ Programs should close any open files before exiting (BDOS F16).
   The count applies only to sequential I/O; the random functions always move
   one record.  The valid range is 1..127.  An invalid count resets it to 1
   rather than leaving a stale larger value: PIP asks for 128, is rejected,
-  and falls back to single-record transfers; Z80ASM asks for 8 and gets its
-  whole source block in one read.
+  falls back to one record and later uses smaller valid counts; Z80ASM asks
+  for 8 and gets its whole source block in one read.
 
 #### F45 — Set BDOS Error Mode
 - **In**: E=mode

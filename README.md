@@ -77,11 +77,10 @@ emulator.
 | Microsoft BASIC Compiler 5.3 | Pass | compile → link → stand-alone `.COM` |
 | Aztec C 1.06D | Pass | cc → asm → object → link → run |
 | Microsoft ZSID 1.4 | Pass | debugger: load, dump, `G0` |
-| SLR Z80ASM 1.32 | Known | needs full multi-sector F20; see the TODO list |
+| SLR Z80ASM 1.32 | Pass | direct-to-`.COM` assembler; exercises F44 multi-sector reads |
 
-15 of the 16 packages pass (some rows above group several packages);
-Z80ASM's limitation is documented in the suite. The suite is run on demand
-rather than in CI because it downloads third-party software.
+All 16 packages pass (some rows above group several packages). The suite is
+run on demand rather than in CI because it downloads third-party software.
 
 Two display caveats, both from the same root cause — the default screen is 51
 columns:
@@ -135,9 +134,9 @@ Also supported:
 - **80-column mode** — a 3px font, or an 80-column buffer with a panned
   viewport. This is the remaining gap for WordStar and other 80-column
   layouts.
-- **Full multi-sector F20 transfers**, which would fix Z80ASM. A prototype
-  broke PIP's copy, so the single-record behaviour stands until that is
-  understood.
+- **Larger multi-sector counts** — F44 currently accepts 1..127; 128 (a full
+  16K buffer) is rejected so PIP falls back to its compatible path. Larger
+  counts may be possible once PIP's buffering is fully understood.
 - **Richer command-line file specs** (wildcards for `TYPE`, and the like).
 
 ## Out of scope

@@ -357,6 +357,11 @@ accounting check, not a stub: the count is non-zero, drops by 8 records
 after writing one 1K block, and returns to its original value once the
 file is deleted.
 
+T23/T27/T28 cover the F44 multi-sector path: T23 reads four records of
+`CPM3.SYS` in one `F20` (EOT-style count 4, H=4) and compares them with four
+single-record reads; T27/T28 write four records in one `F21` to A: and C:
+and read each marker back.
+
 `fdc_log` must stay retry-free.  A `FAIL` on T4 usually means the directory
 cache key/sector was corrupted; a `FAIL` on T11 means an extent's RC/alloc
 was not flushed.

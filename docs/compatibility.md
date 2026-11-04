@@ -28,7 +28,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE layout wraps on the 51-column screen; the default build is unchanged, but TINST can install it for a 64-column terminal and `SCREEN 64` then fits the IDE |
 | **WordStar** | 3.0 | Banner and no-file menu appear; `INSTALL` patches terminals and writes `WS.COM` | 80-column layout wraps on the 51-column screen, so the display is not usable yet (needs an 80-column mode) |
 | **BBC BASIC** | — | Previously exercised from the disk image | Visual/interactive test; see the smoke-test notes |
-| **PIP** | reference binary | `PIP C:=A:DATE.COM`, then `DIR C:` | Covered by the automated smoke test |
+| **PIP** | reference binary | `PIP C:=A:DATE.COM`, then `DIR C:`; local harness copies `SMOKE.TXT` interactively | Covered by the automated smoke test; `tools/zx84_pip.py` runs a local copy end to end (F44 caller) |
 | **Microsoft M80 + L80** | MACRO-80 / Link-80 3.44 | `M80 =HELLO` assembles and links to `HELLO.COM`, which prints `HELLO, WORLD` | Exercises REL output, the linker's random I/O and the FCB command line |
 | **Microsoft FORTRAN-80** | 3.44 | `F80 CHELLO=CHELLO` compiles, `L80 CHELLO,FORLIB,CHELLO/N/E` links, `CHELLO` prints `HELLO, WORLD` | Library search, larger REL files |
 | **Microsoft BASIC Compiler** | 5.3 | `BASCOM =CHELLO/O` compiles, `L80 CHELLO,OBSLIB,CHELLO/N/E` links, `CHELLO` prints `HELLO, WORLD` | Stand-alone `/O` output links the 48 KB OBSLIB runtime. `BASCOM53.ZIP` is an OEM build that probes banked memory and exits; use `BASCOM.ZIP` |
@@ -42,7 +42,13 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **WordStar 3.0 display** | The program runs and draws its menu, but WordStar is an 80×24 program and the character buffer is 51 columns, so each 80-column line wraps and overlaps the next. | The crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: an 80-column screen mode (3px font) or a WordStar install with a ≤51-column terminal. |
 | **Turbo Pascal display** | Runs correctly; the 80-column IDE frames wrap on screen. | Same root cause as WordStar's display: no 80-column mode. |
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
-| ~~SLR Z80ASM 1.32~~ | Fixed: F20 now transfers the whole F44 count in one call. | Z80ASM sets a multi-sector count with F44 and assumes one F20 transferred the whole block. The BDOS now applies the count for reads (1..127), so the source buffer is complete. F21 deliberately keeps the single-record partial-write contract PIP and the RAM disk rely on; Z80ASM only needed the read side. |
+
+Recently fixed: **SLR Z80ASM 1.32** used to fail with `Line Too Long`
+because it sets a multi-sector count (8) with F44 and assumes one F20 moved
+the whole source block.  F20/F21 now apply the count to both sequential
+directions (1..127) and report the records moved in H.  An invalid count
+resets to 1, which is what lets PIP's 128 request fall back cleanly.  The
+real-world suite reports it as `PASS`.
 
 ## WordStar 3.0 display width
 

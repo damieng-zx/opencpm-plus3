@@ -92,11 +92,12 @@ recorded known issue; the others are history):
   The image was one file too full: including `LIBC.REL` left no free
   block, so `AS` created a zero-length `CHELLO.O`.  With `LIBC.REL`
   omitted, `LN CHELLO.O C.LIB` links and the program runs.
-- **Z80ASM 1.32** sets a multi-sector count with F44 and then reads its
-  source once, assuming the whole block was transferred.  F20 now applies
-  the F44 count (1..127), so the source buffer is complete and the package
-  passes.  F21 keeps the single-record partial-write contract PIP and the
-  RAM disk need; Z80ASM only required the read side.
+- **Z80ASM 1.32** sets a multi-sector count (8) with F44 and then reads its
+  source once, assuming the whole block was transferred.  F20/F21 now apply
+  the F44 count (1..127) to both sequential directions and report the records
+  moved in H, so the source buffer is complete and the package passes.  An
+  invalid count resets to 1: PIP asks for 128, falls back, and its buffered
+  copy and RAM-disk transfers still work.
 
 - **WordMaster 1.07A** edits and saves.  Leaving its insert mode needs
   `ESC`, which on the +3 is the BREAK key (`Caps Shift + Space`) per the
