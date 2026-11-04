@@ -256,8 +256,11 @@ sets the `DC00h` magic byte.  It builds a standard 9-sector header table at
 checks the data area, then reads the sector ID.  It then copies the XDPB,
 sets 8 sectors/track, formats track 38 with an 8-entry header at `D520h`,
 checks `READ ID` never reports sector 9 and reads the eighth sector back.
-The smoke runner does this on a scratch copy and uses `sector_read` to
-confirm the filler.
+It then fills a 1K buffer at `C000h` (`AAh` then `55h`) and writes sectors
+1-2 of track 38 with one `DD_L_WRITE` WRITE DATA MULTIPLE command (EOT=2),
+then reads each sector back with `DD_L_READ` and compares the halves.  The
+smoke runner does this on a scratch copy and uses `sector_read` to confirm
+the filler.
 
 Test 11 applies the default `DD_SETUP` parameter block at `D600h`.  The
 smoke runner then checks the translated fields: `motor_off_ticks=250`

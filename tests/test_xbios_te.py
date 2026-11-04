@@ -364,6 +364,10 @@ class DiscPhase2(unittest.TestCase):
         self.assertIn("0xD220 + 19", text)
         self.assertIn("0xD520", text)
         self.assertIn("0x26E5", text)
+        # Multi-sector WRITE DATA MULTIPLE on the formatted track.
+        self.assertIn("fmtwrite_multi_pb", text)
+        self.assertIn("0x45, 0x00, 0x26", text)
+        self.assertIn("dw 1024", text)
         # Non-destructive rejection cases: bad bank, low XDPB, unit 1.
         self.assertIn("32.FMTBAD", text)
         self.assertIn("0xB000", text)

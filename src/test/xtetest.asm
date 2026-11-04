@@ -721,6 +721,108 @@ start:
     cp 0xE5
     jp nz, .t10_fail
 
+    ; DD_L_WRITE multi-sector: write sectors 1-2 of track 38 in one WRITE
+    ; DATA MULTIPLE command, then read each back and compare.
+    ld hl, 0xC000
+    ld bc, 512
+    ld a, 0xAA
+.t10_fill_a:
+    ld (hl), a
+    inc hl
+    dec bc
+    ld a, b
+    or c
+    jr nz, .t10_fill_a
+
+    ld bc, 512
+    ld a, 0x55
+.t10_fill_b:
+    ld (hl), a
+    inc hl
+    dec bc
+    ld a, b
+    or c
+    jr nz, .t10_fill_b
+
+    ld hl, fmtwrite_multi_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_WRITE
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t10_fail
+    inc hl
+    inc hl
+    ld a, (hl)                  ; ST1
+    and 0x7B                    ; WP, DE, OR, ND, NW, MA
+    jp nz, .t10_fail
+
+    ; Sector 1 must hold the 0xAA half.
+    ld hl, fmtread1_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t10_fail
+    inc hl
+    inc hl
+    ld a, (hl)
+    and 0x3B
+    jp nz, .t10_fail
+    ld hl, 0xD300
+    ld de, 0xC000
+    ld bc, 512
+.t10_cmp1:
+    ld a, (de)
+    cp (hl)
+    jp nz, .t10_fail
+    inc hl
+    inc de
+    dec bc
+    ld a, b
+    or c
+    jr nz, .t10_cmp1
+
+    ; Sector 2 must hold the 0x55 half.
+    ld hl, fmtread2_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t10_fail
+    inc hl
+    inc hl
+    ld a, (hl)
+    and 0x3B
+    jp nz, .t10_fail
+    ld hl, 0xD300
+    ld de, 0xC200
+    ld bc, 512
+.t10_cmp2:
+    ld a, (de)
+    cp (hl)
+    jp nz, .t10_fail
+    inc hl
+    inc de
+    dec bc
+    ld a, b
+    or c
+    jr nz, .t10_cmp2
+
     ld de, msg_ok
     jr .t10_print
 .t10_fail:
@@ -2181,6 +2283,24 @@ lwrite_bank0_pb:
     dw 512
     db 9
     db 0x45, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x2A, 0xFF
+fmtwrite_multi_pb:
+    db 1
+    dw 0xC000
+    dw 1024
+    db 9
+    db 0x45, 0x00, 0x26, 0x00, 0x01, 0x02, 0x02, 0x2A, 0xFF
+fmtread1_pb:
+    db 1
+    dw 0xD300
+    dw 512
+    db 9
+    db 0x46, 0x00, 0x26, 0x00, 0x01, 0x02, 0x01, 0x2A, 0xFF
+fmtread2_pb:
+    db 1
+    dw 0xD300
+    dw 512
+    db 9
+    db 0x46, 0x00, 0x26, 0x00, 0x02, 0x02, 0x02, 0x2A, 0xFF
 lwrite_data_pb:
     db 1
     dw 0xD300

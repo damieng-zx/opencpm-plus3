@@ -132,6 +132,9 @@ delay 250, requiring several repeats in the first case and exactly one
 character in the second, so the stored timings are proven to drive the
 scanner.  Test 32 checks the `DD_FORMAT` argument guards that return before
 any FDC access: an XDPB below `C000h` (A=9) and the unfitted unit 1 (A=0).
+The destructive test 10 also writes two sectors with one `DD_L_WRITE`
+WRITE DATA MULTIPLE command on the freshly formatted track and compares
+both halves read back with `DD_L_READ`.
 
 ## Calling from a .COM program
 
