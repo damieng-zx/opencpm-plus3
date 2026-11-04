@@ -1504,6 +1504,128 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 28: DD_L_READ depth ===
+    ld de, msg_t28
+    ld c, 9
+    call BDOS
+
+    xor a
+    ld (t28_ok), a
+
+    ; Motor on, seek track 0.
+    ld hl, DD_L_ON_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+    ld hl, DD_L_SEEK
+    ld (userf_dw), hl
+    ld bc, 0
+    ld d, 0
+    ld ix, 0xD200
+    call userf_trampoline
+    jp nc, .t28_off
+
+    ; Multi-sector READ DATA: sectors 1-2 into D400h (1024 bytes).
+    ld hl, lread_multi_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t28_off
+    inc hl
+    inc hl
+    ld a, (hl)
+    and 0x3B
+    jp nz, .t28_off
+
+    ; Single-sector READ DATA for sector 2 into E000h.
+    ld hl, lread_one_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t28_off
+    inc hl
+    inc hl
+    ld a, (hl)
+    and 0x3B
+    jp nz, .t28_off
+
+    ; The second half of the multi-sector read must match sector 2.
+    ld hl, 0xD600
+    ld de, 0xE000
+    ld bc, 512
+.t28_cmp:
+    ld a, (de)
+    cp (hl)
+    jp nz, .t28_off
+    inc hl
+    inc de
+    dec bc
+    ld a, b
+    or c
+    jr nz, .t28_cmp
+
+    ; Bank != 1 is rejected without transferring data.
+    ld hl, lread_bank0_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    or a
+    jp nz, .t28_off
+
+    ; Missing sector: the result phase must still come back (ND/MA set).
+    ld hl, lread_bad_pb
+    ld de, 0xD900
+    ld bc, 15
+    ldir
+    ld hl, DD_L_READ
+    ld (userf_dw), hl
+    ld hl, 0xD900
+    call userf_trampoline
+    ld a, (hl)
+    cp 7
+    jp nz, .t28_off
+    inc hl
+    inc hl
+    ld a, (hl)                  ; ST1
+    and 0x05                    ; ND or MA
+    jp z, .t28_off
+
+    ld a, 1
+    ld (t28_ok), a
+
+.t28_off:
+    ld hl, DD_L_T_OFF_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+    ld hl, DD_OFF_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+
+    ld a, (t28_ok)
+    or a
+    ld de, msg_fail
+    jr z, .t28_print
+    ld de, msg_ok
+.t28_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -1639,6 +1761,7 @@ t8_ok: db 0
 t9_ok: db 0
 t14_ok: db 0
 t15_ok: db 0
+t28_ok: db 0
 dd_setup_defaults: db 10, 50, 175, 30, 12, 15, 3
 dd_l_spec: db 0, 0, 40, 9, 2, 1, 3, 2, 42, 82
 
@@ -1654,6 +1777,30 @@ lread_data_pb:
     dw 512
     db 9
     db 0x46, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x2A, 0xFF
+lread_multi_pb:
+    db 1
+    dw 0xD400
+    dw 1024
+    db 9
+    db 0x46, 0x00, 0x00, 0x00, 0x01, 0x02, 0x02, 0x2A, 0xFF
+lread_one_pb:
+    db 1
+    dw 0xE000
+    dw 512
+    db 9
+    db 0x46, 0x00, 0x00, 0x00, 0x02, 0x02, 0x02, 0x2A, 0xFF
+lread_bank0_pb:
+    db 0
+    dw 0xD400
+    dw 1024
+    db 9
+    db 0x46, 0x00, 0x00, 0x00, 0x01, 0x02, 0x02, 0x2A, 0xFF
+lread_bad_pb:
+    db 1
+    dw 0xD400
+    dw 0
+    db 9
+    db 0x46, 0x00, 0x00, 0x00, 0x14, 0x02, 0x14, 0x2A, 0xFF
 lwrite_data_pb:
     db 1
     dw 0xD300
@@ -1694,6 +1841,7 @@ msg_t24:    db 0x0D, 0x0A, "24.KTWRAP..", '$'
 msg_t25:    db 0x0D, 0x0A, "25.SETKEY..", '$'
 msg_t26:    db 0x0D, 0x0A, "26.EXPMAX..", '$'
 msg_t27:    db 0x0D, 0x0A, "27.KMZERO..", '$'
+msg_t28:    db 0x0D, 0x0A, "28.LREADX..", '$'
 exp_string: db "HELLO"
 exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
