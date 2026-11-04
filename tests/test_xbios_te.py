@@ -371,6 +371,13 @@ class DiscPhase2(unittest.TestCase):
         self.assertIn("10.FMT..OK", text)
         self.assertIn("format-test.dsk", text)
 
+    def test_quick_mode_skips_the_destructive_test(self):
+        text = source("tools/zx84_smoke.py")
+        self.assertIn('"--quick"', text)
+        self.assertIn("def run(self, quick: bool = False)", text)
+        self.assertIn("quick mode: skipping", text)
+        self.assertIn("smoke.run(quick=args.quick)", text)
+
 
 class DdSetup(unittest.TestCase):
     def test_dispatch_uses_jumpblock_entry(self):

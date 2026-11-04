@@ -1035,7 +1035,7 @@ class Smoke:
         if bad:
             raise SmokeError("FDC retry/error lines:\n" + "\n".join(bad[:20]))
 
-    def run(self) -> None:
+    def run(self, quick: bool = False) -> None:
         self.boot()
         self.run_loader_stage()
         self.run_bank6_sentinels()
@@ -1058,7 +1058,10 @@ class Smoke:
         self.run_ccp_external()
         # Check before the scratch-image format test reboots the machine.
         self.check_bank6_sentinels()
-        self.run_xtetest_format()
+        if quick:
+            self.log("quick mode: skipping the destructive format test")
+        else:
+            self.run_xtetest_format()
         self.check_fdc()
         self.log("all checks passed")
 
@@ -1116,6 +1119,8 @@ def main() -> int:
     ap.add_argument("--dsk", default=str(ROOT / "build" / "cpm3.dsk"),
                     help="DSK image to boot")
     ap.add_argument("--model", default="zx128kplus3")
+    ap.add_argument("--quick", action="store_true",
+                    help="skip the destructive DD_FORMAT test on a scratch image")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -1133,7 +1138,7 @@ def main() -> int:
         mcp = MCP(zx84, args.model)
         try:
             smoke = Smoke(mcp, dsk, args.verbose)
-            smoke.run()
+            smoke.run(quick=args.quick)
         finally:
             mcp.close()
     except SmokeError as exc:

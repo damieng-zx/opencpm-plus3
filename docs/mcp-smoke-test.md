@@ -34,7 +34,11 @@ track with `sector_read`.
 ```text
 python3 tools/zx84_smoke.py
 python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3.dsk
+python3 tools/zx84_smoke.py --quick     # skip the destructive format test
 ```
+
+`--quick` runs everything except the scratch-image `DD_FORMAT` test, which
+is the only part that reboots a second image.
 
 The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, the `SCREEN` utility
 (`SCREEN 32`/`SCREEN 51`),
