@@ -236,6 +236,7 @@ docs/       API reference, filesystem and compatibility documentation
 - [CP/M Software Compatibility](docs/compatibility.md)
 - [Real-world CP/M Suite](docs/realworld-suite.md)
 - [zx84 MCP Smoke Test](docs/mcp-smoke-test.md)
+- [Third-party Application Tests](docs/third-party-tests.md)
 - [CI with zx84](docs/ci.md)
 
 ## Credits
