@@ -96,6 +96,7 @@ emulator.
 | dBASE II 2.43 | Pass | overlays, FCB random I/O, dot prompt |
 | SuperCalc 1.05 / SuperCalc2 1.00 | Pass | overlays, cell entry, quit; SuperCalc2's VT-100 output is still literal |
 | Microsoft Multiplan 1.05 | Pass | overlays, 80-column grid; the 24x80 variant fits it |
+| VEDIT Plus 2.33 | Pass | CRT installer (VT-52), generated `VPLUS.COM`, opens a file |
 | WordStar 3.0 | Pass | starts and draws its no-file menu; use `SET24X80` for its 80-column menus |
 | WordMaster 1.07A | Pass | full edit/save cycle, BREAK = ESC |
 | Microsoft BASIC-80 5.21 | Pass | interpreter, console and file I/O |
@@ -110,7 +111,7 @@ emulator.
 | Microsoft ZSID 1.4 | Pass | debugger: load, dump, `G0` |
 | SLR Z80ASM 1.32 | Pass | direct-to-`.COM` assembler; exercises F44 multi-sector reads |
 
-All 20 packages pass (some rows above group several packages). The suite is
+All 21 packages pass (some rows above group several packages). The suite is
 run on demand rather than in CI because it downloads third-party software.
 The 24x80 variants (`wordstar30_80`, `turbo3_80`, `supercalc2_80`,
 `multiplan_80`) are additional runs of four of those packages.

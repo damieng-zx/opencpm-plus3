@@ -24,6 +24,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **WordMaster** | 1.07A | Banner, edit, `BREAK` (Caps+Space = ESC) to leave insert mode, `E` saves, `TYPE` shows the text | Uses the official +3 BREAK mapping |
 | **dBASE II** | 2.43 | Starts, date prompt, dot prompt, `QUIT` returns to `A>` | FCB random I/O, overlays |
 | **Multiplan** | 1.05 | Banner, command bar, 80-column grid; the 24x80 variant flips to the right half | Needs the `MP80` data overlay; terminal escapes leave artifacts |
+| **VEDIT Plus** | 2.33 | CRT installer selects VT-52 and writes `VPLUS.COM`; opens `SMOKE.TXT` and shows the `LINE:`/`FILE:` status line | The installer is interactive; the manifest drives it |
 | **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | ⚠️ VT-100 escapes such as `ESC[?3h`, `ESC[2J`, `ESC[H` remain visible; `supercalc2_80` confirms 24x80 fixes only the width, not the terminal |
 | **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
 | **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE wraps on the 51-column screen; TINST+`SCREEN 64` or `turbo3_80` (24x80) fit it, though Kaypro escapes leave stray `1` characters |
@@ -100,7 +101,7 @@ It does not help WordStar, whose 80-column layout is unchanged.
 - [ ] T/Maker 4.03
 - [ ] Magic Wand
 - [ ] DataStar
-- [ ] VEDIT Plus
+- [x] VEDIT Plus 2.33 - works (automated: CRT installer + editor)
 - [ ] PeachText / PeachCalc
 
 ### Languages and development tools

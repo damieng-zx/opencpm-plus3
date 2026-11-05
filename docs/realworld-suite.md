@@ -55,6 +55,7 @@ separate, explicitly triggered workflow.
 | `supercalc2_80` | SuperCalc2 1.00 (24x80) | 80-column banner, right-half flip | Pass (VT-100 escapes) |
 | `multiplan` | Microsoft Multiplan 1.05 | Spreadsheet, overlays, 80-column grid | Pass |
 | `multiplan_80` | Microsoft Multiplan 1.05 (24x80) | 80-column command bar/grid, right-half flip | Pass |
+| `vedit` | VEDIT Plus 2.33 (CRT) | Installer (VT-52), then open/edit a file | Pass |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
 | `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
@@ -102,6 +103,12 @@ issues; the others are history):
   `multiplan_80` variant fits the command bar and grid in 24x80 and
   flips to the right half; terminal escapes still leave artifacts at
   the line starts.
+- **VEDIT Plus 2.33** is a CRT distribution: the archive has a `.SET`
+  file, not a runnable editor.  The test runs `INSTALL VPLUSZC.SET
+  VPLUS.COM`, selects DEC VT-52 (option 12 then 16), answers the save
+  prompt and then opens `SMOKE.TXT` with the generated `VPLUS.COM`.
+  The installer ignores the first character of the Y/N answer, so the
+  manifest answers `" yes"`.
 - **BASCOM 5.3** used to exit immediately because the suite pulled
   `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
   machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`
