@@ -253,8 +253,9 @@ optional. When present they are added to **both** images automatically, so
 the distribution disk carries BBC BASIC and your other tools; a fresh clone
 (and CI) builds a source-only disk, and the smoke runner skips the checks
 that need them.  `RENAME.COM` is deliberately excluded (the CCP's built-in
-`REN` covers it) and the smoke adds it to a scratch copy to keep a real
-third-party F23 caller covered.
+`REN` covers it), the smoke adds it to a scratch copy to keep a real
+third-party F23 caller covered, and `NULU11.COM` (an LBR library manager) is
+left off the image.
 
 ### Testing
 

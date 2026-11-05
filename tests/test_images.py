@@ -41,6 +41,10 @@ class DistributionImage(unittest.TestCase):
             self.skipTest("references/binaries/BBCBASIC.COM is not present")
         self.assertIn(b"BBCBASICCOM", names(DIST))
 
+    def test_nulu11_is_not_shipped(self):
+        # NULU11.COM is a local LBR manager the project does not distribute.
+        self.assertNotIn(b"NULU11  COM", names(DIST))
+
 
 @unittest.skipUnless(TEST.exists(),
                      "build/cpm3-test.dsk is missing (run build.cmd)")
@@ -58,6 +62,9 @@ class TestImage(unittest.TestCase):
         if not DIST.exists():
             self.skipTest("build/cpm3.dsk is missing")
         self.assertLessEqual(names(DIST), names(TEST))
+
+    def test_nulu11_is_not_shipped(self):
+        self.assertNotIn(b"NULU11  COM", names(TEST))
 
 
 if __name__ == "__main__":

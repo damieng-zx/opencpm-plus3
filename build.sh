@@ -76,11 +76,14 @@ if [ "$1" = "--add" ]; then
 fi
 
 # The reference binaries are third-party files and are not tracked, so a
-# fresh clone (including CI) builds without them.
+# fresh clone (including CI) builds without them.  SUBMIT and RENAME are
+# excluded because we build SUBMIT and the CCP has a built-in REN; NULU11
+# (an LBR library manager) is not needed on the distribution disk.
 REF_FILES=()
 for ref in references/binaries/*.COM references/binaries/*.SUB; do
     case "$ref" in
-        */SUBMIT.COM|*/submit.com|*/RENAME.COM|*/rename.com) continue ;;
+        */SUBMIT.COM|*/submit.com|*/RENAME.COM|*/rename.com|\
+        */NULU11.COM|*/nulu11.com) continue ;;
     esac
     if [ -f "$ref" ]; then
         REF_FILES+=("$ref")

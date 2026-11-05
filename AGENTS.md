@@ -35,11 +35,12 @@ lists every region. Before adding a large feature, read `docs/boot.md`
 § *Image headroom and the growth plan*.
 
 `references/binaries/` is optional third-party software added to both images
-(that is how BBC BASIC gets onto the distribution disk); `SUBMIT.COM` and
-`RENAME.COM` are excluded (we build SUBMIT, and the CCP has a built-in REN).
-The smoke runner adds `RENAME.COM` to a scratch copy so a real third-party
-F23 caller is still covered, and drops the two big utilities it never runs
-(`BBCBASIC.COM`, `NULU11.COM`) to leave room for DISKTEST's 17K file.
+(that is how BBC BASIC gets onto the distribution disk); `SUBMIT.COM`,
+`RENAME.COM` and `NULU11.COM` (an LBR library manager) are excluded.  The
+smoke runner adds `RENAME.COM` to a scratch copy so a real third-party F23
+caller is still covered, and drops the big optional utilities it never runs
+(`BBCBASIC.COM`, `NULU11.COM`) if they are present, to leave room for
+DISKTEST's 17K file.
 
 ### ZPA Preprocessing
 

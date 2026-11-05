@@ -1230,9 +1230,9 @@ def prepare_test_image(dsk: Path) -> Path:
 
     DISKTEST writes a 17K multi-extent file, and a developer image that
     build.cmd populated from references/binaries/ can be too full for that.
-    The two big optional utilities the suite never runs (BBCBASIC.COM and
-    NULU11.COM) are therefore dropped from the scratch copy, which is
-    disposable anyway.
+    Any large optional utilities the suite never runs (BBCBASIC.COM,
+    NULU11.COM) are therefore dropped from the scratch copy if present; the
+    scratch copy is disposable anyway.
     """
     rename = ROOT / "references" / "binaries" / "RENAME.COM"
     if not rename.exists():

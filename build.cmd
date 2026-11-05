@@ -94,7 +94,7 @@ if errorlevel 1 goto :fail
 echo   Building DSK...
 
 set REF_BINS=
-for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" set REF_BINS=!REF_BINS! %%F
+for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" if /I not "%%~nxF"=="NULU11.COM" set REF_BINS=!REF_BINS! %%F
 
 set EXTRA_FILES=
 if /I "%~1"=="--add" shift
