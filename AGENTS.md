@@ -15,11 +15,12 @@ build.cmd --add FILE ...     # Build with extra CP/M files on disk
 
 Requires: `sjasmplus` (Z80 assembler at C:\Apps\sjasmplus.exe), `python3`.
 
-Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) → loader → boot sector → DSK image. The BIOS is stored as `CPM3.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0. The CCP is a separate file, `CCP.COM`, staged by the stage-2 loader during cold boot (see Boot Chain).
+Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) → loader → boot sector → DSK image. The BIOS head is stored as `CPM3.SYS` and the common stub as `CPM3C.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0. The CCP is a separate file, `CCP.COM`, staged by the stage-2 loader during cold boot (see Boot Chain).
 
-`CPM3.SYS` must fit the 16K `C000-FFFF` window; the build prints the exact
-budget and `build/memory.map` lists every region. Before adding a large
-feature, read `docs/boot.md` § *Image headroom and the growth plan*.
+`CPM3.SYS` must fit the 16K `C000-FFFF` window and `CPM3C.SYS` the
+`F600-FFFF` window; the build prints both budgets and `build/memory.map`
+lists every region. Before adding a large feature, read `docs/boot.md`
+§ *Image headroom and the growth plan*.
 
 `references/binaries/` is optional third-party software: `SUBMIT.COM` and
 `RENAME.COM` are excluded from the image (we build SUBMIT, and the CCP has a
@@ -120,8 +121,8 @@ OCR does not work with our custom 5px font.
 
 ### Boot Chain
 1. Boot sector (512B at FE00h) → loads loader from track 0
-2. Loader (~1.1K) → stages fonts + `CCP.COM` + FID in bank 6, then loads CPM3.SYS to C000h
-3. Init code at C000h → copies system to bank 4, common stub to F600h
+2. Loader (~1.2K) → stages fonts + `CCP.COM` + FID + `CPM3C.SYS` in bank 6, then loads CPM3.SYS to C000h
+3. Init code at C000h → copies system to bank 4, common stub from bank-6 `9C00h` to F600h
 4. Cold boot in bank 4 → init screen/kbd/FDC, validate the staged FID
 5. `warm_boot` → copy the staged CCP (bank 6, B000h) to 0100h
 6. start_tpa (common) → switch to TPA mode, set page zero, JP 0100h
@@ -129,7 +130,9 @@ OCR does not work with our custom 5px font.
 The CCP is **not** part of CPM3.SYS: `CCP.COM` (the MiniCCP PRL) is read from
 the boot disk into bank 6 at B000h by the stage-2 loader and copied to
 0100h on every warm boot, so a normal exit never touches the disk. A cold
-boot without `CCP.COM` prints a diagnostic and halts.
+boot without `CCP.COM` prints a diagnostic and halts.  The common stub is
+also split out (as `CPM3C.SYS`) so `CPM3.SYS` can use the whole bank-3
+window; a missing `CPM3C.SYS` stops the boot at the loader.
 
 ### Memory Layout (Banked)
 **TPA mode (mode 0: banks 0,1,2,3)**:
@@ -182,7 +185,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 ## Source Structure
 
 - `src/boot/bootsect.asm` — Boot sector (checksum must be 3 mod 256)
-- `src/boot/loader.asm` — Stage 2: stages fonts/CCP/FID in bank 6, then loads CPM3.SYS
+- `src/boot/loader.asm` — Stage 2: stages fonts/CCP/FID/`CPM3C.SYS` in bank 6, then loads the `CPM3.SYS` head
 - `src/bios/bios.asm` — Init + BIOS (PHASE 0000 for bank 4) + common stub (PHASE F600)
 - `src/bios/common.asm` — Common memory stub: BDOS dispatch, bank switching, inter-bank copy
 - `src/bios/screen.asm` — 32/51/64-column text display (8px, 5px and 4px fonts)
@@ -201,6 +204,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `tools/zpa.py` — ZPA preprocessor (see **ZPA Preprocessing**)
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)
 - `tools/check_ccp.py` — Fails the build if `CCP.COM` does not fit the bank-6 staging window
+- `tools/split_sys.py` — Splits the raw BIOS blob into `CPM3.SYS` (head) and `CPM3C.SYS` (common stub)
 - `tools/mkfont64.py` — Builds `font64.bin` from the Compression `.ch8` (`--check` verifies the committed binary)
 - `tools/z80lint.py` — Parser-based Z80 linter (see **Linting**)
 
@@ -238,7 +242,7 @@ When copying memory blocks with LDIR (forward) or LDDR (backward), source and de
 - **LDIR** (forward, HL→HL+BC to DE→DE+BC): safe only if `DE >= HL + BC` or `HL >= DE + BC`
 - **LDDR** (backward, HL down to HL-BC to DE down to DE-BC): safe even with overlap
 
-The init code must copy `system_image` to bank 4 before copying `common_image` to F600h. `COMMON_BASE=F600` overlaps the physical source range of the loaded `system_image` in bank 3; copying common first corrupts bytes that still need to be relocated into bank 4. `tools/check_layout.py` verifies this order from `build/bios.lst`. The common copy itself still needs the correct LDIR/LDDR direction if its source/destination ranges overlap.
+The init code copies `system_image` to bank 4 first because that copy overwrites the loader; nothing may need the loader afterwards. The common stub no longer overlaps it: it comes from `SYS2_STAGE` (bank 6, `9C00h`) and is a plain LDIR to F600h, since bank 6 and bank 3 are different banks. `tools/check_layout.py` verifies the init copy source from `build/bios.lst` and the head/common size budgets.
 
 ## Standard +3 Disk Format (DPB)
 ```

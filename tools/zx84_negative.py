@@ -7,6 +7,7 @@ reach the CP/M prompt:
   missing    CPM3.SYS directory entry marked deleted
   truncated  CPM3.SYS allocation map starts with block 0
   badblock   CPM3.SYS points at a block past the end of the disk
+  nosys2     CPM3C.SYS (common stub) directory entry marked deleted
   badsum     boot-sector checksum corrupted
   noccp      CCP.COM directory entry marked deleted (signon + diagnostic)
   nodisk     drive A ejected before disk_boot
@@ -70,16 +71,22 @@ def make_images(src: Path, outdir: Path) -> dict[str, Path]:
     images: dict[str, Path] = {}
 
     missing = bytearray(base)
-    missing[entry_offset(0)] = 0xE5          # user byte -> deleted
+    missing[find_entry(missing, b"CPM3    SYS")] = 0xE5          # user byte -> deleted
     images["missing"] = write("missing", missing)
 
     truncated = bytearray(base)
-    truncated[entry_offset(0) + 16] = 0      # first allocation block = 0
+    truncated[find_entry(truncated, b"CPM3    SYS") + 16] = 0     # first allocation block = 0
     images["truncated"] = write("truncated", truncated)
 
     badblock = bytearray(base)
-    badblock[entry_offset(0) + 16] = 200     # > DSM 174
+    badblock[find_entry(badblock, b"CPM3    SYS") + 16] = 200     # > DSM 174
     images["badblock"] = write("badblock", badblock)
+
+    # The common stub is a separate boot file; without it the loader must
+    # stop rather than jump into an uninitialised common memory.
+    nosys2 = bytearray(base)
+    nosys2[find_entry(nosys2, b"CPM3C   SYS")] = 0xE5
+    images["nosys2"] = write("nosys2", nosys2)
 
     badsum = bytearray(base)
     badsum[0x3FF] ^= 0xFF                    # boot-sector checksum byte

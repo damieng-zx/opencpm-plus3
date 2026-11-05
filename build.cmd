@@ -40,6 +40,10 @@ if errorlevel 1 goto :fail
 python3 tools\check_ccp.py
 if errorlevel 1 goto :fail
 
+echo   Splitting system image...
+python3 tools\split_sys.py
+if errorlevel 1 goto :fail
+
 echo   Assembling loader...
 %SJASMPLUS% --raw=build\loader.bin src\boot\loader.asm
 if errorlevel 1 goto :fail
@@ -86,7 +90,6 @@ if errorlevel 1 goto :fail
 
 :: Stage 2: Build DSK
 echo   Building DSK...
-copy /y build\bios.bin build\CPM3.SYS >nul
 
 set REF_BINS=
 for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" set REF_BINS=!REF_BINS! %%F
@@ -100,14 +103,16 @@ shift
 goto collect_extra_files
 :extra_files_done
 
-python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\b16test.com build\RAMDISK.FID src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\b16test.com build\RAMDISK.FID src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 python3 tools\mkdsk.py create build\cpm3_720.dsk --format 720k --add src\test\hello16.txt
 if errorlevel 1 goto :fail
 
 for %%A in (build\loader.bin) do echo   Loader: %%~zA bytes
-for %%A in (build\bios.bin) do echo   CPM3.SYS: %%~zA bytes
+for %%A in (build\bios.bin) do echo   BIOS blob: %%~zA bytes
+for %%A in (build\CPM3.SYS) do echo   CPM3.SYS:  %%~zA bytes
+for %%A in (build\CPM3C.SYS) do echo   CPM3C.SYS: %%~zA bytes
 for %%A in (build\CCP.COM) do echo   CCP.COM: %%~zA bytes
 
 echo === Done ===

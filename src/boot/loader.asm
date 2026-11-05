@@ -111,6 +111,15 @@ BIOS_ADDR   equ 0xC000        ; Where to load the system file
     ld (LF_FLAGS), a
 .no_ccp:
 
+    ; --- CPM3C.SYS → bank 6 at 9C00 ---
+    ; The common stub is a separate file so CPM3.SYS (loaded at C000) can
+    ; use the whole bank-3 window instead of carrying the stub inside it.
+    ld hl, NAME_SYS2
+    ld de, SYS2_STAGE
+    ld b, SYS2_BLOCKS
+    call load_file
+    jp nz, load_error
+
     ; --- RAMDISK.FID first block → bank 6 at 9000 ---
     ld hl, NAME_FID
     ld de, 0x9000
@@ -250,6 +259,7 @@ load_file:
 
 
 NAME_SYS:   db "CPM3    SYS"
+NAME_SYS2:  db "CPM3C   SYS"
 NAME_CCP:   db "CCP     COM"
 NAME_FID:   db "RAMDISK FID"
 NAME_51:    db "FONT51  BIN"
@@ -274,6 +284,11 @@ font_table:
 ; Hand-off block for the OS: bank 6, outside the image.
 LF_FLAGS    equ 0xA860         ; bit 0=font51, 1=font32, 2=fid, 3=ccp, 4=font64
 LF_CCP_LEN  equ 0xA861         ; word: bytes staged at B000 (0 = no CCP)
+; Bank-6 staging for the common stub (CPM3C.SYS).  Must match SYS2_STAGE in
+; bios.zpa: the first runtime buffer starts at 9C00, and 3 blocks end at
+; A7FF, before the loader's own flags at A860 and the row table at A890.
+SYS2_STAGE  equ 0x9C00
+SYS2_BLOCKS equ 3
 
 ; Helper: read one 512-byte sector to (load_dest), advance load_dest
 ;   In: A = absolute sector number in data area

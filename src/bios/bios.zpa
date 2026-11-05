@@ -56,6 +56,11 @@ LF_CCP_LEN  equ 0xA861            ; loader: staged CCP length word (bank 6)
 CCP_MAX_BLK equ 4                 ; 1K blocks staged (the whole B000-BFFF window)
 JMP_OPCODE  equ 0xC3              ; JP instruction
 COMMON_BASE equ 0xF600            ; Start of bank-3 common memory
+; The loader stages CPM3C.SYS (the common stub) here, at the bottom of the
+; bank-6 window that the FDC/screen buffers use at run time.  It is free
+; during boot: FONT64 ends at 9BFF and the first runtime buffer is 9C00.
+SYS2_STAGE  equ 0x9C00            ; Staged common stub (bank 6)
+SYS2_BLOCKS equ 3                 ; 2.5K max: 9C00-A7FF
 TPA_TOP     equ COMMON_BASE       ; First byte of common memory = top of TPA
 RAMDISK_MSG equ 0x93E0            ; Status string embedded in RAMDISK.FID
 
@@ -76,9 +81,7 @@ init:
 
     ; ---- Copy system code to bank 4 at 0000h ----
     ; We're in mode 2 (loader left us here): bank 4 @ 0000, bank 3 @ C000.
-    ; Do this before installing common.  With COMMON_BASE below the physical
-    ; tail of system_image, copying common first would overwrite bytes that
-    ; this LDIR still needs to read.
+    ; This overwrites the loader, so it must be the last thing that needs it.
 _copy_sys_size equ system_image_end - system_image
     assert system_image >= (0x0000 + _copy_sys_size), "LDIR safe: no overlap (src >= dst+count)"
     ld hl, system_image
@@ -87,24 +90,16 @@ _copy_sys_size equ system_image_end - system_image
     ldir
 
     ; ---- Install common memory stub at COMMON_BASE (bank 3) ----
-    ; common_image sits in the file just past system_image; it must be
-    ; copied to COMMON_BASE.  Source and destination usually overlap, so the
-    ; copy direction matters: LDDR is safe when src starts BELOW dst,
-    ; LDIR is safe when src starts AT/ABOVE dst.  We pick at assembly
-    ; time based on where common_image actually landed.
+    ; The loader staged CPM3C.SYS in bank 6 at SYS2_STAGE.  Bank 6 is
+    ; mapped here (mode 2), bank 6 and bank 3 never overlap, so a plain
+    ; LDIR is safe and the old source/destination direction dance is gone.
 _copy_common_size equ common_image_end - common_image
     assert _copy_common_size <= 0x10000 - COMMON_BASE, "common stub overflows bank 3"
-    IF common_image < COMMON_BASE
-    ld hl, common_image + _copy_common_size - 1
-    ld de, COMMON_BASE + _copy_common_size - 1
-    ld bc, _copy_common_size
-    lddr
-    ELSE
-    ld hl, common_image
+    assert _copy_common_size <= SYS2_BLOCKS * 1024, "common stub overflows its boot staging area"
+    ld hl, SYS2_STAGE
     ld de, COMMON_BASE
     ld bc, _copy_common_size
     ldir
-    ENDIF
 
     ; ---- Jump to cold_boot (now live in bank 4) ----
     jp cold_boot
@@ -2301,11 +2296,12 @@ system_end:
 system_image_end:
 
 ; ######################################################################
-; COMMON MEMORY STUB — Lives at F600-FFFF (bank 3, always visible)
+; COMMON MEMORY STUB - Lives at F600-FFFF (bank 3, always visible)
 ; ######################################################################
 ;
 ; Assembled with PHASE COMMON_BASE so labels resolve to common memory addresses.
-; The init code copies these bytes from the binary to COMMON_BASE.
+; The loader stages these bytes as CPM3C.SYS in bank 6; init copies them to
+; COMMON_BASE.
 
 common_image:
     PHASE COMMON_BASE
@@ -2317,7 +2313,11 @@ common_image_end:
 
 
 ; ######################################################################
-; End of CPM3.SYS image
+; End of the assembled image
 ; ######################################################################
 
-    assert $ <= 0x10000, "CPM3.SYS image overflows bank 3!"
+; The raw output is split into CPM3.SYS (everything up to common_image) and
+; CPM3C.SYS (the common stub) by tools/split_sys.py.  CPM3.SYS is loaded at
+; C000, so the head still has to fit the bank-3 window; the common stub has
+; its own F600-FFFF window and staging space.
+    assert common_image <= 0x10000, "CPM3.SYS head overflows bank 3!"

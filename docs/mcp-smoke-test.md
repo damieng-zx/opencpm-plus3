@@ -49,7 +49,8 @@ The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, the `SCREEN` utility
 (query, `USER 3`/`USER 10`, range and junk rejection, restore to 0),
 `DATE`, invalid `D:`, and the C: prompt. They also verify that `CCP.COM` is
 on the disk and staged byte-for-byte at `CCP_STAGE` (bank 6, B000h), and that
-`CPM3.SYS` no longer embeds the CCP image. `SCREEN 64` is checked against the
+`CPM3.SYS` no longer embeds the CCP image. The common stub is staged as
+`CPM3C.SYS` at `SYS2_STAGE` (bank 6, 9C00h) and copied to F600h by `init`. `SCREEN 64` is checked against the
 font binary pixel-for-pixel (two 4-pixel glyphs per attribute cell) and `DIR`
 must switch to four entries per line. The runner also runs `SUBMIT SMOKE.SUB`, the
 implicit `SMOKE` -> `SUBMIT SMOKE.SUB` chain, the missing-file path,
@@ -78,8 +79,9 @@ python3 tools/zx84_negative.py
 ```
 
 Cases: missing/deleted `CPM3.SYS`, truncated allocation map, block number
-past the end of the disk, corrupted boot-sector checksum, deleted `CCP.COM`
-(boots, prints `CCP.COM missing`, no prompt), and no disk in drive A:.
+past the end of the disk, deleted `CPM3C.SYS` (common stub), corrupted
+boot-sector checksum, deleted `CCP.COM` (boots, prints `CCP.COM missing`,
+no prompt), and no disk in drive A:.
 
 Optional-file cases (the boot must still reach `A>`): deleted `FONT64.BIN`
 (and `SCREEN 64` is refused, width stays 51), deleted `FONT51.BIN`, deleted

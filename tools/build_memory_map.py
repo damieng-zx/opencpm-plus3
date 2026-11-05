@@ -71,11 +71,13 @@ def _match_directive(rest: str) -> tuple[str, int | None] | None:
 def parse_listing(path: Path) -> list[Section]:
     """Return [file, system, common] sections from a bios.lst.
 
-    - file:   physical CPM3.SYS layout (addresses at `org 0xC000` and later)
+    - file:   physical raw blob layout (split into CPM3.SYS + CPM3C.SYS)
     - system: PHASE 0x0000 block (bank 4 runtime labels)
     - common: PHASE 0xF600 block (common memory stub runtime labels)
     """
-    file_section = Section("CPM3.SYS file layout", base=0xC000, limit=0x10000, labels=[])
+    # The raw blob now runs past 0xFFFF because the common stub is split
+    # into CPM3C.SYS after assembly (tools/split_sys.py).  Keep the labels.
+    file_section = Section("CPM3.SYS file layout", base=0xC000, limit=0x20000, labels=[])
     system_section = Section("System bank 4", base=0x0000, limit=0x4000, labels=[])
     common_section = Section("Common memory", base=0xF600, limit=0x10000, labels=[])
 
@@ -129,8 +131,11 @@ def parse_listing(path: Path) -> list[Section]:
 def _format_section(section: Section) -> list[str]:
     lines: list[str] = []
     lines.append(f"Section: {section.name}")
-    lines.append(f"  Range: 0x{section.base:04X} - 0x{section.limit - 1:04X}"
-                 f"  ({section.limit - section.base} bytes available)")
+    if section.name == "CPM3.SYS file layout":
+        lines.append("  Range: 0xC000 - 0xFFFF (head window; common stub is split out)")
+    else:
+        lines.append(f"  Range: 0x{section.base:04X} - 0x{section.limit - 1:04X}"
+                     f"  ({section.limit - section.base} bytes available)")
     if not section.labels:
         lines.append("  (no labels)")
         lines.append("")
@@ -148,10 +153,14 @@ def _format_section(section: Section) -> list[str]:
             size = 0  # final label — size unknown from listing alone
         lines.append(f"    {lbl.addr:04X}   {size:5d}  {lbl.name}")
     used = top - section.base
-    limit_bytes = section.limit - section.base
-    slack = section.limit - top
-    pct = 100.0 * used / limit_bytes if limit_bytes else 0.0
-    lines.append(f"  top: 0x{top:04X}   used≈{used} bytes ({pct:.1f}%)   slack to limit: {slack} bytes")
+    if section.name == "CPM3.SYS file layout":
+        lines.append(f"  top: 0x{top:04X}   raw blob ≈{used} bytes"
+                     "   (split by tools/split_sys.py)")
+    else:
+        limit_bytes = section.limit - section.base
+        slack = section.limit - top
+        pct = 100.0 * used / limit_bytes if limit_bytes else 0.0
+        lines.append(f"  top: 0x{top:04X}   used≈{used} bytes ({pct:.1f}%)   slack to limit: {slack} bytes")
     lines.append("")
     return lines
 

@@ -180,10 +180,11 @@ build.cmd --add FILE ...
 
 Output: `build/cpm3.dsk` — a standard +3 disk image ready for emulation.
 
-The system files on the disk are `CPM3.SYS` (BIOS + BDOS), `CCP.COM` (the
-command processor), `FONT32.BIN`/`FONT51.BIN`/`FONT64.BIN` (screen fonts) and,
-optionally, `RAMDISK.FID` (C: RAM disk). A disk without `CCP.COM` boots to a
-diagnostic instead of a prompt.
+The system files on the disk are `CPM3.SYS` (BIOS + BDOS head),
+`CPM3C.SYS` (common stub), `CCP.COM` (the command processor),
+`FONT32.BIN`/`FONT51.BIN`/`FONT64.BIN` (screen fonts) and, optionally,
+`RAMDISK.FID` (C: RAM disk). A disk without `CCP.COM` boots to a
+diagnostic instead of a prompt; a disk without `CPM3C.SYS` does not boot.
 
 The third-party binaries under `references/binaries/` are untracked and
 optional. When present they are added automatically; a fresh clone (and CI)

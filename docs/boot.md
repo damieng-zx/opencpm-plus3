@@ -51,21 +51,27 @@ DI not yet asserted.
 ### Stage 2 — loader (`src/boot/loader.asm`)
 
 - `org 0x0000`. Still in mode 2. Stack moved to `0x0800` (free bank-4 RAM)
-  so neither the 16K system image (`C000-FFFF`) nor the bank-6 font/CCP
-  staging (`8000-BFFF`) can trample it.
+  so neither the 16K system image (`C000-FFFF`) nor the bank-6 staging
+  (`8000-BFFF`) can trample it.
 - Scans the directory (track 1, sectors 1-4) for each file in turn:
   `FONT51.BIN` to `8000`, `FONT32.BIN` to `8800`, `FONT64.BIN` to `9400`,
   `CCP.COM` to `B000` (max 4K) and `RAMDISK.FID`'s first block to `9000`.
   Missing optional files are skipped.  It also copies the built-in 48-byte
   screen row-address table to `A890`; that pure data would otherwise cost
-  `CPM3.SYS` image space.
+  image space.
+- Stages the common stub, `CPM3C.SYS`, in bank 6 at `9C00` (max 3K).  That
+  window is free at boot: `FONT64` ends at `9BFF` and the first runtime
+  buffer (`9C00`) only comes into use after `init` has copied the stub out.
+  This file is **required**: a missing `CPM3C.SYS` stops the boot.
 - Records what it staged in `LF_FLAGS`/`LF_CCP_LEN` in bank 6 (`A860h`),
   which survive the system-image copy into bank 4.
 - Finally finds `CPM3    SYS`, walks its allocation map (16 block pointers,
-  1K each = 2 physical sectors) to `BIOS_ADDR`, and jumps there.
+  1K each = 2 physical sectors) to `BIOS_ADDR`, and jumps there.  Because
+  the common stub is no longer inside `CPM3.SYS`, the head can use the whole
+  `C000-FFFF` window (see *Image headroom* below).
 
-The system image lands in **bank 3** at `C000-FFFF` because that's what mode 2
-maps there.
+The head lands in **bank 3** at `C000-FFFF` because that's what mode 2 maps
+there; the common stub waits in bank 6.
 
 ### Stage 3 — CPM3.SYS init (`src/bios/bios.zpa`)
 
@@ -74,79 +80,58 @@ real code into the right banks before jumping into bank 4.
 
 ```
    C000 --init--+
-                +--> LDIR     system_image   --> 0000 (bank 4 @ 0000-3FFF, mode 2)
-                +--> LDIR/LDDR common_image  --> F600 (bank 3)
-                +--> jp cold_boot              (bank 4)
+                +--> LDIR  system_image        --> 0000 (bank 4 @ 0000-3FFF, mode 2)
+                +--> LDIR  SYS2_STAGE (9C00)   --> F600 (bank 3)
+                +--> jp cold_boot                 (bank 4)
 ```
 
-The system-image copy must happen before installing common. `CPM3.SYS` is
-loaded in bank 3 at `C000-FFFF`; with `COMMON_BASE=F600`, the common-memory
-destination overlaps the physical source bytes for the tail of `system_image`.
-Copying common first corrupts the bytes that are later relocated into bank 4,
-usually showing up as no `A>` prompt or BDOS walking through SCB-looking data.
+`SYS2_STAGE` is the bank-6 copy of `CPM3C.SYS`.  Bank 6 and bank 3 never
+overlap, so both copies are plain `LDIR`s with no direction or ordering
+constraints.  The system copy must still come first: it overwrites the
+loader in bank 4, so nothing may need the loader afterwards.
 
-Direction of the common-memory copy is still decided at assembly time (`IF
-common_image < COMMON_BASE` -> LDDR else LDIR) so the common copy itself does
-not clobber overlapping source/destination ranges. The system-image copy uses
-LDIR with an assert that `system_image >= 0x0000 + size` — i.e. source is above
-destination.
-
-After init, **bank 3 still holds the rest of the loaded CPM3.SYS image from
-C000 up to the image end, but nothing references it again** — it's just
-whatever the loader deposited there. Common memory at F600+ is the live copy.
+After init, **bank 3 still holds the loaded `CPM3.SYS` head from `C000` up
+to the image end, but nothing references it again** — it's just whatever
+the loader deposited there. Common memory at F600+ is the live copy.
 
 ### Image headroom and the growth plan
 
-`CPM3.SYS` is loaded linearly at `C000`, and `init` relocates the two
-`PHASE` regions from there, so *the whole file* must fit the 16K
-`C000-FFFF` window. `tools/check_layout.py` enforces this and prints the
-budget on every build. Current figures:
+`CPM3.SYS` (init + the bank-4 image) is loaded linearly at `C000`, so it
+must fit the 16K `C000-FFFF` window. The common stub is a **separate boot
+file**, `CPM3C.SYS`, staged in bank 6 and copied to `F600` by `init`; it has
+its own 2,560-byte window. `tools/check_layout.py` enforces both and
+`tools/split_sys.py` cuts the two files out of the raw assembly output.
 
-| Region                     | Used   | Window              | Slack |
-|----------------------------|--------|---------------------|-------|
-| `CPM3.SYS` file            | 16,058 | 16,384 (`C000-FFFF`)| 326   |
-| init + `system_image`      | 14,251 | 16,384 (`0000-3FFF`)| 2,159 |
-| `common_image`             | 1,807  | 2,560 (`F600-FFFF`) | 753   |
-| loader                     | 1,196  | 8,704 (17 sectors)  | 7,508 |
+| Region                  | Used   | Window               | Slack |
+|-------------------------|--------|----------------------|-------|
+| `CPM3.SYS` head         | 14,251 | 16,384 (`C000-FFFF`) | 2,133 |
+| `CPM3C.SYS` common stub | 1,807  | 2,560 (`F600-FFFF`)  | 753   |
+| loader                  | 1,221  | 8,704 (17 sectors)   | 7,483 |
 
-The file budget binds: the 2,159-byte bank-4 slack and 753-byte common
-slack cannot be used while the file is stored linearly at `C000`. New code
-must either fit in the 326 bytes or move out of the image.
+Total code capacity is `16,384 + 2,560 = 18,944` bytes, up from 16,058
+before the split. The old 326-byte ceiling is gone.
 
-Strategies, in the order they should be applied:
+Remaining strategies, in order:
 
 1. **Loader staging for pure data.** Anything that is only `db`/`dw` (fonts,
    the screen row table at `A890`, message strings, `xdpb_std_table`) can be
    built into the loader and copied to its fixed bank-6 address at boot.
    Bank 6 is mapped for the whole system lifetime, so no call site changes.
-   Cost: loader space only (7.5K spare).
-2. **Lift the 16K file cap (next step, ~80 bytes of loader).** Two limits
-   combine: the directory entry maps 16 blocks (16K), and the file is
-   unwrapped at `C000`. Teach the loader to (a) walk every extent of
-   `CPM3.SYS` (follow the same name/extent in the next directory entry) and
-   (b) send the common-stub tail to bank 6 at `9800` instead of `C000`;
-   `init` then copies it from `9800` to `F600` (mode 3 maps bank 6). Pad the
-   bank-4 image to a 1K boundary so the hand-over is block-aligned (85
-   bytes of padding today, taken from the gain). Capacity becomes
-   `16,384 + 2,560 = 18,944` bytes, i.e. +2.9K over today, with the loader
-   well inside its 8.7K budget. Use `9800-A5FF` as the boot staging window
-   (3,584 bytes; the runtime tables there are initialized later).
-   Update `check_layout.py`, the bank-6 sentinel gaps in
-   `tools/zx84_smoke.py`, `tools/zx84_negative.py` and this document.
-3. **Compression, if 18.9K ever runs out.** A simple LZ (literal runs plus
-   12-bit offsets) compresses the current image to about 78%, a ZX0-style
+   Cost: loader space only (7.4K spare).
+2. **Compression, if 18.9K ever runs out.** A simple LZ (literal runs plus
+   12-bit offsets) compresses the current blob to about 78%, a ZX0-style
    format to about 60%; that buys roughly +4.8K / +10K of code. It needs a
    compressor in `tools/` and a decoder in the loader (which has room), and
-   turns `CPM3.SYS` into a packed container; the decompressor writes to
-   `C000` and the `9800` staging area directly, so it composes with step 2.
-4. **Do not spend image space on screen RAM.** Bank 5 is only mapped while
+   turns the two boot files into packed containers. The decoder can write
+   straight to `C000` and `9C00`, so it composes with the current split.
+3. **Do not spend image space on screen RAM.** Bank 5 is only mapped while
    the screen is paged in and has `5B00-7FFF` (9,472 bytes) free after the
    bitmap/attributes. The 24×80 virtual buffer (1,920 bytes) belongs there,
    not in bank 6 or the TPA, so 80-column mode costs code space only.
 
 Near-term consequence: the status line (23-row viewport, status row,
-markers) should be implemented after step 2, not squeezed into the last 326
-bytes; the 24×80 work needs step 2 as well.
+markers) now fits comfortably in the head slack; the 24×80 work has room
+for its code and keeps its buffer in bank 5.
 
 ### Stage 4 — `cold_boot` (`src/bios/bios.zpa`, runs in bank 4)
 
@@ -229,6 +214,9 @@ and trampolines. `scb_tpa` is patched to `TPA_TOP` too.
 `A900-A99F`, `KM_SET_EXPAND` slots at `A9A0-AD7F`, FCB shadow at `AD80-ADA3`, loader hand-off at `A860-A862`; staged `CCP.COM` at
 `B000-BFFF`. |
 | `F600-FFFF` | Common stub (bank 3). Same content as in mode 0 — that's the point. |
+
+During boot only, bank 6 `9C00-A7FF` also holds the staged `CPM3C.SYS`
+(common stub); `init` copies it to `F600` before those buffers are used.
 
 ---
 
@@ -375,6 +363,8 @@ wrote in `start_tpa`.
 | Inter-bank `MOVE` returns wrong data           | xmove banks set with `xmove_active=0`, or copying with stale `_ibm_*_bank` | `bios_xmove`, `interbank_move` |
 | Mallard BASIC hangs probing XBIOS              | Unknown XBIOS ID returns 0xFF; TE IDs are handled                           | `xbios_handler` in `bios.zpa` |
 | `SCR_RUN_ROUTINE` does nothing or crashes      | Routine is outside common memory; screen mode pages the TPA out             | put the routine in `C000-F5FF` |
+| Red border after green flicker (boot dies)     | `CPM3C.SYS` missing, or `SYS2_STAGE` != loader's `0x9C00`                    | `loader.asm` `SYS2_STAGE`, `bios.zpa` `SYS2_STAGE`, disk directory |
+| Boots but the prompt never appears             | Common stub staged too high (overwrote `LF_FLAGS`/row table) or not copied   | staging `9C00-A7FF`, `init` copy source |
 
 ---
 

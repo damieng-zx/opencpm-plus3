@@ -925,8 +925,8 @@ class Smoke:
         # DIR formats from the SCB width: 64 columns means four entries a line.
         self.command("DIR", 900)
         listing = self.text()
-        line = next((l for l in listing.splitlines() if "CPM3" in l), "")
-        if "FONT32" not in line:
+        line = next((l for l in listing.splitlines() if "FONT32" in l), "")
+        if line.count(" : ") < 3:
             raise SmokeError(
                 f"DIR did not use four columns at 64 -- line: {line!r}\n{listing}")
         self.log(f"DIR at 64: {line.strip()}")

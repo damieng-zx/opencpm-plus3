@@ -7,7 +7,8 @@ Runs after `build_memory_map.py` has parsed `build/bios.lst`. Checks that:
   - The common memory stub fits within F600..FFFF.
   - Critical sized buffers have the expected byte count.
   - Critical buffers sit inside the common memory range.
-  - The CPM3.SYS file (C000..common_image_end) stays below 0x10000.
+  - The CPM3.SYS head (init + bank-4 image) fits the C000..FFFF window.
+  - The CPM3C.SYS common stub fits its F600..FFFF window and boot staging.
 
 These invariants are already asserted by sjasmplus at assembly time for the
 sizes that are statically known. This checker gives us a single place to look
@@ -55,10 +56,6 @@ def _find_label_after(section: Section, lbl: Label) -> Label | None:
     return None
 
 
-def _ranges_overlap(a0: int, a1: int, b0: int, b1: int) -> bool:
-    return a0 < b1 and b0 < a1
-
-
 def _first_active_source_line(path: Path, needle: str) -> int | None:
     for idx, raw in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
         source = raw[SOURCE_COL:] if len(raw) > SOURCE_COL else ""
@@ -100,10 +97,20 @@ def check(sections: list[Section]) -> list[str]:
     if bdos_stack_top and bdos_stack_top > 0x10000:
         errors.append(f"bdos_stack top 0x{bdos_stack_top:04X} exceeds 0xFFFF")
 
+    common_image = labels.get("common_image")
     common_image_end = labels.get("common_image_end")
-    if common_image_end and common_image_end.addr > 0x10000:
-        errors.append(
-            f"common_image_end 0x{common_image_end.addr:04X} — CPM3.SYS overflows bank 3 window")
+    if common_image and common_image_end:
+        head = common_image.addr - file_section.base
+        common = common_image_end.addr - common_image.addr
+        if head > 0x10000 - file_section.base:
+            errors.append(
+                f"CPM3.SYS head is {head} bytes - overflows the C000-FFFF window")
+        if common > 0x10000 - common_section.base:
+            errors.append(
+                f"CPM3C.SYS is {common} bytes - overflows the F600-FFFF window")
+        if common > 0xC00:
+            errors.append(
+                f"CPM3C.SYS is {common} bytes - overflows its 3-block boot staging area")
 
     # --- Buffer sizes (expected fixed layout) --------------------------------
     expected_sizes = [
@@ -144,28 +151,17 @@ def check(sections: list[Section]) -> list[str]:
 def check_listing_invariants(sections: list[Section], listing: Path) -> list[str]:
     errors: list[str] = []
     labels = _labels_by_name(sections)
-    _file_section, _system_section, common_section = sections
 
     required = ("system_image", "system_image_end", "common_image", "common_image_end")
     if not all(name in labels for name in required):
         return errors
 
-    sys_src0 = labels["system_image"].addr
-    sys_src1 = labels["system_image_end"].addr
-    common_size = labels["common_image_end"].addr - labels["common_image"].addr
-    common_dst0 = common_section.base
-    common_dst1 = common_dst0 + common_size
-
-    if _ranges_overlap(sys_src0, sys_src1, common_dst0, common_dst1):
-        system_copy = _first_active_source_line(listing, "ld hl, system_image")
-        common_copy = _first_active_source_line(listing, "ld hl, common_image")
-        if system_copy is None or common_copy is None:
-            errors.append(
-                "init copy-order check could not find active system/common copy instructions")
-        elif common_copy < system_copy:
-            errors.append(
-                "init copies common before system while COMMON_BASE overlaps the physical "
-                "system_image source; this corrupts bank-4 code before it is relocated")
+    # init must copy the common stub from the bank-6 staging area; reading it
+    # back out of the CPM3.SYS blob would mean the old single-file layout.
+    if _first_active_source_line(listing, "ld hl, SYS2_STAGE") is None:
+        errors.append(
+            "init does not copy the common stub from SYS2_STAGE "
+            "(CPM3C.SYS staging)")
 
     return errors
 
@@ -184,9 +180,12 @@ def summary(sections: list[Section]) -> list[str]:
     if "bdos_stack_base" in labels:
         used = labels["bdos_stack_base"].addr + 128 - common_section.base
         rows.append(f"  common used: {_pct(used, 0x10000 - common_section.base)}")
-    if "common_image_end" in labels:
-        size = labels["common_image_end"].addr - file_section.base
-        rows.append(f"  CPM3.SYS image: {size} bytes (C000..{labels['common_image_end'].addr:04X})")
+    if "common_image" in labels and "common_image_end" in labels:
+        head = labels["common_image"].addr - file_section.base
+        common = labels["common_image_end"].addr - labels["common_image"].addr
+        rows.append(f"  CPM3.SYS head: {head} bytes (C000..{file_section.base + head - 1:04X}),"
+                    f" slack {0x10000 - file_section.base - head} bytes")
+        rows.append(f"  CPM3C.SYS: {common} bytes, slack {0x10000 - common_section.base - common} bytes")
     return rows
 
 
