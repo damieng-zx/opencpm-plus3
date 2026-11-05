@@ -116,13 +116,17 @@ class MkDsk720k(unittest.TestCase):
 
 
 class TestTool(unittest.TestCase):
-    def test_b16test_covers_the_16bit_operations(self):
-        text = source("src/tools/b16test.asm")
+    def test_disktest_t30_covers_the_16bit_operations(self):
+        text = source("src/test/disktest.asm")
+        body = text[text.index("test30:"):text.index("; --- shared helpers")]
         for fn in ("ld c, 22", "ld c, 21", "ld c, 35", "ld c, 46",
                    "ld c, 33", "ld c, 99"):
-            self.assertIn(fn, text)
-        self.assertIn("B16 PASS", text)
+            self.assertIn(fn, body)
         self.assertIn('db "B16A    TMP"', text)
+        self.assertIn('db "T30 B16 16-bit blocks$"', text)
+        # It must not run on a plain 8-bit-block B:.
+        self.assertIn("cp 4", body)          # BSH = 4 (2K blocks)
+        self.assertIn("msg_skip", body)
 
 
 if __name__ == "__main__":

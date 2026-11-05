@@ -134,13 +134,13 @@ Also supported:
 - `M80TEST` — 24x80 mode: TE_ASK width, auto-flip and leaving.
 - `M80BIT` — 24x80 fast page flip, checked against a reference
   render of the logical buffer.
-- `DISKTEST` — file, directory, extent and SCB tests (T1-T22).
+- `DISKTEST` — file, directory, extent and SCB tests (T1-T30,
+  including 16-bit block numbers on a 720K B: image).
 - `REGTEST` — BDOS register preservation (BC/DE/IX/IY across calls).
 - `SYSTEST` — stack/MOVE/clock, page-zero, TAB and delimiter checks.
 - `TERMTEST` — terminal escape-sequence walkthrough.
 - `XTETEST` — XBIOS self-test (`TE_ASK`, `TE_RESET`, ink, border, speed,
   `SCR_RUN_ROUTINE`, and the disc calls).
-- `B16TEST` — 16-bit block-number file I/O on B: (720K PCW image).
 
 ## Wishlist / TODO
 

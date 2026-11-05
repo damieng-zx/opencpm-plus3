@@ -34,6 +34,9 @@ python3 tools/build_memory_map.py
 python3 tools/check_layout.py
 python3 tools/check_ccp.py
 
+echo "  Splitting system image..."
+python3 tools/split_sys.py
+
 echo "  Assembling loader..."
 "$SJASMPLUS" --raw=build/loader.bin src/boot/loader.asm
 
@@ -44,9 +47,13 @@ python3 tools/patchsum.py build/bootsect.bin
 echo "  Assembling test programs..."
 "$SJASMPLUS" --raw=build/bdostest.com src/test/bdostest.asm
 "$SJASMPLUS" --raw=build/xtetest.com src/test/xtetest.asm
+"$SJASMPLUS" --raw=build/stltest.com src/test/stltest.asm
 "$SJASMPLUS" --raw=build/disktest.com src/test/disktest.asm
 "$SJASMPLUS" --raw=build/termtest.com src/test/termtest.asm
 "$SJASMPLUS" --raw=build/systest.com src/test/systest.asm
+"$SJASMPLUS" --raw=build/m80test.com src/test/m80test.asm
+"$SJASMPLUS" --raw=build/m80bit.com src/test/m80bit.asm
+"$SJASMPLUS" --raw=build/regtest.com src/test/regtest.asm
 
 echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/date.com build/zpa/date.asm
@@ -55,7 +62,7 @@ echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/setdef.com src/tools/setdef.asm
 "$SJASMPLUS" --raw=build/submit.com src/tools/submit.asm
 "$SJASMPLUS" --raw=build/screen.com src/tools/screen.asm
-"$SJASMPLUS" --raw=build/b16test.com src/tools/b16test.asm
+"$SJASMPLUS" --raw=build/set24x80.com src/tools/set24x80.asm
 
 echo "  Assembling FID modules..."
 "$SJASMPLUS" --raw=build/RAMDISK.FID src/fid/ramdisk.asm
@@ -67,13 +74,6 @@ if [ "$1" = "--add" ]; then
     shift
     EXTRAFILES="$*"
 fi
-
-# Always add CPM3.SYS (the BIOS binary) as a CP/M file
-python3 -c "
-import shutil, sys
-shutil.copy('build/bios.bin', 'build/CPM3.SYS')
-print(f'  CPM3.SYS: {__import__(\"os\").path.getsize(\"build/CPM3.SYS\")} bytes')
-"
 
 # The reference binaries are third-party files and are not tracked, so a
 # fresh clone (including CI) builds without them.
@@ -90,12 +90,13 @@ done
 python3 tools/mkdsk.py create build/cpm3.dsk \
     --boot build/bootsect.bin \
     --system build/loader.bin \
-    --add build/CPM3.SYS build/CCP.COM \
+    --add build/CPM3.SYS build/CPM3C.SYS build/CCP.COM \
     src/bios/font51.bin src/bios/font32.bin src/bios/font64.bin \
-    build/bdostest.com build/xtetest.com \
-    build/disktest.com build/termtest.com build/systest.com \
+    build/bdostest.com build/xtetest.com build/stltest.com \
+    build/m80test.com build/m80bit.com \
+    build/disktest.com build/termtest.com build/systest.com build/regtest.com \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
-    build/submit.com build/screen.com build/b16test.com build/RAMDISK.FID \
+    build/submit.com build/screen.com build/set24x80.com build/RAMDISK.FID \
     src/test/smoke.txt src/test/page.txt src/test/smoke.sub \
     src/test/param.sub \
     "${REF_FILES[@]}" \
@@ -105,7 +106,9 @@ python3 tools/mkdsk.py create build/cpm3_720.dsk --format 720k \
     --add src/test/hello16.txt
 
 echo "  Loader: $(wc -c < build/loader.bin) bytes"
-echo "  CPM3.SYS: $(wc -c < build/bios.bin) bytes"
+echo "  BIOS blob: $(wc -c < build/bios.bin) bytes"
+echo "  CPM3.SYS: $(wc -c < build/CPM3.SYS) bytes"
+echo "  CPM3C.SYS: $(wc -c < build/CPM3C.SYS) bytes"
 echo "  CCP.COM: $(wc -c < build/CCP.COM) bytes"
 
 echo "=== Done ==="

@@ -755,6 +755,10 @@ class Smoke:
                               for line in self.history)]
         if missing:
             raise SmokeError(f"DISKTEST missing PASS for T{missing}")
+        # T30 is the 16-bit block test; without a 16-bit B: it must skip,
+        # not fail.  The late 720K run below exercises the real thing.
+        if not any("T30 " in line and "SKIP" in line for line in self.history):
+            raise SmokeError("DISKTEST T30 did not skip without a 16-bit B:")
         if any(" FAIL" in line for line in self.history):
             raise SmokeError("DISKTEST reported a failure:\n" + history)
         self.expect("DISKTEST prompt", "A>")
@@ -1100,16 +1104,16 @@ class Smoke:
         self.command("TYPE B:HELLO16.TXT", 1200)
         self.expect("720K TYPE", "720K block test", "Line three.")
 
-        # B16TEST creates/writes/sizes/truncates/deletes a file on B: and
-        # checks the free-space deltas, which only add up with 16-bit
-        # block numbers and 2K blocks.
-        self.command("B16TEST", 4500)
+        # T30 in DISKTEST creates/writes/sizes/truncates/deletes a file on
+        # B: and checks the free-space deltas, which only add up with
+        # 16-bit block numbers and 2K blocks.
+        self.command("DISKTEST 30", 3500)
         for _ in range(12):
-            if "B16 " in self.text():
+            if "T30 " in self.text():
                 break
             self.mcp.call("run", {"frames": 600})
             self.record()
-        self.expect("16-bit block test", "B16 PASS")
+        self.expect("16-bit block test", "T30 B16 16-bit blocks PASS")
 
     def run_ccp_external(self) -> None:
         """CCP.COM lives on the disk and is staged at CCP_STAGE on cold boot."""

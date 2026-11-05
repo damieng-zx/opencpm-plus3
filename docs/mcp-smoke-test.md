@@ -69,9 +69,11 @@ and `SETDEF [NOPAGE]` must print the whole file with no prompt and no key.
 16-bit block numbers are checked with the PCW DS/DD image built as
 `build/cpm3_720.dsk` (80 cylinders x 2 sides, 2K blocks, DSM=351).  The
 runner mounts it on B: after boot, lists and types `HELLO16.TXT`, then runs
-`B16TEST`, which creates a file, writes 20 records, checks F35, the F46
-free-space delta (two blocks = 32 records), reads records back, truncates
-with F99 (one block comes back) and deletes it, requiring `B16 PASS`.
+`DISKTEST 30` (T30 is the 16-bit block test, skipped when B: is not a
+2K-block/16-bit-block disk).  T30 creates a file, writes 20 records, checks
+F35, the F46 free-space delta (two blocks = 32 records), reads records back,
+truncates with F99 (one block comes back) and deletes it, requiring
+`T30 B16 16-bit blocks PASS`.
 
 `tools/zx84_negative.py` builds corrupted copies of the image and requires
 that they do **not** reach `A>`:

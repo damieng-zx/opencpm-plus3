@@ -52,11 +52,11 @@ start:
     add a, c                   ; + second digit
     ld b, a
 .single_digit:
-    ; B = test number (1-26)
+    ; B = test number (1-30)
     ld a, b
     or a
     jp z, .run_all
-    cp 30
+    cp 31
     jp nc, .run_all            ; Out of range → run all
     ; Jump to the specific test via table
     dec a                      ; 0-based index
@@ -77,7 +77,7 @@ start:
     dw .run_t14, .run_t15, .run_t16, .run_t17
     dw .run_t18, .run_t19, .run_t20, .run_t21, .run_t22
     dw .run_t23, .run_t24, .run_t25, .run_t26, .run_t27, .run_t28
-    dw .run_t29
+    dw .run_t29, .run_t30
 
     ; Single-test runners: run the test then exit
 .run_t1:  call test1
@@ -138,6 +138,8 @@ start:
     jp done
 .run_t29: call test29
     jp done
+.run_t30: call test30
+    jp done
 
 .run_all:
     call test1
@@ -169,6 +171,7 @@ start:
     call test27
     call test28
     call test29
+    call test30
     jp done
 
 test1:
@@ -2960,6 +2963,310 @@ test29:
     call BDOS
     ret
 
+test30:
+    ; === T30: 16-bit block numbers (2K-block B: image) ===
+    ld de, msg_t30
+    ld c, 9
+    call BDOS
+
+    ; Remember the default drive and select B:.  Only run when B: is a
+    ; 2K-block disk with 16-bit block numbers (DSM > 255); otherwise skip.
+    ld c, 25                   ; F25: current default drive
+    call BDOS
+    ld (t30_save_drive), a
+    ld e, 1                    ; F14: select B:
+    ld c, 14
+    call BDOS
+    inc a
+    jp z, .t30_skip            ; 0xFF: no B:
+    ld c, 31                   ; F31: DPB of the selected drive
+    call BDOS
+    ld a, h
+    or l
+    jp z, .t30_skip
+    ld de, 2
+    add hl, de
+    ld a, (hl)                 ; BSH
+    cp 4                       ; 2K blocks -> 16 records per block
+    jp nz, .t30_skip
+    ld de, 4
+    add hl, de
+    ld a, (hl)                 ; DSM high byte
+    or a                       ; > 255 blocks -> 16-bit block numbers
+    jp z, .t30_skip
+
+    ; --- 16-bit block test -----------------------------------------
+    ld de, DMA
+    ld c, 26                   ; DMA = 0x0080
+    call BDOS
+
+    ld hl, fn_b16
+    call set_fcb
+    ld a, 2
+    ld (FCB1), a               ; B:
+    ld de, FCB1
+    ld c, 19                   ; delete any stale copy
+    call BDOS
+
+    ld a, 1
+    ld (t30_step), a
+    call .t30_free
+    jp c, .t30_fail
+    ld (t30_before), hl
+
+    ld hl, fn_b16
+    call set_fcb
+    ld a, 2
+    ld (FCB1), a
+    ld de, FCB1
+    ld c, 22                   ; make
+    call BDOS
+    cp 0xFF
+    jp z, .t30_fail_make
+
+    ld hl, DMA
+    ld b, 128
+.t30_fill:
+    ld (hl), 0x5A
+    inc hl
+    djnz .t30_fill
+
+    ld a, 3
+    ld (t30_step), a
+    ld b, 20
+.t30_write:
+    push bc
+    ld de, FCB1
+    ld c, 21                   ; write sequential
+    call BDOS
+    pop bc
+    or a
+    jp nz, .t30_fail
+    djnz .t30_write
+
+    ld de, FCB1
+    ld c, 16                   ; close
+    call BDOS
+
+    ld de, FCB1
+    ld c, 15                   ; open
+    call BDOS
+    cp 0xFF
+    jp z, .t30_fail_open
+
+    ld de, FCB1
+    ld c, 35                   ; file size
+    call BDOS
+    ld a, (FCB1 + 33)
+    cp 20
+    jp nz, .t30_fail_size
+    ld a, (FCB1 + 34)
+    or a
+    jp nz, .t30_fail_size
+    ld a, (FCB1 + 35)
+    or a
+    jp nz, .t30_fail_size
+
+    ld a, 6
+    ld (t30_step), a
+    call .t30_free
+    jp c, .t30_fail
+    ld de, (t30_before)
+    ld a, h
+    cp d
+    jr nz, .t30_delta
+    ld a, l
+    cp e
+    jp nz, .t30_delta
+    jp .t30_fail               ; free space did not change
+.t30_delta:
+    ; expect before - 32 (two 2K blocks = 32 records)
+    ld a, e
+    sub 32
+    ld e, a
+    ld a, d
+    sbc a, 0
+    ld d, a
+    ld a, h
+    cp d
+    jp nz, .t30_fail
+    ld a, l
+    cp e
+    jp nz, .t30_fail
+
+    ld a, 7
+    ld (t30_step), a
+    xor a
+    call .t30_read
+    jp nz, .t30_fail
+    ld a, (DMA)
+    cp 0x5A
+    jp nz, .t30_fail
+    ld a, 19
+    call .t30_read
+    jp nz, .t30_fail
+    ld a, (DMA)
+    cp 0x5A
+    jp nz, .t30_fail
+
+    ld a, 8
+    ld (t30_step), a
+    ld a, 5
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 99                   ; truncate to 5 records
+    call BDOS
+    or a
+    jp nz, .t30_fail
+
+    ld a, 9
+    ld (t30_step), a
+    ld de, FCB1
+    ld c, 35
+    call BDOS
+    ld a, (FCB1 + 33)
+    cp 5
+    jp nz, .t30_fail
+    ld a, (FCB1 + 34)
+    or a
+    jp nz, .t30_fail
+    ld a, (FCB1 + 35)
+    or a
+    jp nz, .t30_fail
+
+    ld a, 10
+    ld (t30_step), a
+    call .t30_free
+    jp c, .t30_fail
+    ld de, (t30_before)
+    ld a, e
+    sub 16                     ; one 2K block still allocated
+    ld e, a
+    ld a, d
+    sbc a, 0
+    ld d, a
+    ld a, h
+    cp d
+    jp nz, .t30_fail
+    ld a, l
+    cp e
+    jp nz, .t30_fail
+
+    ld a, 11
+    ld (t30_step), a
+    ld a, 4
+    call .t30_read
+    jp nz, .t30_fail
+    ld a, (DMA)
+    cp 0x5A
+    jp nz, .t30_fail
+    ld a, 100                  ; past the new EOF
+    call .t30_read
+    cp 1
+    jp nz, .t30_fail
+
+    ; Delete and check the space is back.
+    ld hl, fn_b16
+    call set_fcb
+    ld a, 2
+    ld (FCB1), a
+    ld de, FCB1
+    ld c, 19
+    call BDOS
+
+    ld a, 12
+    ld (t30_step), a
+    call .t30_free
+    jp c, .t30_fail
+    ld de, (t30_before)
+    ld a, h
+    cp d
+    jp nz, .t30_fail
+    ld a, l
+    cp e
+    jp nz, .t30_fail
+
+    ld a, (t30_save_drive)
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld de, msg_pass
+    ld c, 9
+    call BDOS
+    ret
+
+.t30_skip:
+    ld a, (t30_save_drive)
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld de, msg_skip
+    ld c, 9
+    call BDOS
+    ret
+
+.t30_fail_make:
+    ld a, 2
+    ld (t30_step), a
+    jp .t30_fail
+.t30_fail_open:
+    ld a, 4
+    ld (t30_step), a
+    jp .t30_fail
+.t30_fail_size:
+    ld a, 5
+    ld (t30_step), a
+    jp .t30_fail
+
+.t30_fail:
+    ld hl, fn_b16
+    call delete_name           ; best effort on the selected drive (B:)
+    ld de, DMA
+    ld c, 26
+    call BDOS
+    ld de, msg_step
+    ld c, 9
+    call BDOS
+    ld a, (t30_step)
+    call print_hex_a
+    ld a, (t30_save_drive)
+    ld e, a
+    ld c, 14
+    call BDOS
+    ld de, msg_fail
+    ld c, 9
+    call BDOS
+    ret
+
+; .t30_free - B: free records (128-byte units) in HL; carry = error.
+.t30_free:
+    ld e, 1
+    ld c, 46
+    call BDOS
+    or a
+    jr nz, .t30_free_bad
+    ld hl, (DMA)
+    or a
+    ret
+.t30_free_bad:
+    scf
+    ret
+
+; .t30_read - read random record A of FCB1; Z = success.
+.t30_read:
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 33
+    call BDOS
+    or a
+    ret
+
 ; --- shared helpers for T18-T22 ---
 ; set_fcb: HL = 11-byte name; clear FCB1 and copy the name to FCB1+1.
 set_fcb:
@@ -3056,6 +3363,7 @@ fn_ram:   db "RAMTEST TMP"
 fn_test4: db "TEST4   TMP"
 fn_test5: db "TEST5   TMP"
 fn_test6: db "TEST6   TMP"
+fn_b16:   db "B16A    TMP"
 t10_before: dw 0
 t25_cb:   dw t25_text
           dw t25_end - t25_text
@@ -3073,6 +3381,9 @@ t28_ptr:  dw 0
 t29_before: dw 0
 t29_written: dw 0
 t29_step: db 0
+t30_before: dw 0
+t30_step: db 0
+t30_save_drive: db 0
 
 msg_hdr:  db "DISKTEST v7", 13, 10, "$"
 msg_pass: db " PASS", 13, 10, "$"
@@ -3110,5 +3421,6 @@ msg_t26:  db "T26 F59 load overlay$"
 msg_t27:  db "T27 F44 multi write$"
 msg_t28:  db "T28 F44 multi write C:$"
 msg_t29:  db "T29 F99 truncate$"
+msg_t30:  db "T30 B16 16-bit blocks$"
 msg_step: db " step=0x$"
 msg_skip: db " SKIP", 13, 10, "$"

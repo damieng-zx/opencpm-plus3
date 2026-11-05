@@ -41,7 +41,8 @@ smoke runner always exercises `SMOKE.TXT` (from `src/test/smoke.txt`),
 `HELLO16.TXT` on the 720K image (from `src/test/hello16.txt`),
 `SMOKE.SUB` (from `src/test/smoke.sub`), `PARAM.SUB` (from
 `src/test/param.sub`), the source-built `SUBMIT.COM`, `DATE.COM`,
-`B16TEST.COM`, and the built-in `ERA`/`REN` commands; only the external
+`DISKTEST` (including the 16-bit block test), and the built-in
+`ERA`/`REN` commands; only the external
 `RENAME.COM` (added to a scratch copy of the image) and `PIP` checks depend
 on the reference programs.  The build also produces `build/cpm3_720.dsk`
 with `mkdsk.py --format 720k` for the 16-bit block test.
