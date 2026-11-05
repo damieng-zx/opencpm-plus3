@@ -249,9 +249,13 @@ Programs should close any open files before exiting (BDOS F16).
 - **Out**: A=entry index (0-3) or 0xFF (no more matches)
 - **Note**: Continues from previous F17. Same FCB must remain at 005Ch.
 
-#### F19 — Delete File
+#### F19 - Delete File
 - **In**: DE=FCB address (supports wildcards)
 - **Out**: A=0 (deleted) or 0xFF (none found)
+- **Note**: A file with the R/O attribute (bit 7 of the filetype byte,
+  entry offset 9) is never deleted.  With F45's error mode bit set the call
+  returns 0xFF; otherwise it prints `Bdos Err: R/O` and warm boots, like
+  CP/M.
 
 #### F20 — Read Sequential
 - **In**: DE=FCB address
@@ -275,9 +279,11 @@ Programs should close any open files before exiting (BDOS F16).
 - **Note**: Creates new directory entry. FCB must have drive and filename.
   Should be followed by writes then close.
 
-#### F23 — Rename File
+#### F23 - Rename File
 - **In**: DE=FCB address
 - **Note**: Bytes 1-11 = old name, bytes 17-27 = new name. Supports '?' in old.
+  A read-only file (bit 7 of the filetype byte) is refused the same way as
+  F19: A=0xFF in error mode, otherwise `Bdos Err: R/O` and a warm boot.
 
 #### F30 — Set File Attributes
 - **In**: DE=FCB address

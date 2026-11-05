@@ -68,7 +68,12 @@ SETKEYS crashed because our CCP did not push the warm-boot return address
 first byte is `RET` and the module sits at 0200h, so the CCP now implements
 the CP/M 3 COM header move (`comsize` at 0101h) before jumping to 0100h.
 Attached RSX modules are not installed.  `SET` options need the brackets:
-`SET FILE [RO]`.
+`SET FILE [RO]`.  The R/O attribute is now enforced: F19 (delete) and F23
+(rename) refuse a directory entry whose filetype byte has bit 7 set,
+returning 0xFF in error mode or printing `Bdos Err: R/O` and warm booting,
+and the F21/F34/F40 write core refuses to write through an FCB opened from
+such an entry.  `DISKTEST` T13 checks delete and rename, then clears the
+attribute and deletes.
 
 Recently fixed: **SLR Z80ASM 1.32** used to fail with `Line Too Long`
 because it sets a multi-sector count (8) with F44 and assumes one F20 moved

@@ -166,7 +166,25 @@ def main() -> int:
         smoke.command("SET RO.TXT [RO]", 2500)
         # The status wraps over the 51-column screen, so match the prefix.
         smoke.expect("SET RO", "Read Only")
-        print("[dri] SET ok")
+
+        # The attribute is enforced: ERA and REN must refuse it and leave
+        # the file in place.  (F19/F23 check the directory entry's R/O bit.)
+        smoke.command("ERA RO.TXT", 1500)
+        smoke.expect("ERA refuses R/O", "Bdos Err: R/O")
+        smoke.command("DIR RO.TXT", 1200)
+        smoke.expect("R/O file still present", "RO       TXT")
+        smoke.command("REN NEW.TXT=RO.TXT", 1500)
+        smoke.expect("REN refuses R/O", "Bdos Err: R/O")
+        smoke.command("DIR RO.TXT", 1200)
+        smoke.expect("still RO.TXT after REN", "RO       TXT")
+
+        # Clearing R/O makes both operations work again.
+        smoke.command("SET RO.TXT [RW]", 2500)
+        smoke.expect("SET RW", "Read Write")
+        smoke.command("ERA RO.TXT", 1500)
+        smoke.command("DIR RO.TXT", 1200)
+        smoke.expect("R/O file deleted after RW", "No files")
+        print("[dri] SET ok (R/O enforced on ERA/REN)")
 
         # --- SETKEYS: parse RESET.KEY and program the key table --------
         before = smoke.memory(bank_for_address(KMTAB), KMTAB, KMTAB_SIZE)

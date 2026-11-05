@@ -72,6 +72,9 @@ checks:
 * `SET` reports `ERROR: No options specified.` with no arguments, and
   `SET RO.TXT [RO]` prints `Read Only (RO)`.  DRI's SET takes its options
   in square brackets.
+* The R/O attribute is then enforced: `ERA RO.TXT` and
+  `REN NEW.TXT=RO.TXT` print `Bdos Err: R/O` and the file stays put.
+  `SET RO.TXT [RW]` clears the attribute and `ERA` deletes it.
 * `SETKEYS RESET.KEY` parses the key file and programs the +3 key override
   table (XBIOS `KM_SET_KEY`); the harness snapshots the table before and
   after and fails if nothing changed.

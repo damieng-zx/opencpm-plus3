@@ -1186,10 +1186,70 @@ test12:
     ret
 
 test13:
-    ; === T13: Cleanup ===
+    ; === T13: R/O protection, then cleanup ===
+    ; T12 deliberately leaves TEST.TMP read-only.  F19 (delete) and F23
+    ; (rename) must refuse it and leave the file alone; after clearing the
+    ; R/O attribute both must succeed.
     ld de, msg_t13
     ld c, 9
     call BDOS
+
+    ; F45 = 1 so a R/O error returns 0xFF instead of aborting the test.
+    ld e, 1
+    ld c, 45
+    call BDOS
+
+    ; --- Delete must be refused ---------------------------------------
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 19                ; F19: Delete
+    call BDOS
+    cp 0xFF
+    jp nz, .t13_fail        ; R/O file must not be deleted
+
+    ; --- Rename must be refused ---------------------------------------
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld hl, fn_test2
+    ld de, FCB1 + 17
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 23                ; F23: Rename
+    call BDOS
+    cp 0xFF
+    jp nz, .t13_fail        ; R/O file must not be renamed
+
+    ; --- The file is still there and still read-only -------------------
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 15                ; F15: Open
+    call BDOS
+    cp 0xFF
+    jp z, .t13_fail         ; it must still exist
+
+    ; --- Clear R/O, then delete succeeds -------------------------------
+    call clear_fcb
+    ld hl, fn_test
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 30                ; F30: Set File Attributes (R/W)
+    call BDOS
+    cp 0xFF
+    jp z, .t13_fail
 
     call clear_fcb
     ld hl, fn_test
@@ -1197,10 +1257,15 @@ test13:
     ld bc, 11
     ldir
     ld de, FCB1
-    ld c, 19
+    ld c, 19                ; F19: Delete
     call BDOS
     cp 0xFF
-    jr z, .t13_fail
+    jp z, .t13_fail
+
+    ; Restore the normal error mode.
+    ld e, 0
+    ld c, 45
+    call BDOS
 
     ld de, msg_pass
     ld c, 9
@@ -1208,6 +1273,9 @@ test13:
     ret
 
 .t13_fail:
+    ld e, 0
+    ld c, 45                ; restore the normal error mode
+    call BDOS
     ld de, msg_fail
     ld c, 9
     call BDOS

@@ -2526,6 +2526,16 @@ bf_f19:
     pop de
     jp nz, .del_next
 
+    ; A read-only file (bit 7 of the filetype byte, entry offset 9) may
+    ; not be deleted.  CP/M reports "File R/O" here and leaves it alone.
+    push hl
+    ld de, 9
+    add hl, de
+    ld a, (hl)
+    pop hl
+    bit 7, a
+    jp nz, .del_ro_err
+
     ; Match — free all blocks and mark entry as deleted
     push de
     push bc
@@ -2570,6 +2580,15 @@ bf_f19:
     jp bdos_ret
 .del_none:
     ld a, 0xFF
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+.del_ro_err:
+    ; File R/O: with error_mode bit 0 set ro_error returns A=0xFF
+    ; (nothing deleted); otherwise it prints the classic message and warm
+    ; boots, exactly like the other read-only paths.
+    ld a, 0xFF
+    call ro_error
     ld l, a
     ld h, 0
     jp bdos_ret
@@ -2861,6 +2880,14 @@ bf_f21_core:
     jp c, .wseq_error
     call is_fcb_readonly
     jp nz, .wseq_ro
+    ; A file opened from a read-only directory entry carries the R/O
+    ; attribute in its filetype byte (bit 7).  Refuse the write like CP/M.
+    bit 7, (ix + 9)
+    jr z, .wseq_writable
+    ld a, 2
+    call ro_error
+    jp .wseq_ro
+.wseq_writable:
 
     ; If CR == 128 this extent is full — create a new extent first
     ld a, (ix + 32)            ; CR
@@ -3327,6 +3354,15 @@ bf_f23:
     jp nz, .ren_cmp
     pop hl                     ; HL = entry base
 
+    ; A read-only file may not be renamed (filetype bit 7, entry offset 9).
+    push hl
+    ld de, 9
+    add hl, de
+    ld a, (hl)
+    pop hl
+    bit 7, a
+    jp nz, .ren_ro_err
+
     ; Match — copy new name (FCB bytes 17-27) to entry bytes 1-11
     push hl                    ; save entry base
     inc hl                     ; HL = &entry[1]
@@ -3367,6 +3403,14 @@ bf_f23:
     jp bdos_ret
 .ren_none:
     ld a, 0xFF
+    ld l, a
+    ld h, 0
+    jp bdos_ret
+.ren_ro_err:
+    ; File R/O (same convention as delete: error_mode bit 0 -> A=0xFF,
+    ; otherwise print the classic message and warm boot).
+    ld a, 0xFF
+    call ro_error
     ld l, a
     ld h, 0
     jp bdos_ret
