@@ -23,10 +23,10 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **SuperCalc** | 1.05 | Banner, grid, cell entry, `/Q` + `Y` quit | `SCHAZ15.COM`, the Hazeltine build. Saving a `.CAL` fails its “program diskette” media check |
 | **WordMaster** | 1.07A | Banner, edit, `BREAK` (Caps+Space = ESC) to leave insert mode, `E` saves, `TYPE` shows the text | Uses the official +3 BREAK mapping |
 | **dBASE II** | 2.43 | Starts, date prompt, dot prompt, `QUIT` returns to `A>` | FCB random I/O, overlays |
-| **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | ⚠️ VT-100 escapes such as `ESC[?3h`, `ESC[2J`, `ESC[H` remain visible; the screen layer implements VT52 + ADM-3A, not VT-100 |
+| **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | ⚠️ VT-100 escapes such as `ESC[?3h`, `ESC[2J`, `ESC[H` remain visible; `supercalc2_80` confirms 24x80 fixes only the width, not the terminal |
 | **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
-| **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE layout wraps on the 51-column screen; the default build is unchanged, but TINST can install it for a 64-column terminal and `SCREEN 64` then fits the IDE |
-| **WordStar** | 3.0 | Banner and no-file menu appear; `INSTALL` patches terminals and writes `WS.COM` | 80-column layout wraps on the 51-column screen, so the display is not usable yet (needs an 80-column mode) |
+| **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE wraps on the 51-column screen; TINST+`SCREEN 64` or `turbo3_80` (24x80) fit it, though Kaypro escapes leave stray `1` characters |
+| **WordStar** | 3.0 | Banner and no-file menu appear; `INSTALL` patches terminals and writes `WS.COM` | 80-column layout wraps on the 51-column screen by default; `wordstar30_80` runs it under `SET24X80`, where the menu and right half are readable (Visual 200 escape artifacts remain) |
 | **BBC BASIC** | — | Previously exercised from the disk image | Visual/interactive test; see the smoke-test notes |
 | **PIP** | reference binary | `PIP C:=A:DATE.COM`, then `DIR C:`; local harness copies `SMOKE.TXT` interactively | Covered by the automated smoke test; `tools/zx84_pip.py` runs a local copy end to end (F44 caller) |
 | **Microsoft M80 + L80** | MACRO-80 / Link-80 3.44 | `M80 =HELLO` assembles and links to `HELLO.COM`, which prints `HELLO, WORLD` | Exercises REL output, the linker's random I/O and the FCB command line |
@@ -44,9 +44,9 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 
 | Title | Observed behavior | Investigation so far |
 |---|---|---|
-| **WordStar 3.0 display** | The program runs and draws its menu, but WordStar is an 80×24 program and the character buffer is 51 columns, so each 80-column line wraps and overlaps the next. | The crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: an 80-column screen mode (3px font) or a WordStar install with a ≤51-column terminal. |
-| **Turbo Pascal display** | Runs correctly; the 80-column IDE frames wrap on screen. | Same root cause as WordStar's display: no 80-column mode. |
-| **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
+| **WordStar 3.0 display** | The default run still wraps at 51 columns, but `wordstar30_80` enters `SET24X80` first: the no-file menu fits 80 columns and EXTEND+Enter shows the right half. Visual 200 escape codes leave artifacts at the line starts. | The original crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: terminal escape handling. |
+| **Turbo Pascal display** | The default run wraps; `turbo3_80` fits the IDE in 80 columns. Kaypro terminal escapes leave stray `1` characters in the buffer. | 24x80 solves the width; the remaining work is the Kaypro terminal escape set. |
+| **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. `supercalc2_80` fits the banner and right half in 24x80; the escapes remain. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
 | **ED `E` (save)** | Writes the data and directory sector, then stops with `*e` still on the line; no further BDOS/XBIOS calls. | Found with `tools/zx84_dri.py`; `Q`/`Y` exits normally, so the failure is in ED's end-of-edit path after the write. |
 | **SET** | Reads the disk indefinitely instead of drawing its menu. | Found with `tools/zx84_dri.py`; not investigated yet. |
 | **SETKEYS** | Stops after opening its key file. | Found with `tools/zx84_dri.py`; try it with a known `.KEY` file. |

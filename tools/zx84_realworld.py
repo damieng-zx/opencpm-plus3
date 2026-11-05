@@ -300,6 +300,13 @@ class RealWorld:
 
 def run_package(rw: RealWorld, pkg: dict, dsk: Path) -> None:
     rw.boot(dsk)
+    for setup in pkg.get("setup", []):
+        if isinstance(setup, str):
+            rw.command(setup, 900)
+        else:
+            rw.command(setup["command"], int(setup.get("frames", 900)))
+            if setup.get("expect"):
+                rw.wait_for(setup["expect"], label="setup")
     rw.command(pkg["command"], int(pkg.get("frames", 3000)))
     if pkg.get("expect"):
         rw.wait_for(pkg["expect"], label="start")

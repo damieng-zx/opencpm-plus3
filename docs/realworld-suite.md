@@ -52,9 +52,12 @@ separate, explicitly triggered workflow.
 | `zork1` | Zork I | Large `.DAT`, random reads, console | Pass |
 | `dbase2` | dBASE II 2.43 | FCB random I/O, overlays, dot prompt | Pass |
 | `supercalc2` | SuperCalc2 1.00 | Spreadsheet, overlays, VT-100 output | Pass |
+| `supercalc2_80` | SuperCalc2 1.00 (24x80) | 80-column banner, right-half flip | Pass (VT-100 escapes) |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
+| `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
 | `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
 | `turbo3` | Turbo Pascal 3.0 | Compiler/IDE, overlays, TPA | Pass (80-column caveat) |
+| `turbo3_80` | Turbo Pascal 3.0 (24x80) | 80-column IDE, right-half flip | Pass (escape artifacts) |
 | `m80l80` | Microsoft M80 + L80 | Assembler → REL → `.COM`, then run | Pass |
 | `f80344` | Microsoft FORTRAN-80 3.44 | Compiler → REL → link with FORLIB → run | Pass |
 | `bascom53` | Microsoft BASIC Compiler 5.3 | BASIC-80 → OBSLIB → stand-alone `.COM`, then run | Pass |
@@ -69,21 +72,28 @@ separate, explicitly triggered workflow.
 | `wordmaster` | MicroPro WordMaster 1.07A | Full-screen edit, BREAK/ESC, save, TYPE | Pass |
 | `supercalc1` | SuperCalc 1.05 | Spreadsheet start, cell entry, quit | Pass |
 
-Notes on individual packages (WordStar's display caveat is the only
-recorded known issue; the others are history):
+Notes on individual packages (the display caveats are recorded known
+issues; the others are history):
 
 - **WordStar 3.0** starts and draws its no-file menu, and the automated
   check (banner and menu) passes.  It is an 80-column program, so on the
-  51-column screen each line wraps and overlaps the next; an 80-column
-  screen mode is the remaining display piece.  The original crash was a
-  page-zero bug - `(0006h)` held `bdos_stub` (F737) instead of the TPA top
-  (F600), so WordStar sized its screen buffer from the wrong ceiling and
-  overwrote the BIOS jump table.  `common.zpa` now places `bdos_vector` at
-  F600 and page zero 0006h points at it.
+  51-column screen each line wraps and overlaps the next; the
+  `wordstar30_80` variant runs it after `SET24X80` and flips with
+  EXTEND+Enter.  The 80-column menu and the right half are now readable;
+  Visual 200 escape codes still leave artifacts at the line starts.
+  The original crash was a page-zero bug - `(0006h)` held `bdos_stub`
+  (F737) instead of the TPA top (F600), so WordStar sized its screen
+  buffer from the wrong ceiling and overwrote the BIOS jump table.
+  `common.zpa` now places `bdos_vector` at F600 and page zero 0006h points
+  at it.
 - **Turbo Pascal 3.0** runs (banner, `TURBO.MSG` load, IDE menu) and its
-  80-column frames wrap on the 51-column screen for the same reason.
-  TINST can install the editor for a 64-column terminal, which the
-  64-column mode (`SCREEN 64`) then fits.
+  80-column frames wrap on the 51-column screen.  TINST can install the
+  editor for a 64-column terminal (`SCREEN 64`), and the `turbo3_80`
+  variant runs the default install after `SET24X80` and checks the right
+  half.  Kaypro terminal escapes still leave stray `1` characters.
+- **SuperCalc2 1.00** the `supercalc2_80` variant fits the banner in
+  80 columns and flips to the right half, but its VT-100 escape output is
+  still printed literally; the VT-100 parser is the remaining blocker.
 - **BASCOM 5.3** used to exit immediately because the suite pulled
   `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
   machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`
@@ -143,6 +153,7 @@ Edit `tests/realworld/manifest.json`:
   "archive": "zip",
   "members": ["EXAMPLE.COM", "EXAMPLE.OVR"],
   "fixtures": ["OPTIONAL.TXT"],
+  "setup": ["SET24X80"],
   "command": "EXAMPLE",
   "expect": ["READY"],
   "frames": 2500,
@@ -157,10 +168,21 @@ Edit `tests/realworld/manifest.json`:
 `archive` may be `zip` or `file`. For `file`, use `save_as` to name the CP/M
 file. `fixtures` refers to `tests/realworld/fixtures/`.
 
+`setup` is optional: each entry is typed at the `A>` prompt before
+`command` (a string is a command, or an object with `command`, `frames` and
+`expect`).  The 24x80 variants use `["SET24X80"]` so the same package runs
+through the paged 80-column screen.
+
 Steps run in order. A step with `text` types a command, `key` presses a key,
 and `wait: true` just runs the emulator for `frames` without typing — use it
 when a tool needs time after its last output (for example Link-80 writing a
-large `.COM`) before the next command is sent.
+large `.COM`) before the next command is sent.  `key: "shift+sym+enter"` is
+the EXTEND+Enter chord that flips the 24x80 halves.
+
+The package image is built from the manifest's `base` list: `CPM3.SYS`,
+`CPM3C.SYS`, `CCP.COM`, the three fonts, `SET24X80.COM` and
+`RAMDISK.FID`.  Keep that list in step with the boot files; a missing
+`CPM3C.SYS` stops the loader.
 
 The runner extracts files by basename, so archives with directory trees are
 supported. CP/M names must remain 8.3. Keep each package under the +3 data

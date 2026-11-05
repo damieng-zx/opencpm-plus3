@@ -5,10 +5,12 @@
     "system": "build/loader.bin",
     "files": [
       "build/CPM3.SYS",
+      "build/CPM3C.SYS",
       "build/CCP.COM",
       "src/bios/font51.bin",
       "src/bios/font32.bin",
       "src/bios/font64.bin",
+      "build/SET24X80.COM",
       "build/RAMDISK.FID"
     ]
   },
@@ -84,6 +86,29 @@
       "notes": "Spreadsheet with overlays and VT-100 screen output."
     },
     {
+      "id": "supercalc2_80",
+      "title": "SuperCalc2 1.00 (24x80)",
+      "url": "http://www.retroarchive.org/cpm/business/sc2.zip",
+      "archive": "zip",
+      "members": [
+        "SC2.COM",
+        "SC2.OVL",
+        "SC2.HLP"
+      ],
+      "setup": ["SET24X80"],
+      "command": "SC2",
+      "expect": ["SuperCalc2", "Version"],
+      "frames": 4000,
+      "steps": [
+        {
+          "key": "shift+sym+enter",
+          "frames": 1800,
+          "expect": ["CORP."]
+        }
+      ],
+      "notes": "24x80 variant: the banner and grid fit 80 columns, but the VT-100 escapes ([?3h[2J[H, [22;1H[0K) are still printed literally; the VT-100 parser is the remaining blocker."
+    },
+    {
       "id": "wordstar30",
       "title": "WordStar 3.0",
       "url": "http://www.retroarchive.org/cpm/text/WS30.ZIP",
@@ -101,6 +126,34 @@
       "frames": 3000,
       "known_issue": "Starts and draws its no-file menu, but WordStar is an 80-column program: the layout does not fit the 51-column screen, so the display wraps and is unreadable. Needs an 80-column screen mode (3px font).",
       "notes": "Full-screen editor; exercises terminal escape handling and overlays."
+    },
+    {
+      "id": "wordstar30_80",
+      "title": "WordStar 3.0 (24x80)",
+      "url": "http://www.retroarchive.org/cpm/text/WS30.ZIP",
+      "archive": "zip",
+      "members": [
+        "WS.COM",
+        "WSMSGS.OVR",
+        "WSOVLY1.OVR",
+        "WIMSGS.OVR"
+      ],
+      "setup": ["SET24X80"],
+      "command": "WS",
+      "expect": ["N O - F I L E   M E N U"],
+      "frames": 3500,
+      "steps": [
+        {
+          "key": "shift+sym+enter",
+          "frames": 1800,
+          "expect": ["serial # WZ3994AS"]
+        },
+        {
+          "key": "shift+sym+enter",
+          "frames": 1800
+        }
+      ],
+      "notes": "24x80 variant: the no-file menu now fits 80 columns and EXTEND+Enter shows the right half. Visual 200 escape codes still leave artifacts at the line starts."
     },
     {
       "id": "mbasic",
@@ -145,6 +198,34 @@
         }
       ],
       "notes": "Compiler/IDE with overlays; exercises TPA and console handling. The 80-column IDE layout is wider than the 51-column screen, so the display wraps."
+    },
+    {
+      "id": "turbo3_80",
+      "title": "Turbo Pascal 3.0 (24x80)",
+      "url": "http://www.retroarchive.org/cpm/lang/tpas30.zip",
+      "archive": "zip",
+      "members": [
+        "TURBO.COM",
+        "TURBO.OVR",
+        "TURBO.MSG"
+      ],
+      "setup": ["SET24X80"],
+      "command": "TURBO",
+      "expect": ["TURBO Pascal system"],
+      "frames": 3500,
+      "steps": [
+        {
+          "text": "Y",
+          "frames": 3000,
+          "expect": ["Loading A:TURBO.MSG", "Text:"]
+        },
+        {
+          "key": "shift+sym+enter",
+          "frames": 1800,
+          "expect": ["compiler"]
+        }
+      ],
+      "notes": "24x80 variant: the IDE now fits 80 columns; Kaypro terminal escapes still leave stray '1' characters in the buffer."
     },
     {
       "id": "m80l80",

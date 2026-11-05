@@ -94,11 +94,11 @@ emulator.
 |---|---|---|
 | Zork I / II / III | Pass | large `.DAT` files, random reads, save files |
 | dBASE II 2.43 | Pass | overlays, FCB random I/O, dot prompt |
-| SuperCalc 1.05 / SuperCalc2 1.00 | Pass | overlays, cell entry, quit |
+| SuperCalc 1.05 / SuperCalc2 1.00 | Pass | overlays, cell entry, quit; SuperCalc2's VT-100 output is still literal |
 | WordStar 3.0 | Pass | starts and draws its no-file menu; use `SET24X80` for its 80-column menus |
 | WordMaster 1.07A | Pass | full edit/save cycle, BREAK = ESC |
 | Microsoft BASIC-80 5.21 | Pass | interpreter, console and file I/O |
-| Turbo Pascal 3.0 | Pass | IDE starts; fits `SCREEN 64` after a TINST 64-column install |
+| Turbo Pascal 3.0 | Pass | IDE starts; `SCREEN 64` after a TINST 64-column install, or the 24x80 variant |
 | Microsoft M80 + L80 3.44 | Pass | assemble → link → run |
 | Microsoft FORTRAN-80 3.44 | Pass | compile → link → run |
 | Microsoft BASIC Compiler 5.3 | Pass | compile → link → stand-alone `.COM` |
@@ -114,12 +114,18 @@ run on demand rather than in CI because it downloads third-party software.
 
 The default screen is 51 columns, the +3's native width.  For 80-column
 software, enter the virtual 80-column screen with `SET24X80` (or `ESC x`);
-it pans automatically or on EXTEND+Enter.
+it pans automatically or on EXTEND+Enter.  The real-world suite has 24x80
+variants (`wordstar30_80`, `turbo3_80`, `supercalc2_80`) that run the same
+packages under `SET24X80` and flip with EXTEND+Enter.
 
 - **WordStar**'s menus wrap at 51 in the default mode; 24x80 gives them the
-  full 80 columns.
+  full 80 columns and the right half.  Visual 200 escape codes still leave
+  artifacts at the line starts.
 - **Turbo Pascal**'s IDE wraps with its default install; TINST can install
   the editor for a 64-column terminal, which `SCREEN 64` fits, or use 24x80.
+  Kaypro terminal escapes still leave stray `1` characters.
+- **SuperCalc2** fits its banner in 24x80, but its VT-100 escapes are still
+  printed literally; a VT-100 parser is the remaining blocker.
 
 Also supported:
 
