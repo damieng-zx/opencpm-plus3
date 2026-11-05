@@ -104,7 +104,7 @@ its own 2,560-byte window. `tools/check_layout.py` enforces both and
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 14,251 | 16,384 (`C000-FFFF`) | 2,133 |
+| `CPM3.SYS` head         | 14,399 | 16,384 (`C000-FFFF`) | 1,985 |
 | `CPM3C.SYS` common stub | 1,807  | 2,560 (`F600-FFFF`)  | 753   |
 | loader                  | 1,221  | 8,704 (17 sectors)   | 7,483 |
 
@@ -129,9 +129,9 @@ Remaining strategies, in order:
    bitmap/attributes. The 24×80 virtual buffer (1,920 bytes) belongs there,
    not in bank 6 or the TPA, so 80-column mode costs code space only.
 
-Near-term consequence: the status line (23-row viewport, status row,
-markers) now fits comfortably in the head slack; the 24×80 work has room
-for its code and keeps its buffer in bank 5.
+The status line is implemented on top of the viewport (23 text rows, the
+bottom row reserved for BIOS messages; it costs about 150 bytes), and the
+24×80 work has room for its code and keeps its buffer in bank 5.
 
 ### Stage 4 — `cold_boot` (`src/bios/bios.zpa`, runs in bank 4)
 

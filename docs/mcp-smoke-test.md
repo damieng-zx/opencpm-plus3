@@ -10,12 +10,14 @@ checks that the stage-2 loader staged the three fonts and `RAMDISK.FID`
 byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), fills the remaining
 free bank-6 gaps with a sentinel and verifies they survive the app runs,
 then runs
-`SYSTEST`, `XTETEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
+`SYSTEST`, `XTETEST`, `STLTEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
 `F59` overlay load and an `F111` print-block check), and the main CCP flows,
 and asserts the 51x24 character buffer plus an empty FDC retry log:
 
 `XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry (including a set
-`ESC X` viewport), `TE_RESET`,
+`ESC X` viewport and the 23-row status-line viewport), `TE_RESET`,
+`TE_STL_ASK`/`TE_STL_ON_OFF` (the full status-line toggle and 23-row
+scroll are covered by `STLTEST` below),
 `TE_SET_INK` (including FLASH), `TE_SET_BORDER`, `TE_SET_SPEED` and
 `SCR_RUN_ROUTINE`, plus the disc calls (`DD_INIT`, `DD_SETUP`,
 `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`,
@@ -234,7 +236,10 @@ run 1200
 Require `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK` and `DONE`, with no `FAIL`.
 `XTETEST` calls every implemented TE entry through `USERF`: `TE_ASK`
 reports `51x24`, `TE_RESET` clears, the ink/border tests change the
-palette, and `TE_SET_SPEED` is accepted.  Test 7 stages a routine at
+palette, and `TE_SET_SPEED` is accepted.  Test 4 disables then enables the
+status line with `TE_STL_ON_OFF`, checks `TE_STL_ASK`'s A/Zero contract
+and that `TE_ASK` drops to 23 rows, then disables it again and checks that
+24 rows come back.  Test 7 stages a routine at
 `D000h`, runs it via `SCR_RUN_ROUTINE`, checks DE/HL/IX/IY pass-through
 and leaves:
 
@@ -351,6 +356,25 @@ cursor clamped into the rectangle (`H=L=0`).  It then restores the
 full-screen viewport with `ESC X 0 0 23 50` and prints `33.VIEWPORT..OK`.
 The viewport state lives in bank 6 (`A73A-A73F`), and the loader stages
 the screen row-address table at `A890` so it costs no image space.
+
+### Status-line suite (`STLTEST`)
+
+Run:
+
+```text
+type "STLTEST`enter`"
+run 1500
+```
+
+Require `STL..OK`.  The program disables the status line, checks
+`TE_STL_ASK` (`A=00h`, Zero set), enables it with `TE_STL_ON_OFF`
+(`A=FFh`, Zero clear), and checks that `TE_ASK` drops to 23 rows
+(`D=22`).  It then turns page mode off and scrolls 30 numbered lines
+through the 23-row viewport, which exercises the height-parameterised
+fast scroll and must leave the status row alone.  Disabling again must
+give `D=23` and `A=00h`/Zero set.  XTETEST test 4 runs the same checks,
+but so early in its burst that the runner's frame sampling misses the
+marker; `STLTEST` is the one the smoke gates on.
 
 ### BDOS file regression suite
 

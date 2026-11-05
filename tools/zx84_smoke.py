@@ -437,10 +437,10 @@ class Smoke:
     # overlaps (the fcb_buf/alv_c type of bug).
     # A880-A881 is f111_addr (BDOS F111 text pointer), so the gap is split
     # around it.
-    # A880-A881 is f111_addr and A890-A8BF is the loader-staged row table,
-    # so the old A870-A8FF gap is split around both.
+    # A880-A881 is f111_addr, A890-A8BF is the loader-staged row table and
+    # A8C0 is the status-line flag, so the old A870-A8FF gap is split.
     BANK6_GAPS = ((0xA6FC, 4), (0xA83D, 3), (0xA870, 0x10),
-                  (0xA882, 0x0E), (0xA8C0, 0x40), (0xADA4, 0x25C))
+                  (0xA882, 0x0E), (0xA8C1, 0x3F), (0xADA4, 0x25C))
 
     def run_bank6_sentinels(self) -> None:
         self.sentinels: list[tuple[int, bytes]] = []
@@ -643,6 +643,14 @@ class Smoke:
                 scratch.unlink()
             except OSError:
                 pass
+
+    def run_stltest(self) -> None:
+        """Status line: TE_STL contract and the 23-row fast scroll."""
+        self.log("STLTEST")
+        self.command("STLTEST", 1500)
+        self.wait_for(["STL..OK"], frames=300, attempts=10)
+        if "FAIL" in self.text():
+            raise SmokeError("STLTEST reported a failure")
 
     def run_disktest(self) -> None:
         self.log("DISKTEST")
@@ -1065,6 +1073,7 @@ class Smoke:
         self.run_bank6_sentinels()
         self.run_systest()
         self.run_xtetest()
+        self.run_stltest()
         # SYSTEST deliberately changes and restores the delimiter; DIR must
         # still be clean afterwards.
         self.command("DIR", 500)

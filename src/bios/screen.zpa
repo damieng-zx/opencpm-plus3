@@ -89,6 +89,11 @@ vp_width:   equ 0xA73D         ; viewport columns (1..scr_cols)
 vp_tmp_row: equ 0xA73E         ; ESC X: cursor's old absolute row
 vp_tmp_col: equ 0xA73F         ; ESC X: cursor's old absolute column
 
+; --- Status line (ESC 0/1, TE_STL_ON_OFF) ---
+; 0 = off (24 text rows), 1 = on (23 text rows + status row 23).
+; Stored in the free bank-6 gap at A8C0, outside the image.
+stl_on:     equ 0xA8C0
+
 ; --- XBIOS colour state ---
 scr_ink:      db 7             ; Ink colour 0-7 (Spectrum GRB)
 scr_paper:    db 1             ; Paper colour 0-7
@@ -128,10 +133,14 @@ scr_init:
     ; A size change cancels any escape sequence in progress.
     xor a
     ld (esc_state), a
-    ; A mode change resets the viewport to the whole screen.
+    ; A mode change resets the viewport to the whole screen, minus the
+    ; status row when it is enabled.
     ld (vp_top), a
     ld (vp_left), a
+    ld a, (stl_on)
+    ld b, a
     ld a, SCR_ROWS
+    sub b
     ld (vp_height), a
     ld a, (scr_cols)
     ld (vp_width), a
@@ -407,9 +416,9 @@ scr_putchar:
     db 'X'
     dw .esc_X_start
     db '0'
-    dw .esc_ret         ; status line off  — ignore
+    dw .esc_stl_off     ; status line off
     db '1'
-    dw .esc_ret         ; status line on   — ignore
+    dw .esc_stl_on      ; status line on
     db '2'
     dw .esc_1p          ; national variant — consume 1 param
     db '3'
@@ -570,6 +579,15 @@ scr_putchar:
     xor a
     ld (scr_wrap), a
     ret
+
+; ------- status line (ESC 0 / ESC 1) -------
+.esc_stl_off:
+    xor a
+    jp _stl_apply
+
+.esc_stl_on:
+    ld a, 1
+    jp _stl_apply
 
 ; ------- cursor movement -------
 .esc_A:
@@ -1390,28 +1408,68 @@ _abs_cursor:
 
 
 ; ==========================================================================
-; _vp_fullscreen - Is the viewport the whole screen?
-;   Out:     Z set when vp_top=0, vp_left=0, vp_height=SCR_ROWS and
-;            vp_width=scr_cols; NZ otherwise
+; _stl_apply - Enable or disable the status line
+;   In:  A = 0 (off, 24 text rows) / 1 (on, 23 text rows + status row)
+;   Enabling clears the bottom row and clamps the cursor into the 23-row
+;   viewport; disabling hands the row back to the CRT without clearing it.
+;   Clobbers: AF, BC, DE, HL, IX
+; ==========================================================================
+; @proc _stl_apply
+; @param %on:u8 a
+; @clobbers af,bc,de,hl,ix
+; @end
+_stl_apply:
+    and 1
+    ld (stl_on), a
+    ld b, a
+    ld a, SCR_ROWS
+    sub b
+    ld (vp_height), a
+    dec a
+    ld b, a
+    ld a, (cursor_row)
+    cp b
+    jr c, .sa_row_ok
+    ld a, b
+    ld (cursor_row), a
+.sa_row_ok:
+    ld a, (stl_on)
+    or a
+    ret z
+    ; Reserve the bottom row: blank it across the full screen width.
+    xor a
+    ld c, a
+    ld a, (scr_cols)
+    ld b, a
+    ld a, SCR_ROWS - 1
+    jp _blank_render_range
+
+
+; ==========================================================================
+; _vp_fast_scroll - Can the fast scroll path handle the current viewport?
+;   Out:     Z set when vp_top=0, vp_left=0, vp_width=scr_cols and
+;            vp_height >= 2; NZ otherwise
 ;   Clobbers: AF, B
 ; ==========================================================================
-; @proc _vp_fullscreen
+; @proc _vp_fast_scroll
 ; @clobbers af,b
 ; @end
-_vp_fullscreen:
+_vp_fast_scroll:
     ld a, (vp_top)
     or a
     ret nz
     ld a, (vp_left)
     or a
     ret nz
-    ld a, (vp_height)
-    cp SCR_ROWS
-    ret nz
     ld a, (vp_width)
     ld b, a
     ld a, (scr_cols)
     cp b
+    ret nz
+    ld a, (vp_height)
+    cp 2
+    ret c
+    xor a
     ret
 
 
@@ -1806,11 +1864,22 @@ _render_char:
 ;   Spectrum's interleaved screen layout (thirds + scan lines).
 ;   Much faster than redrawing all 1224 characters.
 ; ==========================================================================
+; _scroll_up - Scroll screen up by one text row, clear bottom row
+;   In:      nothing
+;   Out:     nothing
+;   Clobbers: AF, BC, DE, HL, IX, IY
+;
+;   Fast path: moves the viewport bitmap up by 8 pixel rows (one character
+;   row) using LDIR on each scan line, and shifts the character/attribute
+;   buffers to match.  It requires a viewport anchored at the top-left with
+;   the full screen width; anything else falls back to a buffer move plus a
+;   whole-screen redraw (_delete_line).
+; ==========================================================================
 ; @proc _scroll_up
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 _scroll_up:
-    call _vp_fullscreen
+    call _vp_fast_scroll
     jr z, .su_fast
     ; Partial viewport: deleting the top viewport row is a scroll up
     ; (delete_line blanks the bottom row and redraws the screen).
@@ -1827,30 +1896,28 @@ _scroll_up:
     ld (cursor_row), a
     ret
 .su_fast:
-    ; Scroll character buffer: rows 1-23 → rows 0-22
-    ; HL = char_buffer + scr_cols (source = start of row 1)
+    ; last = vp_height - 1, the row that will be cleared
+    ld a, (vp_height)
+    dec a
+    ld (_scroll_last), a
+
+    ; Buffer: rows 1..last -> 0..last-1
+    call _mul_row_scr_cols      ; HL = last * scr_cols (count)
+    ld b, h
+    ld c, l
+    ld hl, char_buffer
     ld a, (scr_cols)
     ld e, a
     ld d, 0
-    ld hl, char_buffer
-    add hl, de                  ; HL = char_buffer + scr_cols
-    ld de, char_buffer          ; DE = char_buffer (dest = row 0)
-    ; BC = scr_cols * 23
-    push de
-    push hl
-    ld a, 23
-    call _mul_row_scr_cols      ; HL = scr_cols * 23
-    ld b, h
-    ld c, l
-    pop hl
-    pop de
+    add hl, de                  ; HL = source (row 1)
+    ld de, char_buffer          ; DE = dest (row 0)
     ldir
 
-    ; Clear bottom row in buffer: HL = char_buffer + scr_cols * 23
-    ld a, 23
-    call _mul_row_scr_cols      ; HL = scr_cols * 23
+    ; Clear the last buffer row
+    ld a, (_scroll_last)
+    call _mul_row_scr_cols
     ld de, char_buffer
-    add hl, de                  ; HL = char_buffer + 23*scr_cols
+    add hl, de
     ld d, h
     ld e, l
     inc de
@@ -1858,37 +1925,21 @@ _scroll_up:
     ld a, (scr_cols)
     ld c, a
     ld b, 0
-    dec bc                      ; BC = scr_cols - 1
+    dec bc
     ldir
 
-    ; Fast pixel scroll on the actual screen bitmap
+    ; Pixel scroll: row R+1 -> R for R = 0..last-1
     call _page_in
-
-    ; Scroll 23 character rows up by one row (184 pixel rows)
-    ; For each character row R (0-22), copy row R+1's 8 scan lines to row R.
-    ;
-    ; Screen address for char row R, scan S:
-    ;   H = 0x40 | (third << 3) | scan
-    ;   L = (row_in_third << 5)
-    ;   third = R / 8, row_in_third = R & 7
-    ;
-    ; We process 23 character rows. For each, copy 8 scan lines × 32 bytes.
-
-    ld a, 0
+    xor a
     ld (_scroll_row_ctr), a
-
 .scroll_row:
-    ; Calculate dest (current row) and source (current row + 1)
     ld a, (_scroll_row_ctr)
-    call _calc_row_addr        ; HL = dest row, scan 0
+    call _calc_row_addr         ; HL = dest row, scan 0
     push hl
-
     ld a, (_scroll_row_ctr)
     inc a
-    call _calc_row_addr        ; HL = source row+1, scan 0
-    pop de                     ; DE = dest, HL = source
-
-    ; Copy 8 scan lines × 32 bytes
+    call _calc_row_addr         ; HL = source row+1, scan 0
+    pop de                      ; DE = dest, HL = source
     ld b, 8
 .scroll_scan:
     push bc
@@ -1898,21 +1949,26 @@ _scroll_up:
     ldir
     pop de
     pop hl
-    inc h                      ; Source next scan line (SSS += 1)
-    inc d                      ; Dest next scan line
+    inc h                       ; next scan line
+    inc d
     pop bc
     djnz .scroll_scan
 
-    ; Next character row
     ld a, (_scroll_row_ctr)
     inc a
     ld (_scroll_row_ctr), a
-    cp SCR_ROWS - 1            ; Done 23 rows?
-    jr c, .scroll_row
+    ld b, a
+    ld a, (_scroll_last)
+    cp b
+    jr z, .su_clear
+    jr c, .su_clear
+    jr .scroll_row
 
-    jr _scroll_clear
+.su_clear:
+    jp _scroll_clear
 
 _scroll_row_ctr: db 0
+_scroll_last:    db 0
 
 ; Helper: calculate screen address for character row A, scan line 0
 ;   In:  A = character row (0-23)
@@ -1936,18 +1992,47 @@ _calc_row_addr:
     ld l, a
     pop de
     ret
+
 _row_scr_tbl equ 0xA890
 ; The loader stages the 24 words (row -> screen address at scan 0, byte
 ; column 0) into bank 6 at A890, so they cost no CPM3.SYS image space.
 ;   H = 0x40 | ((r>>3) << 3),  L = (r & 7) << 5
 
+
+; ==========================================================================
+; _attr_row_offset - Compute the attribute-plane offset of a text row
+;   In:  A = row (0-23)
+;   Out: HL = row * 32
+;   Clobbers: AF, HL
+; ==========================================================================
+; @proc _attr_row_offset
+; @param %row:u8 a
+; @out   hl
+; @clobbers af,hl
+; @end
+_attr_row_offset:
+    ld l, a
+    ld h, 0
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    ret
+
+
+; ==========================================================================
+; _scroll_clear - Clear the last viewport row (pixels, buffer, attributes)
+;   Uses _scroll_last.  Called by _scroll_up after the pixel shift.
+;   Clobbers: AF, BC, DE, HL
+; ==========================================================================
 ; @proc _scroll_clear
 ; @clobbers af,bc,de,hl
 ; @end
 _scroll_clear:
-    ; Clear bottom character row (row 23) — 8 scan lines × 32 bytes = 0
-    ld a, 23
-    call _calc_row_addr        ; HL = row 23, scan 0
+    ; Clear the last row's bitmap: 8 scan lines x 32 bytes
+    ld a, (_scroll_last)
+    call _calc_row_addr
     ld b, 8
 .clear_scan:
     push bc
@@ -1959,20 +2044,28 @@ _scroll_clear:
     ld bc, 31
     ldir
     pop hl
-    inc h                      ; Next scan line
+    inc h
     pop bc
     djnz .clear_scan
 
-    ; Scroll attributes: rows 1-23 → 0-22, clear row 23
-    ; Attributes are linear: 32 bytes per row at 5800h
-    ld hl, SCR_ATTR + 32       ; Source: attr row 1
-    ld de, SCR_ATTR             ; Dest: attr row 0
-    ld bc, 23 * 32              ; 23 rows
+    ; Attributes: rows 1..last -> 0..last-1, then clear row last
+    ld a, (_scroll_last)
+    call _attr_row_offset       ; HL = last * 32
+    ld b, h
+    ld c, l                     ; BC = count
+    push bc
+    ld hl, SCR_ATTR + 32        ; source: row 1
+    ld de, SCR_ATTR             ; dest: row 0
+    pop bc
     ldir
-    ; Clear bottom attr row
+    ld a, (_scroll_last)
+    call _attr_row_offset
+    ld de, SCR_ATTR
+    add hl, de                  ; HL = attr row last
+    ld d, h
+    ld e, l
+    inc de
     ld a, (scr_attr)
-    ld hl, SCR_ATTR + 23 * 32
-    ld de, SCR_ATTR + 23 * 32 + 1
     ld (hl), a
     ld bc, 31
     ldir
@@ -1982,18 +2075,18 @@ _scroll_clear:
 
 
 ; ==========================================================================
-; _scroll_down — Scroll screen down one text row; blank top row
+; _scroll_down - Scroll screen down one text row; blank top row
 ;   In:      nothing
 ;   Out:     nothing
 ;   Clobbers: AF, BC, DE, HL, IX, IY
 ;
-;   Mirror of _scroll_up but in the opposite direction.
+;   Mirror of _scroll_up.  Same fast/slow split.
 ; ==========================================================================
 ; @proc _scroll_down
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 _scroll_down:
-    call _vp_fullscreen
+    call _vp_fast_scroll
     jr z, .sd_fast
     ; Partial viewport: inserting a row at the top scrolls down
     ; (insert_line blanks the top row and redraws the screen).
@@ -2010,58 +2103,53 @@ _scroll_down:
     ld (cursor_row), a
     ret
 .sd_fast:
-    ; Scroll char_buffer: rows 0-22 → rows 1-23
-    ; LDDR source end = char_buffer + scr_cols*22 + scr_cols-1 = scr_cols*23-1
-    ; LDDR dest end   = char_buffer + scr_cols*23 + scr_cols-1 = scr_cols*24-1
-    ; count = scr_cols*23
-    ld a, 23
-    call _mul_row_scr_cols      ; HL = scr_cols * 23
-    push hl                     ; save count
-    ; source end = char_buffer + scr_cols*23 - 1
+    ; last = vp_height - 1
+    ld a, (vp_height)
+    dec a
+    ld (_scroll_last), a
+
+    ; Buffer: rows 0..last-1 -> 1..last (LDDR)
+    call _mul_row_scr_cols      ; HL = last * scr_cols (count)
+    ld b, h
+    ld c, l
+    push bc
     ld de, char_buffer - 1
     add hl, de                  ; HL = source end
-    ; dest end = source end + scr_cols
-    ld de, 0
+    push hl
     ld a, (scr_cols)
     ld e, a
+    ld d, 0
+    pop hl
     ex de, hl
     add hl, de                  ; HL = dest end (source end + scr_cols)
     ex de, hl                   ; DE = dest end, HL = source end
-    pop bc                      ; BC = count
+    pop bc
     lddr
 
-    ; Clear top row in buffer
+    ; Clear the top buffer row
     ld hl, char_buffer
     ld de, char_buffer + 1
     ld (hl), 0x20
     ld a, (scr_cols)
     ld c, a
     ld b, 0
-    dec bc                      ; BC = scr_cols - 1
+    dec bc
     ldir
 
-    ; Pixel scroll: rows 0-22 → 1-23 (move each row down one)
+    ; Pixel scroll: row R -> R+1 for R = last-1..0
     call _page_in
-
-    ; Copy rows 22 down to 23, then 21 to 22, … 0 to 1
-    ld a, SCR_ROWS - 2          ; start at source row 22
+    ld a, (_scroll_last)
+    dec a
     ld (_scroll_row_ctr), a
 .sd_row:
     ld a, (_scroll_row_ctr)
-    call _calc_row_addr         ; HL = source row, scan 0
+    call _calc_row_addr         ; HL = source row
     push hl
     ld a, (_scroll_row_ctr)
-    inc a                       ; dest = source + 1
-    call _calc_row_addr         ; HL = dest row, scan 0
-    pop de                      ; DE = source, HL = dest (swap roles)
-    ; Actually we want to copy DE (source) to HL (dest)
-    ; _calc_row_addr returns source in HL; we need DE=source, HL=dest
-    ; Currently: DE = source (from push/pop), HL = dest
-    ; Swap so ldir works: HL=src, DE=dst
-    push hl                     ; push dest
-    ex de, hl                   ; HL = source (old DE), DE = dest (discarded)
-    pop de                      ; DE = dest
-    ; HL = source, DE = dest — correct for ldir
+    inc a
+    call _calc_row_addr         ; HL = dest row
+    pop de                      ; DE = source, HL = dest
+    ex de, hl                   ; HL = source, DE = dest
     ld b, 8
 .sd_scan:
     push bc
@@ -2071,8 +2159,8 @@ _scroll_down:
     ldir
     pop de
     pop hl
-    inc h                       ; source: next scan line
-    inc d                       ; dest: next scan line
+    inc h
+    inc d
     pop bc
     djnz .sd_scan
 
@@ -2084,8 +2172,8 @@ _scroll_down:
     jr .sd_row
 
 .sd_done:
-    ; Clear top row pixels (row 0)
-    ld a, 0
+    ; Clear the top row's bitmap
+    xor a
     call _calc_row_addr         ; HL = row 0, scan 0
     ld b, 8
 .sd_clear_scan:
@@ -2102,12 +2190,27 @@ _scroll_down:
     pop bc
     djnz .sd_clear_scan
 
-    ; Scroll attributes down: rows 0-22 → 1-23
-    ld hl, SCR_ATTR + 22 * 32   ; source: attr row 22
-    ld de, SCR_ATTR + 23 * 32   ; dest: attr row 23
-    ld bc, 23 * 32
+    ; Attributes: rows 0..last-1 -> 1..last, then clear row 0
+    ld a, (_scroll_last)
+    call _attr_row_offset       ; HL = last * 32
+    ld b, h
+    ld c, l                     ; BC = count
+    push bc
+    ld de, SCR_ATTR
+    add hl, de                  ; HL = dest end (attr row last)
+    push hl
+    ld de, 32
+    ld a, l
+    sub e
+    ld l, a
+    ld a, h
+    sbc a, 0
+    ld h, a                     ; HL = source end (attr row last-1)
+    pop de                      ; DE = dest end
+    pop bc
     lddr
-    ; Clear top attr row
+
+    ; Clear the top attr row
     ld a, (scr_attr)
     ld hl, SCR_ATTR
     ld de, SCR_ATTR + 1

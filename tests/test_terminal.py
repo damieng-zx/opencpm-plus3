@@ -113,6 +113,43 @@ class WrapControl(unittest.TestCase):
         self.assertIn("ld a, (scr_wrap)", body)
 
 
+class StatusLine(unittest.TestCase):
+    """ESC 0/1 and TE_STL share one flag; scrolling is height-driven."""
+
+    def test_escape_table_has_status_line(self):
+        text = source("src/bios/screen.zpa")
+        table = text[text.index(".esc_table:"):
+                     text.index("db 0                ; end of table")]
+        self.assertRegex(table, r"db '0'\s*\n\s*dw \.esc_stl_off")
+        self.assertRegex(table, r"db '1'\s*\n\s*dw \.esc_stl_on")
+
+    def test_apply_reserves_the_bottom_row(self):
+        text = source("src/bios/screen.zpa")
+        body = text[text.index("_stl_apply:"):text.index("_vp_fast_scroll:")]
+        self.assertIn("ld (stl_on), a", body)
+        self.assertIn("ld (vp_height), a", body)
+        self.assertIn("ld (cursor_row), a", body)
+        self.assertIn("_blank_render_range", body)
+
+    def test_fast_scroll_uses_the_viewport_height(self):
+        text = source("src/bios/screen.zpa")
+        for start, end in (("_scroll_up:", "_scroll_clear:"),
+                           ("_scroll_down:", "_clear_screen:")):
+            body = text[text.index(start):text.index(end)]
+            self.assertIn("ld a, (vp_height)", body)
+            self.assertIn("_scroll_last", body)
+            self.assertNotIn("ld a, 23", body)
+
+    def test_te_stl_contract(self):
+        text = source("src/bios/bios.zpa")
+        ask = text[text.index(".te_stl_ask:"):text.index(".te_stl_on_off:")]
+        self.assertIn("ld a, (stl_on)", ask)
+        self.assertIn("ld a, 0xFF", ask)
+        onoff = text[text.index(".te_stl_on_off:"):text.index(".te_ask:")]
+        self.assertIn("ld a, (xbios_arg_a)", onoff)
+        self.assertIn("_stl_apply", onoff)
+
+
 class PromptEscapeEcho(unittest.TestCase):
     """F10 must pass ESC to the screen: BREAK 3 0 works at the A> prompt."""
 

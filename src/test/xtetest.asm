@@ -173,38 +173,83 @@ start:
     ld c, 9
     call BDOS
 
-    ; === Test 4: TE_STL_ASK ===
+    ; === Test 4: TE_STL_ASK / TE_STL_ON_OFF ===
     ld de, msg_t4
     ld c, 9
     call BDOS
 
-    ; TE_STL_ON_OFF is accepted and ignored; it must return with Z set.
+    ; Disable first, so the test is independent of the current state.
+    xor a
     ld hl, TE_STL_ON_OFF
     ld (userf_dw), hl
     call userf_trampoline
-    jr z, .stl_ask
-    ld de, msg_nz
-    jr .stl_print
-.stl_ask:
+    or a
+    jr nz, .stl_bad
+
+    ; Enable: A = FFh, Z clear.
+    ld a, 0xFF
+    ld hl, TE_STL_ON_OFF
+    ld (userf_dw), hl
+    call userf_trampoline
+    push af
+    pop bc                      ; B = A, C = F
+    ld a, b
+    cp 0xFF
+    jr nz, .stl_bad
+    bit 6, c                    ; Z must be clear when enabled
+    jr nz, .stl_bad
+
+    ; TE_ASK now reports one row less: D = height - 1 = 22.
+    ld hl, TE_ASK
+    ld (userf_dw), hl
+    call userf_trampoline
+    ld a, d
+    cp 22
+    jr nz, .stl_bad
+
+    ; ASK agrees: A = FFh, Z clear.
     ld hl, TE_STL_ASK
     ld (userf_dw), hl
     call userf_trampoline
-    ; A=0 (disabled), Z set
-
     push af
-    pop bc                      ; B=A, C=F
+    pop bc
     ld a, b
-    call print_hex
-    ld e, ' '
-    ld c, 2
-    call BDOS
-    ; Check Z flag
-    bit 6, c                    ; Z flag is bit 6 of F
-    jr nz, .stl_z
-    ld de, msg_nz
+    cp 0xFF
+    jr nz, .stl_bad
+    bit 6, c
+    jr nz, .stl_bad
+
+    ; Disable again: A = 0, Z set.
+    xor a
+    ld hl, TE_STL_ON_OFF
+    ld (userf_dw), hl
+    call userf_trampoline
+    or a
+    jr nz, .stl_bad
+
+    ; TE_ASK is back to 24 text rows: D = 23.
+    ld hl, TE_ASK
+    ld (userf_dw), hl
+    call userf_trampoline
+    ld a, d
+    cp 23
+    jr nz, .stl_bad
+
+    ; ASK: A = 0, Z set.
+    ld hl, TE_STL_ASK
+    ld (userf_dw), hl
+    call userf_trampoline
+    push af
+    pop bc
+    ld a, b
+    or a
+    jr nz, .stl_bad
+    bit 6, c
+    jr z, .stl_bad
+    ld de, msg_ok
     jr .stl_print
-.stl_z:
-    ld de, msg_zf
+.stl_bad:
+    ld de, msg_fail
 .stl_print:
     ld c, 9
     call BDOS

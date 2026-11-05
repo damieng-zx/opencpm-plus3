@@ -672,7 +672,7 @@ xbios_handler:
     cp 0xC5
     jp z, .te_stl_ask
     cp 0xC8
-    ret z                          ; TE_STL_ON_OFF — swallow, no status line
+    jp z, .te_stl_on_off
     cp 0xCB
     jp z, .te_set_ink
     cp 0xCE
@@ -751,8 +751,37 @@ xbios_handler:
     ret
 
 .te_stl_ask:
-    ; TE_STL_ASK (0x00C5): status line always off on our driver.
-    ;   A = 0x00 (disabled), Zero flag set
+    ; TE_STL_ASK (0x00C5): A = 0x00 (disabled) / 0xFF (enabled), with the
+    ; Zero flag set when disabled.  (Once 24x80 mode exists it also reads
+    ; as disabled there, while the status line itself stays enabled.)
+    ; All other registers preserved.
+    ld a, (stl_on)
+    or a
+    jr z, .stl_ask_off
+    ld a, 0xFF
+    ret
+.stl_ask_off:
+    xor a
+    ret
+
+.te_stl_on_off:
+    ; TE_STL_ON_OFF (0x00C8): caller's A = 0x00 disable / 0xFF enable.
+    ; userf_stub saved it in xbios_arg_a before the function ID went into A.
+    ; Returns A = 0x00/0xFF and the matching Zero flag; F/BC/DE/HL may be
+    ; corrupt, as the manual allows.
+    ld a, (xbios_arg_a)
+    or a
+    jr z, .stl_off
+    ld a, 1
+    jr .stl_set
+.stl_off:
+    xor a
+.stl_set:
+    call _stl_apply
+    ld a, (stl_on)
+    or a
+    ld a, 0xFF
+    ret nz
     xor a
     ret
 

@@ -633,6 +633,8 @@ the viewport and leaves the rest of the screen alone.
 
 | Sequence | Effect |
 |----------|--------|
+| `ESC 0` | Status line off: the bottom row returns to the text viewport (24 rows). |
+| `ESC 1` | Status line on: reserves the bottom row for BIOS messages; the text viewport becomes 23 rows and the row is cleared. |
 | `ESC 3 n` | Screen size: n = `0` → 24×32, `1` → 24×51, `2` → 24×80 (not implemented). Also clears the screen, resets the viewport and **cancels page mode**. Typed at the prompt as `ESC 3 0`/`ESC 3 1`. Any other parameter is consumed and ignored (old WordStar Z19 drivers use `ESC 3`/`ESC 4` with a space parameter as attribute controls). |
 | `ESC 4 n` | Page mode: `0` disables, `1` enables (the `con_mode` bit used by `F109`). Other parameters are ignored. |
 | `ESC v` | Enable wrapping at the right edge (default). |
@@ -650,7 +652,7 @@ attribute; existing text keeps the colours it was drawn with.
 
 These are consumed without error but have no effect:
 
-`ESC 0` `ESC 1` (status line), `ESC e` `ESC f` (cursor on/off),
+`ESC e` `ESC f` (cursor on/off),
 `ESC p` `ESC q` (reverse), `ESC r` `ESC u` (underline),
 `ESC x` `ESC y` (24×80 mode).
 
@@ -669,8 +671,26 @@ was outside, and stays at the same relative position otherwise.
 Cursor addressing (`ESC Y`), cursor motion, wrapping, scrolling, erase,
 insert/delete line and delete character are all relative to the viewport;
 `TE_ASK` reports its origin and size.  `ESC 3 n` and `TE_RESET` restore the
-full-screen viewport.  The viewport state lives in bank 6, so it costs no
-`CPM3.SYS` image space.
+whole-screen viewport (23 rows while the status line is enabled).  The
+viewport state lives in bank 6, so it costs no `CPM3.SYS` image space.
+
+#### Status line — `ESC 0` / `ESC 1`
+
+The status line is the BIOS message channel on the bottom screen row, not
+the CCP prompt.  Enabling it reserves row 23, leaves a 23-row text
+viewport and clears the row; disabling gives the row back to the text
+viewport.  The state is independent of the viewport set by `ESC X` and of
+the screen width, and it survives `ESC 3 n`/`TE_RESET`.
+
+`TE_STL_ASK` reports `A = 00h` (disabled, Zero set) or `A = FFh` (enabled,
+Zero clear); `TE_STL_ON_OFF` takes the enable/disable value in `A` and
+returns the new state the same way.  The status line is **off** at cold
+boot; `ESC 1` enables it from the prompt.
+
+The status row is outside the viewport, so scrolling, erase and the fast
+scroll path leave it alone.  It is drawn blank for now: BIOS messages and
+the 80-column `<`/`>` markers land there once the FDC message and 24×80
+paths exist.  The flag lives in bank 6 (`A8C0h`), outside the image.
 
 ### Keyboard
 
