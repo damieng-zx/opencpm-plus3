@@ -60,23 +60,39 @@ python tools/zx84_dri.py
 python tools/zx84_dri.py --bin /path/to/your/cpm/tools
 ```
 
-It copies the built image to `build/dri-test.dsk`, adds the local
-`SHOW.COM`/`ED.COM` and checks:
+It builds a clean `build/dri-test.dsk` from the boot/system files and the
+local copies (the shipped image is packed with the smoke-test programs), then
+checks:
 
 * `SHOW` prints the drive status and free space (`A: RW, Space: ...`).
 * `ED SMOKE.TXT` appends and types a line (`SMOKE OK`), then quits with
   `Q` and `Y`.
-* `ED NEW.TXT` inserts a line and discards it with `Q`/`Y`.
+* `ED NEW.TXT` inserts a line, saves it with `E` (END) and reads it back
+  with `TYPE NEW.TXT`; this covers ED's save path end to end.
+* `SET` reports `ERROR: No options specified.` with no arguments, and
+  `SET RO.TXT [RO]` prints `Read Only (RO)`.  DRI's SET takes its options
+  in square brackets.
+* `SETKEYS RESET.KEY` parses the key file and programs the +3 key override
+  table (XBIOS `KM_SET_KEY`); the harness snapshots the table before and
+  after and fails if nothing changed.
 
-Known issues, found with this harness and not yet run by it:
+The three failures this harness originally found are fixed:
 
-* **ED `E` (end/save)** writes the data and directory sector, then stops
-  with `*e` still on the line; no further BDOS or XBIOS calls are made.
-* **SET** keeps reading the disk instead of drawing its menu.
-* **SETKEYS** stops after opening its key file.
+* **ED `E` (end/save)** built its records at address 0 and destroyed page
+  zero.  ED keeps its record-buffer base at `FCB+21h`, i.e. right after a
+  33-byte FCB, and the BDOS copied 36 bytes back into the FCB after every
+  file call, zeroing it.  `writeback_fcb` now stops at byte 32; only F35
+  (file size) and F36 (set random record) write the random-record bytes.
+* **SETKEYS** crashed on exit because it ends with `RET` and the CCP never
+  pushed a return address.  The CCP now pushes 0000h, exactly like the
+  CP/M 3 CCP, so the entry stack is `SP = TPA_TOP - 2` with `(SP) = 0000h`.
+* **SET** is a GENCOM "COM file with header" (first byte `RET`, module at
+  0200h, `comsize` at 0101h).  The CCP now performs the CP/M 3 loader's
+  module move from 0200h down to 0100h.  Attached RSX modules are not
+  installed (this system has no RSX chain), and SET runs without its RSX.
 
-Without `SHOW.COM`/`ED.COM` the tool prints the notice and exits 0, so CI
-never needs the binaries.
+Without the binaries the tool prints the notice and exits 0, so CI never
+needs them.
 
 ## Other local utilities
 

@@ -567,7 +567,15 @@ bank_sel:
 ;
 ; File functions call setup_fcb on entry to copy the 36-byte FCB from
 ; TPA to fcb_buf (common memory). BDOS works with fcb_buf. On exit,
-; writeback_fcb copies fcb_buf back to the user's TPA address.
+; writeback_fcb copies the documented FCB back to the user's TPA address.
+;
+; Only bytes 0-32 (drive/name/type/EX/S1/S2/RC/allocation/CR) are part
+; of the sequential FCB and only those are written back.  The random
+; record at bytes 33-35 is caller storage unless the BDOS fills it in
+; (F35/F36 use writeback_fcb_rrr for that).  Programs are allowed to put
+; their own data straight after a 33-byte FCB: DRI's ED keeps its
+; record-buffer base at FCB+0x21, and a 36-byte write-back zeroed it, so
+; ED then built records at address 0 and destroyed page zero.
 
 ; ------------------------------------------------------------------
 ; setup_fcb — Copy 36-byte FCB from TPA to fcb_buf
@@ -592,7 +600,7 @@ setup_fcb:
 
 
 ; ------------------------------------------------------------------
-; writeback_fcb — Copy fcb_buf back to TPA FCB address
+; writeback_fcb — Copy the 33-byte sequential FCB back to the TPA
 ;
 ; @proc writeback_fcb
 ; @clobbers af,bc,de,hl
@@ -600,7 +608,7 @@ setup_fcb:
 writeback_fcb:
     ld hl, fcb_buf                 ; source: common memory
     ld de, (fcb_user_addr)         ; dest: TPA
-    ld bc, 36
+    ld bc, 33                      ; stop before R0/R1/R2 (caller-owned)
     call copy_to_user(hl, de, bc)
     ret
 
@@ -1161,3 +1169,48 @@ dd_format_hdr: ds 36               ; DD_FORMAT header table (9 x 4 bytes)
 ; CD_INFO buffer-descriptor table: empty (single 0xFF terminator).  The
 ; manual requires HL to point into common memory so a TPA caller can read it.
 cd_buf_tab: db 0xFF
+
+
+; ==========================================================================
+; ccp_run_prog — Start a freshly loaded .COM (called from the CCP's stub)
+; ==========================================================================
+;
+; The CCP's loader stub copies the program to 0100h and jumps here after
+; setting SP = TPA_TOP.  This routine pushes 0000h, so a program that ends
+; with RET warm-boots like it does under the real CP/M 3 CCP.
+;
+; If the first byte is RET (0C9h) the file carries a CP/M 3 COM header:
+; a 256-byte header with the COM module size at 0101h, the module loaded
+; at 0200h and optional RSX modules after it (see the CP/M 3 LOADER).
+; Move the module down over the header exactly as the LOADER does.  The
+; attached RSX modules are NOT installed - this system has no RSX chain -
+; see docs/third-party-tests.md.
+;
+; Lives in common memory because the loaded program overwrites the CCP.
+;
+; @proc ccp_run_prog
+; @clobbers af,bc,de,hl
+; @end
+ccp_run_prog:
+    ld a, (0x0100)
+    cp 0xC9
+    jr nz, .run
+    ld hl, (0x0101)                ; COM module size
+    ld a, h
+    or l
+    jr z, .run                     ; empty module
+    ld a, h
+    cp 0xF0
+    jr nc, .run                    ; absurd size - treat as a plain COM
+    push bc                        ; keep C = current drive
+    ld bc, (0x0101)
+    ld hl, 0x0200
+    ld de, 0x0100
+    ldir                           ; module down over the header
+    pop bc
+.run:
+    ld hl, 0
+    push hl                        ; RET from the program returns to warm boot
+    jp 0x0100
+
+    assert ccp_run_prog == 0xFD0F, "miniccp.zpa CCP_RUN_PROG must match ccp_run_prog"

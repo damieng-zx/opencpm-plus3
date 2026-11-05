@@ -9,7 +9,7 @@ on the ZX Spectrum +3.
 - **Doesn't work:** the observed failure is described below.
 - **Not yet tested:** candidate software; no claim either way.
 
-Build used for the current results: `CPM3.SYS` 16,253 bytes + `CPM3C.SYS` 1,807 bytes plus `CCP.COM` 3,620 bytes (the CCP is loaded from the disk), no FDC retries.
+Build used for the current results: `CPM3.SYS` 16,303 bytes + `CPM3C.SYS` 1,847 bytes plus `CCP.COM` 3,620 bytes (the CCP is loaded from the disk), no FDC retries.
 Tests were run on 2026-10-28 through the zx84 MCP server.
 
 ## ✅ Works
@@ -43,7 +43,9 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **APL/Z** | 1.1 | `APL`, date `010180`, `2+2` → `4`, `1 2 3 + 4 5 6` → `5 7 9` | Start-up asks for `mmddyy`; 30 KB workspace |
 | **SUBMIT** (our build) | — | Explicit `SUBMIT SMOKE.SUB`, implicit `SMOKE`, `$1`/`$2` substitution, missing-file/missing-parameter paths | Project tool, not third-party |
 | **SHOW** | DRI CP/M 3 | Prints `A: RW, Space: ...` | Local-only harness `tools/zx84_dri.py` |
-| **ED** | DRI CP/M 3 | Appends/types a line, inserts text, `Q`/`Y` quits | Read/edit and quit work; `E` (save) hangs, see below |
+| **ED** | DRI CP/M 3 | Appends/types a line, inserts text, `E` (END) saves and the text reads back with `TYPE`, `Q`/`Y` quits | Local-only harness; the save used to hang (see below) |
+| **SET** | DRI CP/M 3 | Reports `ERROR: No options specified.` and applies a bracketed attribute (`SET FILE [RO]` prints `Read Only (RO)`) | Local-only harness; options go in `[...]` |
+| **SETKEYS** | Locomotive (+3) | Parses `RESET.KEY` and programs the +3 key override table through XBIOS `KM_SET_KEY`/`KM_SET_EXPAND` | Local-only harness verifies the table changed |
 
 ## ❌ Doesn’t work yet
 
@@ -52,11 +54,21 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **WordStar 3.0 display** | The default run still wraps at 51 columns, but `wordstar30_80` enters `SET24X80` first: the no-file menu fits 80 columns and EXTEND+Enter shows the right half. Visual 200 escape codes leave artifacts at the line starts. | The original crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: terminal escape handling. |
 | **Turbo Pascal display** | The default run wraps; `turbo3_80` fits the IDE in 80 columns. Kaypro terminal escapes leave stray `1` characters in the buffer. | 24x80 solves the width; the remaining work is the Kaypro terminal escape set. |
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. `supercalc2_80` fits the banner and right half in 24x80; the escapes remain. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
-| **ED `E` (save)** | Writes the data and directory sector, then stops with `*e` still on the line; no further BDOS/XBIOS calls. | Found with `tools/zx84_dri.py`; `Q`/`Y` exits normally, so the failure is in ED's end-of-edit path after the write. |
-| **SET** | Reads the disk indefinitely instead of drawing its menu. | Found with `tools/zx84_dri.py`; not investigated yet. |
 | **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The clock is a FID installed at cold boot. This loader only stages `RAMDISK.FID`; a generic +3 FID loader is needed. |
 | **BDS C compiler exit** | Part II prints `38K to spare`, then the CPU loops in TPA (PC around `183B`-`184D`) after a directory write; no CCP return. | The write completes, so the loop is in the compiler's exit path; needs a debugger session. |
-| **SETKEYS** | Stops after opening its key file. | Found with `tools/zx84_dri.py`; try it with a known `.KEY` file. |
+
+Recently fixed: **DRI ED/SET/SETKEYS**.  ED's `E` command corrupted page
+zero because its record-buffer base lives at `FCB+21h` (a 33-byte FCB) and
+`writeback_fcb` copied 36 bytes back after every file call, zeroing that
+base; ED then built records at address 0.  The FCB write-back now stops at
+byte 32 and only F35/F36 (which produce R0/R1/R2) write the full FCB.
+SETKEYS crashed because our CCP did not push the warm-boot return address
+(it exits with `RET`); the CCP now pushes 0000h like the real one, so
+`SP = TPA_TOP - 2` on entry.  SET.COM is a GENCOM COM-with-header file: its
+first byte is `RET` and the module sits at 0200h, so the CCP now implements
+the CP/M 3 COM header move (`comsize` at 0101h) before jumping to 0100h.
+Attached RSX modules are not installed.  `SET` options need the brackets:
+`SET FILE [RO]`.
 
 Recently fixed: **SLR Z80ASM 1.32** used to fail with `Line Too Long`
 because it sets a multi-sector count (8) with F44 and assumes one F20 moved

@@ -3948,7 +3948,8 @@ bf_f35:
     jp bdos_ret
 
 .fsz_done:
-    call writeback_fcb()
+    call writeback_fcb()       ; bytes 0-32
+    call writeback_fcb_rrr()   ; bytes 33-35: R0/R1/R2 are the result
     xor a
     ld l, a
     ld h, 0
@@ -3991,8 +3992,41 @@ bf_f36:
     ld (ix + 34), h            ; R1
     ld (ix + 35), 0            ; R2
 
-    call writeback_fcb()
+    call writeback_fcb()       ; bytes 0-32
+    call writeback_fcb_rrr()   ; bytes 33-35: R0/R1/R2 are the result
     jp bdos_eok                ; A=0, HL=0 on success
+
+
+; ------------------------------------------------------------------
+; writeback_fcb_rrr — copy FCB[33..35] (R0/R1/R2) back to the TPA
+;
+; writeback_fcb stops at byte 32 so that a program can keep its own
+; data directly after a 33-byte FCB (DRI's ED stores its record-buffer
+; base at FCB+0x21).  The two calls that produce the random record
+; still publish it, one byte at a time.
+;
+; @proc writeback_fcb_rrr
+; @clobbers af,bc,de,hl
+; @end
+writeback_fcb_rrr:
+    push bc
+    ld de, (fcb_user_addr)
+    ld hl, 33
+    add hl, de                     ; HL = user FCB + 33
+    ex de, hl                      ; DE = user FCB + 33
+    ld hl, fcb_buf + 33
+    ld a, (hl)
+    call write_user_byte(a, de)
+    inc hl
+    inc de
+    ld a, (hl)
+    call write_user_byte(a, de)
+    inc hl
+    inc de
+    ld a, (hl)
+    call write_user_byte(a, de)
+    pop bc
+    ret
 
 
 ; F40: Write Random with Zero Fill

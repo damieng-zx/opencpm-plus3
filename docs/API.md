@@ -45,8 +45,10 @@ F600h  common memory starts  ; SCB/BIOS stubs, not usable by programs
 
 When a .COM program starts executing at 0100h:
 
-- **SP** = 0xF600 (`TPA_TOP` = first byte of common memory). The stack grows
-  down into the TPA, so memory at and above 0xF600 is off limits.
+- **SP** = 0xF5FE (`TPA_TOP` - 2). The CCP pushes 0000h (the warm-boot
+  vector) as the program's return address, exactly like the CP/M 3 CCP, so
+  a transient can end with `RET`. The stack grows down into the TPA, so
+  memory at and above 0xF600 is off limits.
 - **C** = current default drive (0=A)
 - **Z80 interrupts**: Enabled, IM 1
 - **Page zero**: WBOOT at 0000h, IOBYTE at 0003h, user/drive at 0004h,
@@ -60,10 +62,24 @@ When a .COM program starts executing at 0100h:
 - **Command tail**: length byte at 0080h, ASCII text at 0081h (no trailing CR)
 - Both FCBs are cleared (drive=0, name=spaces) if no argument was given
 
+### COM file header (RSX-enabled programs)
+
+A .COM file whose first byte is `RET` (`0C9h`) carries a CP/M 3 COM header,
+as produced by `GENCOM` for programs with attached RSX modules.  The CCP's
+loader copies the file to 0100h; the header occupies 0100h-01FFh and the
+actual module starts at 0200h.  The loader then moves `comsize` (the word
+at 0101h) bytes from 0200h down to 0100h before starting the program, like
+the CP/M 3 `LOADER`.  **Attached RSX modules are not installed**: this
+system has no RSX chain, so SET.COM runs without its RSX.  The helper lives
+in common memory (`ccp_run_prog`) because the loaded program overwrites the
+CCP.
+
 ### Exit Convention
 
 Return to the CCP by jumping to 0000h (warm boot). This reloads the CCP and
 redisplays the prompt. You can also call BDOS function 0 (system reset).
+Because the CCP pushes 0000h before entry, a plain `RET` warm-boots too
+(that is how DRI's `SETKEYS` exits).
 
 Programs should close any open files before exiting (BDOS F16).
 
@@ -871,8 +887,10 @@ CP/M bank 1 (the TPA).  See [XBIOS/TE Interface](cpm-plus-xbios.md) for
 the register contracts, colour encoding and the `SCR_RUN_ROUTINE`
 common-memory limitation.  `KM_SET_SPEED` (`0x00E0`) sets the keyboard
 repeat delays, `KM_SET_KEY` (`0x00D7`) rewrites key translations,
-`KM_SET_EXPAND` (`0x00D4`) stores expansion strings, and
-`KM_KT_PUT` (`0x00DD`)/`KM_KT_GET` (`0x00DA`) queue and dequeue key tokens.
+`KM_SET_EXPAND` (`0x00D4`) stores expansion strings (the source string may
+live in the TPA: the handler copies it byte by byte through the common
+stub), and `KM_KT_PUT` (`0x00DD`)/`KM_KT_GET` (`0x00DA`) queue and dequeue
+key tokens.
 
 ---
 

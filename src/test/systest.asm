@@ -24,12 +24,20 @@ start:
     ; lint-exempt: stack  ; the deep-stack test deliberately changes SP
     ld (entry_sp), sp
 
-    ; --- 1. Initial SP must be TPA_TOP -----------------------------------
+    ; --- 1. Initial SP: the CCP enters a transient with 0000h (warm boot)
+    ;        pushed on the stack, i.e. SP = TPA_TOP - 2, exactly like the
+    ;        CP/M 3 CCP does so a program can exit with RET. --------------
     ld hl, (entry_sp)
-    ld de, TPA_TOP
+    ld de, TPA_TOP - 2
     or a
     sbc hl, de
+    jr nz, .sp_bad
+    ld hl, (entry_sp)             ; and the pushed word must be 0000h
+    ld a, (hl)
+    inc hl
+    or (hl)
     jr z, .sp_ok
+.sp_bad:
     ld de, msg_stack_bad
     jp fail
 

@@ -127,6 +127,15 @@ OCR does not work with our custom 5px font.
 5. `warm_boot` → copy the staged CCP (bank 6, B000h) to 0100h
 6. start_tpa (common) → switch to TPA mode, set page zero, JP 0100h
 
+The CCP's `.COM` loader stub is copied to `0008h` for each run.  The CCP
+sets `SP = TPA_TOP` and enters the stub, which loads the file at 0100h.
+`ccp_run_prog` (common memory) then pushes `0000h` so a program may exit
+with `RET` (the real CP/M 3 CCP does the same), applies the CP/M 3 COM
+header rule (if 0100h holds `RET`, the module at 0200h is moved down
+`comsize` bytes from 0101h) and jumps to 0100h.  Attached RSX modules are
+not installed.  The stub must stay below `0038h` (the IM 1 vector); an
+assert enforces it.
+
 The CCP is **not** part of CPM3.SYS: `CCP.COM` (the MiniCCP PRL) is read from
 the boot disk into bank 6 at B000h by the stage-2 loader and copied to
 0100h on every warm boot, so a normal exit never touches the disk. A cold

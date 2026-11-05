@@ -47,8 +47,10 @@ for this project.
 - **Banked memory**: 61K TPA, a separate system bank, and a common-memory stub
   that bridges TPA calls into the BIOS/BDOS.
 - **MiniCCP**: `CCP.COM`, loaded from the boot disk at cold boot like real
-  CP/M 3, with DIR, TYPE, ERA, REN, USER and HELP built in, `.COM` loading,
-  SUBMIT chaining and F47 program chaining.
+  CP/M 3, with DIR, TYPE, ERA, REN, USER and HELP built in, `.COM` loading
+  (including GENCOM COM files with a 256-byte header), the CP/M 3 warm-boot
+  return address on the program stack, SUBMIT chaining and F47 program
+  chaining.
 - **C: RAM disk**: optional 16K `RAMDISK.FID` in bank 7.
 - **Clock**: tick-driven date/time (F104/F105), maintained by an ISR in common
   memory so it keeps running while a TPA program executes.

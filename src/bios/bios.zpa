@@ -1691,12 +1691,28 @@ xbios_handler:
     ld a, c
     ld (de), a                   ; slot length
     inc de
-    pop hl                       ; restore the source string
-    ld b, 0
+    pop hl                       ; HL = source string (in the TPA)
     ld a, c
     or a
     jr z, .kex_ok                ; LDIR with BC=0 would copy 64K
-    ldir                         ; BC = length
+    ld b, c                      ; B = byte count
+.kex_copy:
+    ; The caller's string lives in the TPA, but this handler runs in the
+    ; system banks: read one byte at a time through the common-memory
+    ; helper (read_user_byte switches to TPA and back).
+    push bc
+    push hl
+    push de
+    ld d, h
+    ld e, l
+    call read_user_byte(de)      ; A = byte from the TPA
+    pop de
+    pop hl
+    ld (de), a
+    inc hl
+    inc de
+    pop bc
+    djnz .kex_copy
 .kex_ok:
     scf
     ret

@@ -782,7 +782,12 @@ class KmSetExpand(unittest.TestCase):
         self.assertIn("push hl", body)           # keep the source
         self.assertIn("pop hl", body)
         self.assertIn("ld (de), a", body)        # slot length
-        self.assertIn("ldir", body)
+        # The caller's string is in the TPA while the handler runs in the
+        # system banks, so each byte is fetched through read_user_byte
+        # instead of a raw LDIR.
+        self.assertIn("call read_user_byte(de)", body)
+        self.assertIn(".kex_copy", body)
+        self.assertNotIn("ldir", body)
         self.assertIn("scf", body)
         self.assertIn(".kex_bad", body)
 
