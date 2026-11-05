@@ -2201,7 +2201,20 @@ start:
     ld a, 50 + 32
     call t33_put
 
-    ; Back on the full screen: print the marker and the result together.
+    ; Back on the full screen: park the cursor at the bottom so the result
+    ; does not overwrite rows near the top (the expanded viewport keeps the
+    ; cursor at the same absolute position, which is correct but here sits
+    ; at the top of the screen).
+    ld a, 0x1B
+    call t33_put
+    ld a, 'Y'
+    call t33_put
+    ld a, (23 - 1) + 32
+    call t33_put
+    ld a, 32
+    call t33_put
+
+    ; Print the marker and the result together.
     ld de, msg_t33
     ld c, 9
     call BDOS

@@ -143,11 +143,12 @@ window; a missing `CPM3C.SYS` stops the boot at the loader.
 **System mode (mode 3: banks 4,7,6,3)**:
 - **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers
 - **4000-7FFF**: Bank 7 — C: RAM disk (16K, owned by `RAMDISK.FID`)
-- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, `DD_CHECK_SECTOR` compare buffer at 9E00h, runtime screen/scroll buffers at A000h-A5FFh, row-address table at A700h and CSV/ALV at A740h-A82Ch, BIOS/BDOS scratch at A600h-A6FFh and A82Dh-A83Ch, screen cursor/ESC scratch at A730h-A739h, viewport scratch at A73Ah-A73Fh, loader-staged screen row table at A890h-A8BFh, status-line flag at A8C0h, `KM_SET_KEY` translation table at A900h-A99Fh, `KM_SET_EXPAND` slots at A9A0h-AD7Fh, FCB shadow at AD80h-ADA3h, staged `CCP.COM` at B000h-BFFFh
+- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, `DD_CHECK_SECTOR` compare buffer at 9E00h, runtime screen/scroll buffers at A000h-A5FFh, row-address table at A700h and CSV/ALV at A740h-A82Ch, BIOS/BDOS scratch at A600h-A6FFh and A82Dh-A83Ch, screen cursor/ESC scratch at A730h-A739h, viewport scratch at A73Ah-A73Fh, loader-staged screen row table at A890h-A8BFh, status-line flag at A8C0h, 24x80 state at A8C1h-A8CEh, `KM_SET_KEY` translation table at A900h-A99Fh, `KM_SET_EXPAND` slots at A9A0h-AD7Fh, FCB shadow at AD80h-ADA3h, staged `CCP.COM` at B000h-BFFFh
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
 
 **Screen access (mode 2: banks 4,5,6,3)**:
 - **4000-7FFF**: Bank 5 — Screen RAM (paged in temporarily by `_page_in`/`_page_out`)
+- **5B00-62BF**: Bank 5 — 80x24 logical screen for 24x80 mode (`LG_BUF`), outside the bitmap/attributes
 
 ### Banking (port 1FFD)
 - Mode 0 (`BANK0_1FFD=0x01`): banks 0,1,2,3 — TPA execution

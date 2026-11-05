@@ -101,10 +101,13 @@ must fit the 16K `C000-FFFF` window. The common stub is a **separate boot
 file**, `CPM3C.SYS`, staged in bank 6 and copied to `F600` by `init`; it has
 its own 2,560-byte window. `tools/check_layout.py` enforces both and
 `tools/split_sys.py` cuts the two files out of the raw assembly output.
+The assembly uses `device none` because the raw blob (head + common) can
+run past `0xFFFF`; `build_memory_map.py` unwraps the listing's 16-bit
+addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 14,399 | 16,384 (`C000-FFFF`) | 1,985 |
+| `CPM3.SYS` head         | 15,694 | 16,384 (`C000-FFFF`) | 690   |
 | `CPM3C.SYS` common stub | 1,807  | 2,560 (`F600-FFFF`)  | 753   |
 | loader                  | 1,221  | 8,704 (17 sectors)   | 7,483 |
 
@@ -129,9 +132,9 @@ Remaining strategies, in order:
    bitmap/attributes. The 24×80 virtual buffer (1,920 bytes) belongs there,
    not in bank 6 or the TPA, so 80-column mode costs code space only.
 
-The status line is implemented on top of the viewport (23 text rows, the
-bottom row reserved for BIOS messages; it costs about 150 bytes), and the
-24×80 work has room for its code and keeps its buffer in bank 5.
+The status line and the 24×80 virtual screen are implemented; together
+they cost about 1,300 bytes, leaving ~690 bytes of head slack. The 24×80
+buffer lives in bank 5 (`5B00-62BF`), not in the image.
 
 ### Stage 4 — `cold_boot` (`src/bios/bios.zpa`, runs in bank 4)
 

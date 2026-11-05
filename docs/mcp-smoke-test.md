@@ -10,7 +10,7 @@ checks that the stage-2 loader staged the three fonts and `RAMDISK.FID`
 byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), fills the remaining
 free bank-6 gaps with a sentinel and verifies they survive the app runs,
 then runs
-`SYSTEST`, `XTETEST`, `STLTEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
+`SYSTEST`, `XTETEST`, `STLTEST`, `M80TEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
 `F59` overlay load and an `F111` print-block check), and the main CCP flows,
 and asserts the 51x24 character buffer plus an empty FDC retry log:
 
@@ -375,6 +375,19 @@ fast scroll and must leave the status row alone.  Disabling again must
 give `D=23` and `A=00h`/Zero set.  XTETEST test 4 runs the same checks,
 but so early in its burst that the runner's frame sampling misses the
 marker; `STLTEST` is the one the smoke gates on.
+
+### 24x80 suite (`M80TEST`) and `SET24X80`
+
+`M80TEST` enters `ESC x`, checks `TE_ASK` reports an 80-column viewport
+(`E=79`), moves the cursor to column 70 (auto-flip), checks the logical
+cursor (`L=70`), leaves with `ESC y` and checks the width is back to
+`E=50`.  It prints `M80..OK`; the runner also checks that the physical
+width and 24x80 flag are restored afterwards.
+
+The runner then exercises `SET24X80.COM` from the prompt: no argument and
+`ON` must enter 24x80, `OFF` must leave it, the prompt must still appear,
+and `SET24X80 JUNK` must print `SET24X80 [ON|OFF]`.  After each switch it
+reads `mode80` (bank 6, `A8C1h`) and requires the expected state.
 
 ### BDOS file regression suite
 

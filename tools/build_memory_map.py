@@ -82,6 +82,8 @@ def parse_listing(path: Path) -> list[Section]:
     common_section = Section("Common memory", base=0xF600, limit=0x10000, labels=[])
 
     section_stack: list[Section] = [file_section]
+    file_wrap = 0
+    file_last = -1
 
     for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
         m = LINE_RE.match(raw)
@@ -120,6 +122,14 @@ def parse_listing(path: Path) -> list[Section]:
             continue
 
         current = section_stack[-1]
+        if current is file_section:
+            # The raw blob can run past 0xFFFF (the common stub is split
+            # out); the listing wraps those addresses modulo 64K.  Labels
+            # are monotonic, so a lower address means another 0x10000 chunk.
+            if file_last >= 0 and addr < file_last:
+                file_wrap += 0x10000
+            addr += file_wrap
+            file_last = addr
         if not (current.base <= addr < current.limit):
             # An EQU or alias outside this section's address window.
             continue

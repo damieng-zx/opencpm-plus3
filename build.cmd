@@ -65,6 +65,7 @@ if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\termtest.com src\test\termtest.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\systest.com src\test\systest.asm
+%SJASMPLUS% --raw=build\m80test.com src\test\m80test.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\regtest.com src\test\regtest.asm
 if errorlevel 1 goto :fail
@@ -81,6 +82,7 @@ if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\submit.com src\tools\submit.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\screen.com src\tools\screen.asm
+%SJASMPLUS% --raw=build\set24x80.com src\tools\set24x80.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\b16test.com src\tools\b16test.asm
 if errorlevel 1 goto :fail
@@ -104,7 +106,7 @@ shift
 goto collect_extra_files
 :extra_files_done
 
-python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\bdostest.com build\xtetest.com build\stltest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\b16test.com build\RAMDISK.FID src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\bdostest.com build\xtetest.com build\stltest.com build\m80test.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\b16test.com build\RAMDISK.FID src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 python3 tools\mkdsk.py create build\cpm3_720.dsk --format 720k --add src\test\hello16.txt

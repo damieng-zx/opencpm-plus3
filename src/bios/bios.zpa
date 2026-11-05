@@ -26,7 +26,9 @@
 ;
 ; ==========================================================================
 
-    device zxspectrum128
+    ; The raw blob can extend past 0xFFFF (head + common are split into
+    ; CPM3.SYS and CPM3C.SYS), so use no 64K memory model at assembly time.
+    device none
     org 0xC000
 
 ; --- Port definitions (global, used by all sections) ---
@@ -229,6 +231,13 @@ cold_boot:
     ld (cached_drive), a
 
     ; Initialize drivers
+    ; Screen mode flags live in bank-6 RAM; seed them once.
+    xor a
+    ld (stl_on), a
+    ld (mode80), a
+    ld (lg_off), a
+    ld a, 1
+    ld (lg_auto), a
     call scr_init                  ; Screen: clear, set attributes
     call kbd_init                  ; Keyboard: reset state
     call fdc_init                  ; FDC: recalibrate drive
@@ -751,14 +760,22 @@ xbios_handler:
     ret
 
 .te_stl_ask:
-    ; TE_STL_ASK (0x00C5): A = 0x00 (disabled) / 0xFF (enabled), with the
-    ; Zero flag set when disabled.  (Once 24x80 mode exists it also reads
-    ; as disabled there, while the status line itself stays enabled.)
+    ; TE_STL_ASK (0x00C5): A = 0x00 (disabled) / 0xFF (enabled).  The Zero
+    ; flag is set when the status line is disabled *or* the screen is in
+    ; 24x80 mode, even though the enabled state itself is unchanged.
     ; All other registers preserved.
     ld a, (stl_on)
     or a
     jr z, .stl_ask_off
+    ld a, (mode80)
+    or a
+    jr z, .stl_ask_on
     ld a, 0xFF
+    cp a                       ; 24x80: force Zero, keep A = FFh
+    ret
+.stl_ask_on:
+    ld a, 0xFF                 ; enabled and not 24x80: NZ
+    or a
     ret
 .stl_ask_off:
     xor a
@@ -797,7 +814,14 @@ xbios_handler:
     ld a, (vp_height)
     dec a
     ld d, a
+    ld a, (mode80)
+    or a
+    jr z, .te_ask_vw
+    ld a, 80
+    jr .te_ask_w
+.te_ask_vw:
     ld a, (vp_width)
+.te_ask_w:
     dec a
     ld e, a
     ld a, (cursor_row)

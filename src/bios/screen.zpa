@@ -94,6 +94,26 @@ vp_tmp_col: equ 0xA73F         ; ESC X: cursor's old absolute column
 ; Stored in the free bank-6 gap at A8C0, outside the image.
 stl_on:     equ 0xA8C0
 
+; --- 24x80 mode (bank 6, outside the image) ---
+; mode80   : 0 = physical screen, 1 = 80-column logical screen
+; lg_off   : first logical column shown on the physical screen
+; lg_auto  : 1 = follow the cursor (ESC 5 1), 0 = manual only (ESC 5 0)
+; lg_step  : logical columns between pages (32->24, 51->29, 64->16)
+; lg_savecols: physical width to restore when leaving 24x80
+mode80:      equ 0xA8C1
+lg_off:      equ 0xA8C2
+lg_auto:     equ 0xA8C3
+lg_step:     equ 0xA8C4
+lg_savecols: equ 0xA8C5
+lg_char:     equ 0xA8C6
+lg_vis:      equ 0xA8C7
+lg_row:      equ 0xA8C8
+lg_col:      equ 0xA8C9
+lg_src:      equ 0xA8CA
+lg_dst:      equ 0xA8CC
+lg_loop:     equ 0xA8CE
+LG_BUF       equ 0x5B00         ; 80*24 bytes in bank 5, after the attributes
+
 ; --- XBIOS colour state ---
 scr_ink:      db 7             ; Ink colour 0-7 (Spectrum GRB)
 scr_paper:    db 1             ; Paper colour 0-7
@@ -191,6 +211,11 @@ scr_init:
     ld bc, 767
     ldir
 
+    ld a, (mode80)
+    or a
+    jr z, .si_no_lg
+    call _lg_clear_all
+.si_no_lg:
     call _page_out             ; Clobbers AF, BC
     ret
 
@@ -272,6 +297,8 @@ scr_putchar:
     jp z, .esc_p3              ; screen size
     cp '4'
     jp z, .esc_p4              ; page mode
+    cp '5'
+    jp z, .esc_p5              ; 24x80 auto-flip
     cp 'b'
     jp z, .esc_pb              ; foreground colour
     cp 'c'
@@ -300,6 +327,12 @@ scr_putchar:
     ret c                      ; Other control chars — ignore
 
     ; --- Printable character ---
+    ld b, a
+    ld a, (mode80)
+    or a
+    ld a, b
+    jp nz, _put80
+
     push af                    ; Save char (in A)
 
     ; Write to buffer
@@ -458,9 +491,9 @@ scr_putchar:
     db 'w'
     dw .esc_w          ; wrap off
     db 'x'
-    dw .esc_ret         ; enter 80-col     — ignore
+    dw _enter80         ; enter 24x80 mode
     db 'y'
-    dw .esc_ret         ; leave 80-col     — ignore
+    dw _exit80          ; leave 24x80 mode
     db 0                ; end of table
 
 ; ------- simple helpers -------
@@ -495,7 +528,7 @@ scr_putchar:
     jr nc, .p3_ignore
 .p3_have:
     cp 2
-    jr z, .p3_ignore           ; 24x80 needs the deferred 80-column mode
+    jr z, .p3_80
     cp 1
     ld a, 32
     jr nz, .p3_apply
@@ -504,9 +537,17 @@ scr_putchar:
     push af
     xor a
     ld (esc_state), a
+    ld (mode80), a             ; ESC 3 cancels 24x80
+    ld (lg_off), a
     call _cancel_paging
     pop af
     jp scr_set_cols
+.p3_80:
+    xor a
+    ld (esc_state), a
+    call _cancel_paging
+    jp _enter80
+
 .p3_ignore:
     xor a
     ld (esc_state), a
@@ -536,6 +577,31 @@ scr_putchar:
     and 0xFE
     ld (con_mode), a
 .p4_done:
+    xor a
+    ld (esc_state), a
+    ret
+
+.esc_p5:
+    ; ESC 5 n - auto-flip in 24x80 mode: 0 disables, 1 enables.
+    ld a, b
+    cp '0'
+    jr c, .p5_raw
+    cp '2'
+    jr nc, .p5_done
+    sub '0'
+    jr .p5_have
+.p5_raw:
+    cp 2
+    jr nc, .p5_done
+.p5_have:
+    ld (lg_auto), a
+    xor a
+    ld (esc_state), a
+    ld a, (lg_auto)
+    or a
+    ret z
+    jp _lg_autoflip
+.p5_done:
     xor a
     ld (esc_state), a
     ret
@@ -612,8 +678,8 @@ scr_putchar:
     ret
 
 .esc_C:
-    ; Cursor right (stop at right edge of the viewport)
-    ld a, (vp_width)
+    ; Cursor right (stop at right edge of the logical screen)
+    call _lg_width
     dec a
     ld b, a
     ld a, (cursor_col)
@@ -621,7 +687,7 @@ scr_putchar:
     ret z
     inc a
     ld (cursor_col), a
-    ret
+    jp _lg_autoflip
 
 .esc_D:
     ; Cursor left (stop at column 0)
@@ -630,14 +696,14 @@ scr_putchar:
     ret z
     dec a
     ld (cursor_col), a
-    ret
+    jp _lg_autoflip
 
 .esc_H:
     ; Home cursor
     xor a
     ld (cursor_col), a
     ld (cursor_row), a
-    ret
+    jp _lg_autoflip
 
 .esc_star:
     ; ADM-3A / Kaypro: clear the screen and home the cursor
@@ -801,7 +867,7 @@ scr_putchar:
     xor a
 .yc_ok:
     ld b, a                    ; B = decoded col
-    ld a, (vp_width)
+    call _lg_width
     cp b                       ; carry set if width <= col (clamp needed)
     jr z, .yc_clamp
     jr c, .yc_clamp
@@ -815,7 +881,7 @@ scr_putchar:
     ld (cursor_row), a
     xor a
     ld (esc_state), a
-    ret
+    jp _lg_autoflip
 
 ; ------- ESC X: set viewport (4 params) -------
 ; ESC X tr lc h w, all + 32.  tr/lc are absolute screen coordinates; h/w
@@ -1133,14 +1199,14 @@ _adv_col:
     ld a, (cursor_col)
     inc a
     ld b, a
-    ld a, (vp_width)
+    call _lg_width
     dec a
     cp b
     jr c, .ac_past
-    ; Still inside the viewport row: store the new column.
+    ; Still inside the row: store the new column.
     ld a, b
     ld (cursor_col), a
-    ret
+    jp _lg_autoflip
 .ac_past:
     ld a, (scr_wrap)
     or a
@@ -1149,10 +1215,10 @@ _adv_col:
     ld (cursor_col), a
     jp _do_lf
 .ac_clamp:
-    ld a, (vp_width)
+    call _lg_width
     dec a
     ld (cursor_col), a
-    ret
+    jp _lg_autoflip
 
 
 ; ==========================================================================
@@ -1215,12 +1281,12 @@ _put_attr:
 ;   Clobbers: AF
 ; ==========================================================================
 ; @proc _do_cr
-; @clobbers af
+; @clobbers af,bc,de,hl,ix
 ; @end
 _do_cr:
     xor a
     ld (cursor_col), a
-    ret
+    jp _lg_autoflip
 
 
 ; ==========================================================================
@@ -1292,10 +1358,14 @@ _do_bs:
     ret z                      ; (0,0) — nothing left to back over
     dec a
     ld (cursor_row), a
-    ld a, (vp_width)           ; col = vp_width; dec below → vp_width-1
+    call _lg_width             ; col = width; dec below → width-1
 .back_in_row:
     dec a
     ld (cursor_col), a
+
+    ld a, (mode80)
+    or a
+    jr nz, .bs80
 
     ; Put space in buffer at new cursor position
     call _cursor_buf_addr      ; Clobbers AF, DE, HL → HL = addr
@@ -1308,6 +1378,10 @@ _do_bs:
     call _render_char          ; Clobbers AF, BC, DE, HL, IX
     call _page_out             ; Clobbers AF, BC
     ret
+.bs80:
+    ld a, ' '
+    call _lg_store_char
+    jp _lg_autoflip
 
 
 ; ==========================================================================
@@ -1433,16 +1507,7 @@ _stl_apply:
     ld a, b
     ld (cursor_row), a
 .sa_row_ok:
-    ld a, (stl_on)
-    or a
-    ret z
-    ; Reserve the bottom row: blank it across the full screen width.
-    xor a
-    ld c, a
-    ld a, (scr_cols)
-    ld b, a
-    ld a, SCR_ROWS - 1
-    jp _blank_render_range
+    jp _stl_draw
 
 
 ; ==========================================================================
@@ -1879,6 +1944,19 @@ _render_char:
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 _scroll_up:
+    ld a, (mode80)
+    or a
+    jr z, _scroll_up_vis
+    call _lg_scroll_up
+    call _scroll_up_vis
+    ld a, (vp_height)
+    dec a
+    jp _lg_render_row
+
+; @proc _scroll_up_vis
+; @clobbers af,bc,de,hl,ix,iy
+; @end
+_scroll_up_vis:
     call _vp_fast_scroll
     jr z, .su_fast
     ; Partial viewport: deleting the top viewport row is a scroll up
@@ -2086,6 +2164,18 @@ _scroll_clear:
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 _scroll_down:
+    ld a, (mode80)
+    or a
+    jr z, _scroll_down_vis
+    call _lg_scroll_down
+    call _scroll_down_vis
+    xor a
+    jp _lg_render_row
+
+; @proc _scroll_down_vis
+; @clobbers af,bc,de,hl,ix,iy
+; @end
+_scroll_down_vis:
     call _vp_fast_scroll
     jr z, .sd_fast
     ; Partial viewport: inserting a row at the top scrolls down
@@ -2256,6 +2346,11 @@ _clear_screen:
     ld bc, 767
     ldir
 
+    ld a, (mode80)
+    or a
+    jr z, .cs_no_lg
+    call _lg_clear_all
+.cs_no_lg:
     call _page_out
     ret
 
@@ -2325,7 +2420,18 @@ _cra_row: db 0                  ; scratch for _clear_row_a row value
 ; @clobbers af,bc,de,hl,ix
 ; @end
 _clear_vp_row_a:
+    ld (lg_row), a              ; save the caller's row
+    ld a, (mode80)
+    or a
+    jr z, .cvra_vis
+    xor a
+    ld c, a                     ; start column 0
+    ld b, 80                    ; full logical row
+    ld a, (lg_row)
+    jp _lg_erase_range
+.cvra_vis:
     ; A = absolute row; clear vp_left..vp_left+vp_width-1
+    ld a, (lg_row)
     ld b, a                     ; B = row
     ld a, (vp_left)
     ld c, a                     ; C = start column
@@ -2398,6 +2504,11 @@ _brr_cnt: db 0
 ; @clobbers af,bc,de,hl,ix
 ; @end
 _clear_viewport:
+    ld a, (mode80)
+    or a
+    jr z, .cv_vis
+    call _lg_clear_viewport
+.cv_vis:
     ld a, (vp_top)
     ld (_vp_row_ctr), a
     ld a, (vp_height)
@@ -2424,6 +2535,21 @@ _vp_row_ctr: db 0
 ; @clobbers af,bc,de,hl,ix
 ; @end
 _erase_line_from_cursor:
+    ld a, (mode80)
+    or a
+    jr z, .efc_vis
+    ld a, (cursor_col)
+    ld c, a                     ; start column (logical)
+    ld b, 80
+    ld a, b
+    sub c
+    ld b, a                     ; count
+    ld a, (vp_top)
+    ld d, a
+    ld a, (cursor_row)
+    add a, d                    ; logical row
+    jp _lg_erase_range
+.efc_vis:
     ld a, (cursor_col)
     ld d, a
     ld a, (vp_width)
@@ -2448,6 +2574,20 @@ _erase_line_from_cursor:
 ; @clobbers af,bc,de,hl,ix
 ; @end
 _erase_line_to_cursor:
+    ld a, (mode80)
+    or a
+    jr z, .eltc_vis
+    ld a, (cursor_col)
+    inc a
+    ld b, a                     ; count
+    xor a
+    ld c, a                     ; start column 0
+    ld a, (vp_top)
+    ld d, a
+    ld a, (cursor_row)
+    add a, d
+    jp _lg_erase_range
+.eltc_vis:
     ld a, (cursor_col)
     inc a
     ld b, a                     ; count
@@ -2470,6 +2610,11 @@ _erase_line_to_cursor:
 ; @clobbers af,bc,de,hl,ix
 ; @end
 _delete_char:
+    ld a, (mode80)
+    or a
+    jr z, .dc_vis
+    jp _lg_delete_char
+.dc_vis:
     ; --- shift the buffer left from the cursor ---
     ld a, (vp_width)
     dec a
@@ -2546,6 +2691,12 @@ _delete_char:
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 _insert_line:
+    ld a, (mode80)
+    or a
+    jr z, .il_vis
+    call _lg_insert_line
+    jp _lg_redraw
+.il_vis:
     ld a, (cursor_row)
     ld (_il_row), a
     ld b, a
@@ -2603,6 +2754,12 @@ _il_row: db 0
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 _delete_line:
+    ld a, (mode80)
+    or a
+    jr z, .dl_vis
+    call _lg_delete_line
+    jp _lg_redraw
+.dl_vis:
     ld a, (cursor_row)
     ld (_dl_row), a
     ld b, a
@@ -2705,7 +2862,7 @@ _redraw_all_screenpaged:
 ; ==========================================================================
 ; @proc scr_set_cols
 ; @param %cols:u8 a
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 scr_set_cols:
     cp 32
@@ -2737,7 +2894,733 @@ scr_set_cols:
     ld hl, 0x8800               ; 32-col uses the 8px font in bank 6
 .setfont:
     ld (font_ptr), hl
-    jp scr_init                 ; clear screen, reset cursor (tail call)
+    call scr_init               ; clear screen, reset cursor
+    jp _stl_draw                ; markers follow the current page
+
+
+
+; ==========================================================================
+; 24x80 mode
+; ==========================================================================
+; The logical screen is 80 columns wide and lives in bank 5 at LG_BUF
+; (5B00-62BF), outside the image and the 32/51/64-column char_buffer.
+; The physical screen shows a window of scr_cols columns starting at
+; lg_off.  Pages are lg_step apart: 32 columns -> 0, 24, 48 (three
+; pages); 51 -> 0, 29; 64 -> 0, 16.  The wider the physical font, the
+; fewer pages are needed.
+;
+; Every logical buffer access pages bank 5 in (mode 2).  The visible
+; char_buffer mirrors the current window, so the existing redraw, scroll
+; and status-line paths keep working unchanged.
+;
+; The manual flip chord is EXTEND+Enter (CAPS+SYMB+Enter, since EXTEND is
+; CAPS+SYMB).  Auto-flip (ESC 5 1, the default) follows the cursor when it
+; leaves the window.
+
+; @proc _mul80
+; @param %n:u8 a
+; @out   hl
+; @clobbers af,de,hl
+; @end
+_mul80:
+    ld l, a
+    ld h, 0
+    add hl, hl                 ; *2
+    add hl, hl                 ; *4
+    add hl, hl                 ; *8
+    add hl, hl                 ; *16
+    ld d, h
+    ld e, l
+    add hl, hl                 ; *32
+    add hl, hl                 ; *64
+    add hl, de                 ; *80
+    ret
+
+
+; @proc _lg_width
+; @out   a
+; @clobbers af
+; @end
+_lg_width:
+    ld a, (mode80)
+    or a
+    jr nz, .lw80
+    ld a, (vp_width)
+    ret
+.lw80:
+    ld a, 80
+    ret
+
+
+; @proc _lg_step_for_cols
+; @clobbers af,b
+; @end
+_lg_step_for_cols:
+    ld a, (scr_cols)
+    ld b, 29
+    cp 51
+    jr z, .lgs_store
+    ld b, 24
+    cp 32
+    jr z, .lgs_store
+    ld b, 16
+.lgs_store:
+    ld a, b
+    ld (lg_step), a
+    ret
+
+
+; @proc _enter80
+; @clobbers af,bc,de,hl,ix,iy
+; @end
+_enter80:
+    ld a, (mode80)
+    or a
+    ret nz
+    ld a, (scr_cols)
+    ld (lg_savecols), a
+    call _lg_step_for_cols
+    ld a, 1
+    ld (mode80), a
+    xor a
+    ld (lg_off), a
+    call scr_init              ; clears the visible screen and LG_BUF
+    jp _stl_draw
+
+
+; @proc _exit80
+; @clobbers af,bc,de,hl,ix,iy
+; @end
+_exit80:
+    ld a, (mode80)
+    or a
+    ret z
+    xor a
+    ld (mode80), a
+    ld (lg_off), a
+    ld a, (lg_savecols)
+    cp 32
+    jr z, .ex_set
+    cp 64
+    jr z, .ex_set
+    ld a, 51
+.ex_set:
+    jp scr_set_cols            ; clears and restores the width
+
+
+; @proc _lg_clear_all
+;   Fill the whole logical screen with spaces.  Bank 5 must be paged in.
+; @clobbers af,bc,de,hl
+; @end
+_lg_clear_all:
+    ld hl, LG_BUF
+    ld de, LG_BUF + 1
+    ld (hl), ' '
+    ld bc, 80 * 24 - 1
+    ldir
+    ret
+
+
+; @proc _lg_clear_row
+;   In: A = logical row.  Bank 5 must be paged in.
+; @param %row:u8 a
+; @clobbers af,bc,de,hl
+; @end
+_lg_clear_row:
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ld d, h
+    ld e, l
+    inc de
+    ld (hl), ' '
+    ld bc, 79
+    ldir
+    ret
+
+
+; @proc _lg_clear_viewport
+; @clobbers af,bc,de,hl
+; @end
+_lg_clear_viewport:
+    call _page_in
+    ld a, (vp_top)
+    ld (lg_loop), a
+    ld a, (vp_height)
+    ld b, a
+.lcv_loop:
+    push bc
+    ld a, (lg_loop)
+    call _lg_clear_row
+    pop bc
+    ld a, (lg_loop)
+    inc a
+    ld (lg_loop), a
+    djnz .lcv_loop
+    call _page_out
+    ret
+
+
+; @proc _lg_scroll_up
+; @clobbers af,bc,de,hl
+; @end
+_lg_scroll_up:
+    call _page_in
+    ld a, (vp_height)
+    dec a
+    jr z, .lsu_blank
+    call _mul80
+    ld b, h
+    ld c, l
+    ld hl, LG_BUF + 80
+    ld de, LG_BUF
+    ldir
+.lsu_blank:
+    ld a, (vp_height)
+    dec a
+    call _lg_clear_row
+    call _page_out
+    ret
+
+
+; @proc _lg_scroll_down
+; @clobbers af,bc,de,hl
+; @end
+_lg_scroll_down:
+    call _page_in
+    ld a, (vp_height)
+    dec a
+    jr z, .lsd_blank
+    call _mul80                ; HL = last * 80 (count)
+    ld b, h
+    ld c, l
+    push bc
+    ld de, LG_BUF - 1
+    add hl, de                 ; HL = source end
+    push hl
+    ld de, 80
+    add hl, de
+    ex de, hl                  ; DE = dest end
+    pop hl                     ; HL = source end
+    pop bc
+    lddr
+.lsd_blank:
+    xor a
+    call _lg_clear_row         ; row 0
+    call _page_out
+    ret
+
+
+; @proc _lg_render_row
+;   Copy one logical row into the visible window and redraw it.
+;   In: A = logical row.
+; @param %row:u8 a
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_render_row:
+    ld (lg_row), a
+    call _page_in
+    ld a, (lg_row)
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ld a, (lg_off)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld (lg_src), hl
+    ld a, (lg_row)
+    call _mul_row_scr_cols
+    ld de, char_buffer
+    add hl, de
+    ld (lg_dst), hl
+    xor a
+    ld (lg_col), a
+.lrr_loop:
+    ld hl, (lg_src)
+    ld a, (hl)
+    inc hl
+    ld (lg_src), hl
+    ld (lg_char), a
+    ld hl, (lg_dst)
+    ld a, (lg_char)
+    ld (hl), a
+    inc hl
+    ld (lg_dst), hl
+    ld b, a
+    ld a, (lg_col)
+    ld c, a
+    ld a, (lg_row)
+    ld d, a
+    call _render_char
+    ld a, (lg_col)
+    inc a
+    ld (lg_col), a
+    ld b, a
+    ld a, (scr_cols)
+    cp b
+    jr nz, .lrr_loop
+    call _page_out
+    ret
+
+
+; @proc _lg_redraw
+;   Redraw every visible row from the logical buffer.
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_redraw:
+    xor a
+    ld (lg_loop), a
+.lrd_loop:
+    ld a, (lg_loop)
+    call _lg_render_row
+    ld a, (lg_loop)
+    inc a
+    ld (lg_loop), a
+    ld b, a
+    ld a, (vp_height)
+    cp b
+    jr nz, .lrd_loop
+    ret
+
+
+; @proc _lg_store_char
+;   Write A to the logical cell at the cursor and mirror it into the
+;   visible window when it falls inside the current page.
+;   In: A = character.
+; @param %ch:u8 a
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_store_char:
+    ld (lg_char), a
+    call _page_in
+    ld a, (cursor_row)
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ld a, (cursor_col)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, (lg_char)
+    ld (hl), a
+
+    ld a, (cursor_col)
+    ld b, a
+    ld a, (lg_off)
+    ld c, a
+    ld a, b
+    sub c
+    jr c, .lsc_done
+    ld (lg_vis), a
+    ld b, a
+    ld a, (scr_cols)
+    cp b
+    jr c, .lsc_done
+    jr z, .lsc_done
+
+    ld a, (cursor_row)
+    call _mul_row_scr_cols
+    ld de, char_buffer
+    add hl, de
+    ld a, (lg_vis)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, (lg_char)
+    ld (hl), a
+    ld b, a
+    ld a, (lg_vis)
+    ld c, a
+    ld a, (cursor_row)
+    ld d, a
+    call _render_char
+.lsc_done:
+    call _page_out
+    ret
+
+
+; @proc _put80
+;   Printable character in 24x80 mode: store it logically, follow the
+;   cursor, then advance.
+; @param %ch:u8 a
+; @clobbers af,bc,de,hl,ix
+; @end
+_put80:
+    ld (lg_char), a
+    call _lg_autoflip
+    ld a, (lg_char)
+    call _lg_store_char
+    jp _adv_col
+
+
+; @proc _lg_autoflip
+;   If auto-flip is on and the cursor left the window, page to it.
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_autoflip:
+    ld a, (mode80)
+    or a
+    ret z
+    ld a, (lg_auto)
+    or a
+    ret z
+    ld a, (cursor_col)
+    ld c, a                    ; C = cursor column
+    ld a, (lg_off)
+    ld b, a                    ; B = current page
+    ld a, (scr_cols)
+    add a, b
+    ld e, a                    ; E = page end (exclusive)
+    ld a, c
+    cp b
+    jr c, .laf_need
+    cp e
+    jr c, .laf_ok
+.laf_need:
+    ld a, 80
+    ld e, a
+    ld a, (scr_cols)
+    ld d, a
+    ld a, e
+    sub d
+    ld e, a                    ; E = max page offset
+    xor a
+    ld b, a                    ; B = best
+    ld d, a                    ; D = candidate
+.laf_pick:
+    ld a, d
+    cp c
+    jr z, .laf_cand
+    jr nc, .laf_done
+    ld a, e
+    cp d
+    jr c, .laf_done
+    ld b, d
+    ld a, (lg_step)
+    add a, d
+    ld d, a
+    jr .laf_pick
+.laf_cand:
+    ld a, e
+    cp d
+    jr c, .laf_done
+    ld b, d
+.laf_done:
+    ld a, (lg_off)
+    cp b
+    ret z
+    ld a, b
+    ld (lg_off), a
+    call _lg_redraw
+    jp _stl_draw
+.laf_ok:
+    ret
+
+
+; @proc _lg_flip
+;   Manual page flip (EXTEND+Enter).  Preserves IX/IY so the keyboard
+;   scanner's contract is unchanged.
+; @clobbers af,bc,de,hl
+; @end
+_lg_flip:
+    ld a, (mode80)
+    or a
+    ret z
+    push ix
+    push iy
+    ld a, (lg_off)
+    ld b, a
+    ld a, (lg_step)
+    add a, b
+    ld b, a
+    ld a, 80
+    ld c, a
+    ld a, (scr_cols)
+    ld e, a
+    ld a, c
+    sub e                      ; max page offset
+    cp b
+    jr nc, .lf_ok
+    xor a
+    ld b, a
+.lf_ok:
+    ld a, b
+    ld (lg_off), a
+    call _lg_redraw
+    call _stl_draw
+    pop iy
+    pop ix
+    ret
+
+
+; @proc _flip_chord
+;   EXTEND+Enter from the keyboard scanner; preserves all registers.
+; @clobbers
+; @end
+_flip_chord:
+    push af
+    push bc
+    push de
+    push hl
+    push ix
+    push iy
+    call _lg_flip
+    pop iy
+    pop ix
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ret
+
+
+; ==========================================================================
+; 24x80 line editing
+; ==========================================================================
+
+; @proc _lg_erase_range
+;   Fill count logical cells with spaces and re-render the row.
+;   In: A = row, C = start column, B = count.
+; @param %row:u8 a
+; @param %start:u8 c
+; @param %count:u8 b
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_erase_range:
+    ld (lg_row), a
+    ld a, c
+    ld (lg_col), a
+    ld a, b
+    ld (lg_vis), a
+    or a
+    ret z
+    call _page_in
+    ld a, (lg_row)
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ld a, (lg_col)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld d, h
+    ld e, l
+    inc de
+    ld (hl), ' '
+    ld a, (lg_vis)
+    dec a
+    ld c, a
+    ld b, 0
+    ld a, b
+    or c
+    jr z, .ler_end
+    ldir
+.ler_end:
+    call _page_out
+    ld a, (lg_row)
+    jp _lg_render_row
+
+
+; @proc _lg_delete_line
+;   Move the logical rows below the cursor up and blank the last row.
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_delete_line:
+    call _page_in
+    ld a, (vp_height)
+    dec a
+    ld (lg_loop), a            ; last row
+    ld a, (cursor_row)
+    ld (lg_row), a
+    ld b, a
+    ld a, (lg_loop)
+    cp b
+    jr z, .ldl_blank
+    sub b
+    call _mul80
+    ld b, h
+    ld c, l
+    push bc
+    ld a, (lg_row)
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ld d, h
+    ld e, l
+    ld a, 80
+    ld c, a
+    ld b, 0
+    add hl, bc                 ; source = dest + 80
+    pop bc
+    ldir
+    ld a, (lg_loop)
+    call _lg_clear_row
+    jr .ldl_done
+.ldl_blank:
+    ld a, (lg_row)
+    call _lg_clear_row
+.ldl_done:
+    call _page_out
+    ret
+
+
+; @proc _lg_insert_line
+;   Move the logical rows below the cursor down (losing the last one) and
+;   blank the cursor row.
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_insert_line:
+    call _page_in
+    ld a, (vp_height)
+    dec a
+    ld (lg_loop), a
+    ld a, (cursor_row)
+    ld (lg_row), a
+    ld b, a
+    ld a, (lg_loop)
+    cp b
+    jr z, .lil_blank
+    sub b
+    call _mul80
+    ld b, h
+    ld c, l
+    push bc
+    ld a, (lg_loop)
+    call _mul80
+    ld de, LG_BUF - 1
+    add hl, de                 ; HL = source end (last row)
+    push hl
+    ld de, 80
+    add hl, de
+    ex de, hl                  ; DE = dest end
+    pop hl                     ; HL = source end
+    pop bc
+    lddr
+.lil_blank:
+    ld a, (lg_row)
+    call _lg_clear_row
+    call _page_out
+    ret
+
+
+; @proc _lg_delete_char
+;   Shift the logical row left from the cursor and blank the last cell.
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_delete_char:
+    ld a, (cursor_row)
+    ld (lg_row), a
+    ld a, (cursor_col)
+    ld (lg_col), a
+    call _page_in
+    ld a, (lg_row)
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ld a, (lg_col)
+    ld e, a
+    ld d, 0
+    add hl, de                  ; HL = dest (cursor cell)
+    ld d, h
+    ld e, l
+    inc hl                      ; HL = source (next cell)
+    ld a, 79
+    ld b, a
+    ld a, (lg_col)
+    ld c, a
+    ld a, b
+    sub c                       ; count = 79 - cursor_col
+    ld c, a
+    ld b, 0
+    ld a, b
+    or c
+    jr z, .ldc_blank
+    ldir
+.ldc_blank:
+    ld a, (lg_row)
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ld de, 79
+    add hl, de
+    ld (hl), ' '
+    call _page_out
+    ld a, (lg_row)
+    jp _lg_render_row
+
+
+; ==========================================================================
+; Status line drawing (row 23) and 80-column page markers
+; ==========================================================================
+; @proc _stl_draw
+;   Blank the status row and, in 24x80 mode with the status line on,
+;   place '<' when text is hidden to the left and '>' when it is hidden
+;   to the right.
+; @clobbers af,bc,de,hl,ix
+; @end
+_stl_draw:
+    xor a
+    ld c, a
+    ld a, (scr_cols)
+    ld b, a
+    ld a, SCR_ROWS - 1
+    call _blank_render_range
+    ld a, (stl_on)
+    or a
+    ret z
+    ld a, (mode80)
+    or a
+    ret z
+    ld a, (lg_off)
+    or a
+    jr z, .sd_no_left
+    ld b, '<'
+    xor a
+    call _stl_mark
+.sd_no_left:
+    ld a, (lg_off)
+    ld b, a
+    ld a, (scr_cols)
+    add a, b
+    cp 80
+    ret nc
+    ld b, '>'
+    ld a, (scr_cols)
+    dec a
+    jp _stl_mark
+
+
+; @proc _stl_mark
+;   In: A = screen column, B = character.
+; @param %col:u8 a
+; @param %ch:u8 b
+; @clobbers af,bc,de,hl,ix
+; @end
+_stl_mark:
+    ld (lg_vis), a
+    ld a, b
+    ld (lg_char), a
+    ld a, SCR_ROWS - 1
+    call _mul_row_scr_cols
+    ld de, char_buffer
+    add hl, de
+    ld a, (lg_vis)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, (lg_char)
+    ld (hl), a
+    call _page_in
+    ld a, (lg_vis)
+    ld c, a
+    ld a, SCR_ROWS - 1
+    ld d, a
+    ld a, (lg_char)
+    ld b, a
+    call _render_char
+    call _page_out
+    ret
 
 
 ; Font data is NOT embedded here.  All three fonts are loaded from disk at

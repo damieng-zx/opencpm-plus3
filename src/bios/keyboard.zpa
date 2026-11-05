@@ -371,7 +371,7 @@ _kbd_scan:
 
     ld a, e
     cp 0xFF
-    jr z, .key_released
+    jp z, .key_released
 
     ; --- Key is pressed: debounce/repeat ---
     ld a, (kbd_last_raw)
@@ -429,6 +429,21 @@ _kbd_scan:
     jr .emit
 
 .emit:
+    ; EXTEND+Enter flips the 24x80 halves (manual chord).  EXTEND is
+    ; CAPS+SYMB, i.e. modifiers == 3, and raw key 30 is Enter.
+    ld a, e
+    cp 30
+    jp nz, .emit_map
+    ld a, (kbd_mods)
+    cp 3
+    jp nz, .emit_map
+    ld a, (mode80)
+    or a
+    jp z, .emit_map
+    call _flip_chord
+    ret
+
+.emit_map:
     ; Map raw key E + modifiers D to ASCII
     ld a, e                    ; A = raw key
     ld d, a                    ; Save raw in D (will use HL for table)

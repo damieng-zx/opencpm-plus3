@@ -9,6 +9,12 @@ for this project.
 - **Three text modes**: 32x24 (8px font), 51x24 (5px, the +3's native width)
   and 64x24 (4px "Compression" font, two characters per attribute cell).
   `SCREEN 32|51|64` (the `SCREEN` utility), or BIOS function 32.
+- **24x80 virtual screen**: `SET24X80` / `ESC x` shows 80 columns through a
+  window of the current width.  Paging is automatic (follows the cursor,
+  `ESC 5`), or manual with EXTEND+Enter; at 64 columns only a 16-column
+  shift is needed, so there is less paging than the original +3.
+- **Status line**: `ESC 0`/`ESC 1` reserve the bottom row for BIOS messages
+  (23 text rows), with `<`/`>` 80-column markers when the status line is on.
 - **Terminal**: VT52/ADM-3A cursor and erase sequences, colour and BRIGHT via
   `ESC b`/`ESC c`, wrap control (`ESC v`/`ESC w`), and the `ESC 3`/`ESC 4`
   screen-size and page-mode controls from the +3 CP/M manual.
@@ -113,6 +119,8 @@ Also supported:
 ## Tools
 
 - `SCREEN` — show or set the screen width (32, 51 or 64 columns).
+- `SET24X80` — enter (`ON` or no argument) or leave (`OFF`) the virtual
+  80-column screen.
 - `DATE` — set/show the clock (4-digit year, tick-driven).
 - `DUMP` — hex dump that adapts to the current screen width.
 - `SETDEF` — show/set the search order and search path (F120-F123).

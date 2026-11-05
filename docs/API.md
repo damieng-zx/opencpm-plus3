@@ -635,8 +635,11 @@ the viewport and leaves the rest of the screen alone.
 |----------|--------|
 | `ESC 0` | Status line off: the bottom row returns to the text viewport (24 rows). |
 | `ESC 1` | Status line on: reserves the bottom row for BIOS messages; the text viewport becomes 23 rows and the row is cleared. |
-| `ESC 3 n` | Screen size: n = `0` → 24×32, `1` → 24×51, `2` → 24×80 (not implemented). Also clears the screen, resets the viewport and **cancels page mode**. Typed at the prompt as `ESC 3 0`/`ESC 3 1`. Any other parameter is consumed and ignored (old WordStar Z19 drivers use `ESC 3`/`ESC 4` with a space parameter as attribute controls). |
+| `ESC 3 n` | Screen size: n = `0` → 24×32, `1` → 24×51, `2` → 24×80 (enters the virtual 80-column mode). Also clears the screen, resets the viewport and **cancels page mode**. Typed at the prompt as `ESC 3 0`/`ESC 3 1`. Any other parameter is consumed and ignored (old WordStar Z19 drivers use `ESC 3`/`ESC 4` with a space parameter as attribute controls). |
 | `ESC 4 n` | Page mode: `0` disables, `1` enables (the `con_mode` bit used by `F109`). Other parameters are ignored. |
+| `ESC 5 n` | Auto-flip in 24x80 mode: `0` disables, `1` enables (default). |
+| `ESC x` | Enter 24x80 mode; clears the screen. |
+| `ESC y` | Leave 24x80 mode; clears the screen and restores the physical width. |
 | `ESC v` | Enable wrapping at the right edge (default). |
 | `ESC w` | Disable wrapping; the last column is overwritten. |
 | `ESC b c` | Foreground colour. `c` is the +3 palette number + 32 (32 black … 95 bright white). |
@@ -653,11 +656,9 @@ attribute; existing text keeps the colours it was drawn with.
 These are consumed without error but have no effect:
 
 `ESC e` `ESC f` (cursor on/off),
-`ESC p` `ESC q` (reverse), `ESC r` `ESC u` (underline),
-`ESC x` `ESC y` (24×80 mode).
+`ESC p` `ESC q` (reverse), `ESC r` `ESC u` (underline).
 
-Sequences with a consumed parameter: `ESC 2 p` (national charset),
-`ESC 5 p` (auto-flip).
+Sequences with a consumed parameter: `ESC 2 p` (national charset).
 
 #### Viewport — `ESC X tr lc h w`
 
@@ -691,6 +692,55 @@ The status row is outside the viewport, so scrolling, erase and the fast
 scroll path leave it alone.  It is drawn blank for now: BIOS messages and
 the 80-column `<`/`>` markers land there once the FDC message and 24×80
 paths exist.  The flag lives in bank 6 (`A8C0h`), outside the image.
+
+#### 24×80 mode — `ESC x`, `ESC y`, `ESC 3 2`, `ESC 5 n`
+
+`ESC x` enters a virtual 80-column screen and `ESC y` leaves it (both
+clear the screen).  `ESC 3 2` also enters it at the current physical
+width; `ESC 3 0`/`ESC 3 1` leave 24×80 and set 32/51 columns, as the
+manual requires.  The physical width at entry is remembered, so leaving
+restores it — 51 normally, or 64 when 24×80 was entered from our
+64-column mode.
+
+The 80×24 character grid lives in bank 5 at `5B00h-62BFh`, outside the
+image and the visible `char_buffer`.  The physical screen shows a window
+of the current width, and the window is paged in `lg_step`-column steps:
+
+| physical width | pages | window starts |
+|---|---|---|
+| 32 | 3 | 0, 24, 48 |
+| 51 | 2 | 0, 29 |
+| 64 | 2 | 0, 16 |
+
+So 51 columns need one flip to reach every column, while 64 columns need
+only a 16-column scroll — less paging than the original +3.  32 columns
+need three pages to cover all 80.
+
+`ESC 5 n` controls automatic paging: `0` disables it, `1` enables it
+(the default).  With it on, output, cursor motion and line feeds keep the
+window on the cursor's page.  With it off, the half is changed manually
+with **EXTEND+Enter** (or CAPS SHIFT+SYMBOL SHIFT+Enter, which is the
+same EXTEND state).  The `<`/`>` markers on the status line show whether
+columns are hidden to the left/right; they are not drawn when the status
+line is off.
+
+In 24×80 mode `TE_ASK` reports width − 1 = 79, the cursor column is
+logical (0-79), the line/erase sequences work on the 80-column line, and
+`TE_STL_ASK` sets Zero (as if disabled) while the status-line flag itself
+is unchanged.  The status line still shows on row 23 when enabled, so the
+text area is 23 rows.
+
+`SET24X80.COM` switches from the prompt:
+
+```text
+SET24X80          enter 24x80
+SET24X80 ON       same
+SET24X80 OFF      leave and restore the previous width
+```
+
+The visible window takes the current ink/paper attribute for every cell
+it draws; in 24×80 mode the per-cell colours of the 51/64-column buffer
+are not preserved across flips.
 
 ### Keyboard
 

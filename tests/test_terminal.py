@@ -129,7 +129,7 @@ class StatusLine(unittest.TestCase):
         self.assertIn("ld (stl_on), a", body)
         self.assertIn("ld (vp_height), a", body)
         self.assertIn("ld (cursor_row), a", body)
-        self.assertIn("_blank_render_range", body)
+        self.assertIn("jp _stl_draw", body)
 
     def test_fast_scroll_uses_the_viewport_height(self):
         text = source("src/bios/screen.zpa")
@@ -148,6 +148,54 @@ class StatusLine(unittest.TestCase):
         onoff = text[text.index(".te_stl_on_off:"):text.index(".te_ask:")]
         self.assertIn("ld a, (xbios_arg_a)", onoff)
         self.assertIn("_stl_apply", onoff)
+
+
+class Wide80(unittest.TestCase):
+    """24x80 mode: buffer placement, paging and the flip chord."""
+
+    def test_escape_table_enters_and_leaves(self):
+        text = source("src/bios/screen.zpa")
+        table = text[text.index(".esc_table:"):
+                     text.index("db 0                ; end of table")]
+        self.assertRegex(table, r"db 'x'\s*\n\s*dw _enter80")
+        self.assertRegex(table, r"db 'y'\s*\n\s*dw _exit80")
+        self.assertIn(".p3_80:", text)
+        self.assertIn("jp _enter80", text)
+
+    def test_logical_buffer_is_bank5_free_ram(self):
+        text = source("src/bios/screen.zpa")
+        self.assertRegex(text, r"LG_BUF\s+equ 0x5B00")
+        self.assertLessEqual(0x5B00 + 80 * 24, 0x8000)
+        # after the 6912-byte bitmap + attributes
+        self.assertGreaterEqual(0x5B00, 0x4000 + 6912)
+
+    def test_output_path_uses_put80(self):
+        text = source("src/bios/screen.zpa")
+        self.assertIn("jp nz, _put80", text)
+        for label in ("_put80:", "_lg_store_char:", "_lg_autoflip:", "_lg_flip:",
+                      "_lg_scroll_up:", "_lg_scroll_down:", "_enter80:", "_exit80:"):
+            self.assertIn(label, text)
+        # page step is width-dependent (32/51/64 -> 24/29/16)
+        self.assertIn("ld (lg_step), a", text)
+
+    def test_extend_enter_is_the_flip_chord(self):
+        kb = source("src/bios/keyboard.zpa")
+        body = kb[kb.index(".emit:"):kb.index(".emit_map:")]
+        self.assertIn("cp 30", body)          # raw key 30 = Enter
+        self.assertIn("cp 3", body)           # CAPS+SYMB = EXTEND
+        self.assertIn("_flip_chord", body)
+
+    def test_te_ask_reports_the_logical_width(self):
+        te = source("src/bios/bios.zpa")
+        self.assertIn("ld a, (mode80)", te)
+        self.assertIn("ld a, 80", te)
+        self.assertIn("ld a, (vp_width)", te)
+
+    def test_set24x80_utility(self):
+        text = source("src/tools/set24x80.asm")
+        self.assertIn("SET24X80 [ON|OFF]", text)
+        self.assertIn("ld a, 'x'", text)
+        self.assertIn("ld a, 'y'", text)
 
 
 class PromptEscapeEcho(unittest.TestCase):

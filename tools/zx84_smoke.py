@@ -440,7 +440,7 @@ class Smoke:
     # A880-A881 is f111_addr, A890-A8BF is the loader-staged row table and
     # A8C0 is the status-line flag, so the old A870-A8FF gap is split.
     BANK6_GAPS = ((0xA6FC, 4), (0xA83D, 3), (0xA870, 0x10),
-                  (0xA882, 0x0E), (0xA8C1, 0x3F), (0xADA4, 0x25C))
+                  (0xA882, 0x0E), (0xA8CF, 0x31), (0xADA4, 0x25C))
 
     def run_bank6_sentinels(self) -> None:
         self.sentinels: list[tuple[int, bytes]] = []
@@ -651,6 +651,29 @@ class Smoke:
         self.wait_for(["STL..OK"], frames=300, attempts=10)
         if "FAIL" in self.text():
             raise SmokeError("STLTEST reported a failure")
+
+    def run_m80test(self) -> None:
+        """24x80: TE_ASK width, auto-flip cursor, and returning to 51."""
+        self.log("M80TEST")
+        self.command("M80TEST", 2000)
+        self.wait_for(["M80..OK"], frames=300, attempts=10)
+        if "FAIL" in self.text():
+            raise SmokeError("M80TEST reported a failure")
+
+    def run_set24x80(self) -> None:
+        """SET24X80.COM enters/leaves 24x80 from the prompt."""
+        self.log("SET24X80")
+        for args, want, label in (("", 1, "SET24X80"),
+                                  (" OFF", 0, "SET24X80 OFF"),
+                                  (" ON", 1, "SET24X80 ON"),
+                                  (" OFF", 0, "SET24X80 OFF (2)")):
+            self.command("SET24X80" + args, 900)
+            got = self.memory(6, 0xA8C1, 1)[0]
+            if got != want:
+                raise SmokeError(f"{label}: mode80={got}, expected {want}")
+            self.expect(label + " prompt", "A>")
+        self.command("SET24X80 JUNK", 700)
+        self.expect("SET24X80 usage", "SET24X80 [ON|OFF]")
 
     def run_disktest(self) -> None:
         self.log("DISKTEST")
@@ -1074,6 +1097,8 @@ class Smoke:
         self.run_systest()
         self.run_xtetest()
         self.run_stltest()
+        self.run_m80test()
+        self.run_set24x80()
         # SYSTEST deliberately changes and restores the delimiter; DIR must
         # still be clean afterwards.
         self.command("DIR", 500)
