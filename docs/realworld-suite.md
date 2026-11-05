@@ -56,6 +56,7 @@ separate, explicitly triggered workflow.
 | `multiplan` | Microsoft Multiplan 1.05 | Spreadsheet, overlays, 80-column grid | Pass |
 | `multiplan_80` | Microsoft Multiplan 1.05 (24x80) | 80-column command bar/grid, right-half flip | Pass |
 | `vedit` | VEDIT Plus 2.33 (CRT) | Installer (VT-52), then open/edit a file | Pass |
+| `cobol80` | Microsoft COBOL-80 4.01 | Compile `=HELLO` to `HELLO.REL` | Pass (compile only) |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
 | `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
@@ -109,6 +110,11 @@ issues; the others are history):
   prompt and then opens `SMOKE.TXT` with the generated `VPLUS.COM`.
   The installer ignores the first character of the Y/N answer, so the
   manifest answers `" yes"`.
+- **COBOL-80 4.01** compiles `=HELLO` and writes `HELLO.REL` (the
+  compiler reports one warning).  The archive has no CRT driver, so the
+  REL cannot be linked/run; the complete 4.65 distribution includes
+  `COBLIB.REL`/`CRTDRV.REL`/`L80.COM` but is too large for the 174 KB
+  data area.  The package is therefore compile-only.
 - **BASCOM 5.3** used to exit immediately because the suite pulled
   `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
   machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`

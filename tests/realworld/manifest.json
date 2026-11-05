@@ -911,6 +911,36 @@
         }
       ],
       "notes": "CRT distribution: INSTALL selects DEC VT-52 and writes VPLUS.COM, then VPLUS opens the fixture. The installer ignores the first character of a Y/N answer, hence the leading space in ' yes'."
+    },
+    {
+      "id": "cobol80",
+      "title": "Microsoft COBOL-80 4.01",
+      "url": "http://www.retroarchive.org/cpm/lang/MSCOBOL401.ZIP",
+      "archive": "zip",
+      "members": [
+        "COBOL.COM",
+        "COBOL1.OVR",
+        "COBOL2.OVR",
+        "COBOL3.OVR",
+        "COBOL4.OVR",
+        "COBLIB.REL"
+      ],
+      "fixtures": ["HELLO.COB"],
+      "command": "COBOL",
+      "expect": ["COBOL-80 v4.01"],
+      "frames": 2500,
+      "steps": [
+        {
+          "text": "=HELLO",
+          "frames": 4000
+        },
+        {
+          "text": "DIR HELLO.REL",
+          "frames": 1200,
+          "expect": ["HELLO    REL"]
+        }
+      ],
+      "notes": "Compile-only coverage. The 4.01 archive has no CRT driver, so the REL cannot be linked/run on this image; the complete 4.65 set needs more than the 174 KB data area."
     }
   ]
 }
