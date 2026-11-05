@@ -86,6 +86,54 @@
       "notes": "Spreadsheet with overlays and VT-100 screen output."
     },
     {
+      "id": "multiplan",
+      "title": "Microsoft Multiplan 1.05",
+      "url": "http://www.retroarchive.org/cpm/business/MP_105.ZIP",
+      "archive": "zip",
+      "members": [
+        "MP.COM",
+        "MP.OVR",
+        "MP.HLP",
+        "MP80",
+        "DEFAULT.FK",
+        "RFILE"
+      ],
+      "command": "MP",
+      "expect": [
+        "MICROSOFT MULTIPLAN",
+        "Version 1.05",
+        "COMMAND:"
+      ],
+      "frames": 4500,
+      "notes": "Spreadsheet with overlays; the 80-column grid is paged by the 24x80 variant."
+    },
+    {
+      "id": "multiplan_80",
+      "title": "Microsoft Multiplan 1.05 (24x80)",
+      "url": "http://www.retroarchive.org/cpm/business/MP_105.ZIP",
+      "archive": "zip",
+      "members": [
+        "MP.COM",
+        "MP.OVR",
+        "MP.HLP",
+        "MP80",
+        "DEFAULT.FK",
+        "RFILE"
+      ],
+      "setup": ["SET24X80"],
+      "command": "MP",
+      "expect": ["COMMAND:"],
+      "frames": 4500,
+      "steps": [
+        {
+          "key": "shift+sym+enter",
+          "frames": 1800,
+          "expect": ["Insert Lock Move"]
+        }
+      ],
+      "notes": "24x80 variant: the command bar and grid span 80 columns and EXTEND+Enter shows the right half. Terminal escapes still leave artifacts at the line starts."
+    },
+    {
       "id": "supercalc2_80",
       "title": "SuperCalc2 1.00 (24x80)",
       "url": "http://www.retroarchive.org/cpm/business/sc2.zip",

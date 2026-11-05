@@ -22,7 +22,8 @@ class RealWorld24x80(unittest.TestCase):
         self.assertIn("build/SET24X80.COM", files)
 
     def test_24x80_variants_run_set24x80_and_flip(self):
-        for pid in ("wordstar30_80", "turbo3_80", "supercalc2_80"):
+        for pid in ("wordstar30_80", "turbo3_80", "supercalc2_80",
+                    "multiplan_80"):
             pkg = self.packages[pid]
             self.assertEqual(pkg["setup"], ["SET24X80"], pid)
             flips = [s for s in pkg.get("steps", [])

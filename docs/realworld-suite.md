@@ -53,6 +53,8 @@ separate, explicitly triggered workflow.
 | `dbase2` | dBASE II 2.43 | FCB random I/O, overlays, dot prompt | Pass |
 | `supercalc2` | SuperCalc2 1.00 | Spreadsheet, overlays, VT-100 output | Pass |
 | `supercalc2_80` | SuperCalc2 1.00 (24x80) | 80-column banner, right-half flip | Pass (VT-100 escapes) |
+| `multiplan` | Microsoft Multiplan 1.05 | Spreadsheet, overlays, 80-column grid | Pass |
+| `multiplan_80` | Microsoft Multiplan 1.05 (24x80) | 80-column command bar/grid, right-half flip | Pass |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
 | `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
@@ -94,6 +96,12 @@ issues; the others are history):
 - **SuperCalc2 1.00** the `supercalc2_80` variant fits the banner in
   80 columns and flips to the right half, but its VT-100 escape output is
   still printed literally; the VT-100 parser is the remaining blocker.
+- **Multiplan 1.05** needs the `MP80` data overlay plus `MP.OVR`,
+  `MP.HLP`, `DEFAULT.FK` and `RFILE`; `MP.COM` reports
+  "no data file present (MP80 or MP40)" without it.  The
+  `multiplan_80` variant fits the command bar and grid in 24x80 and
+  flips to the right half; terminal escapes still leave artifacts at
+  the line starts.
 - **BASCOM 5.3** used to exit immediately because the suite pulled
   `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
   machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`
