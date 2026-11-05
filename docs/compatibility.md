@@ -27,6 +27,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **VEDIT Plus** | 2.33 | CRT installer selects VT-52 and writes `VPLUS.COM`; opens `SMOKE.TXT` and shows the `LINE:`/`FILE:` status line | The installer is interactive; the manifest drives it |
 | **Microsoft COBOL-80** | 4.01 | Compiles `=HELLO` and writes `HELLO.REL` | Link/runtime blocked: the 4.01 archive lacks the CRT driver and the complete 4.65 set does not fit 174 KB |
 | **3CLCK** | 2.10 | Extractor writes `CLOCK.FID`/`CLOCK.F64`/`CLOCK.DOC`/`CLOCKCLR.COM`; CLOCKCLR reports the FID state | The clock FID is not loaded at boot; see below |
+| **BDS C** | 1.60 | Compiler part I and part II banners; `CC HELLO.C` starts the compile | Compiler does not return to the CCP; CLINK/run untested |
 | **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | ⚠️ VT-100 escapes such as `ESC[?3h`, `ESC[2J`, `ESC[H` remain visible; `supercalc2_80` confirms 24x80 fixes only the width, not the terminal |
 | **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
 | **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE wraps on the 51-column screen; TINST+`SCREEN 64` or `turbo3_80` (24x80) fit it, though Kaypro escapes leave stray `1` characters |
@@ -54,6 +55,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **ED `E` (save)** | Writes the data and directory sector, then stops with `*e` still on the line; no further BDOS/XBIOS calls. | Found with `tools/zx84_dri.py`; `Q`/`Y` exits normally, so the failure is in ED's end-of-edit path after the write. |
 | **SET** | Reads the disk indefinitely instead of drawing its menu. | Found with `tools/zx84_dri.py`; not investigated yet. |
 | **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The clock is a FID installed at cold boot. This loader only stages `RAMDISK.FID`; a generic +3 FID loader is needed. |
+| **BDS C compiler exit** | Part II prints `38K to spare`, then the CPU loops in TPA (PC around `183B`-`184D`) after a directory write; no CCP return. | The write completes, so the loop is in the compiler's exit path; needs a debugger session. |
 | **SETKEYS** | Stops after opening its key file. | Found with `tools/zx84_dri.py`; try it with a known `.KEY` file. |
 
 Recently fixed: **SLR Z80ASM 1.32** used to fail with `Line Too Long`
@@ -114,7 +116,7 @@ It does not help WordStar, whose 80-column layout is unchanged.
 - [x] Microsoft FORTRAN-80 3.44 - works (automated)
 - [x] Microsoft COBOL-80 4.01 - compiles (link/runtime blocked, see above)
 - [x] Aztec C 1.06D - works (automated)
-- [ ] BDS C
+- [x] BDS C 1.60 - compiler banners; exit hang blocks CLINK/run
 - [ ] Software Toolworks C80 3.1
 - [ ] Tiny C
 - [ ] JRT Pascal 3.0

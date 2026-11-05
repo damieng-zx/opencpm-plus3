@@ -970,6 +970,27 @@
         }
       ],
       "notes": "The self-extractor and CLOCKCLR work. The clock itself is CLOCK.FID, installed at boot; this BIOS only loads RAMDISK.FID, so CLOCKCLR reports that it is not loaded. A generic +3 FID loader is the remaining piece."
+    },
+    {
+      "id": "bdsc",
+      "title": "BDS C 1.60",
+      "url": "https://www.bdsoft.com/dist/bdsc-all.zip",
+      "archive": "zip",
+      "members": [
+        "bdsc160/CC.COM",
+        "bdsc160/CC2.COM",
+        "bdsc160/CLINK.COM",
+        "bdsc160/DEFF.CRL",
+        "bdsc160/C.CCC"
+      ],
+      "fixtures": ["HELLO.C"],
+      "command": "CC HELLO.C",
+      "expect": [
+        "BD Software C Compiler v1.60",
+        "38K to spare"
+      ],
+      "frames": 4500,
+      "notes": "Compiler part I and part II run and print their banners, but the compiler does not return to the CCP afterwards (TPA loop after the final directory write), so CLINK and the linked program are not covered yet."
     }
   ]
 }

@@ -108,8 +108,15 @@ def _extract_zip(zip_path: Path, members: list[str], dest: Path) -> None:
         for name in names:
             lookup.setdefault(Path(name).name.lower(), []).append(name)
         for wanted in members:
-            key = Path(wanted).name.lower()
-            matches = lookup.get(key, [])
+            # A member may include a directory prefix to disambiguate
+            # archives that carry several copies of the same basename.
+            key = wanted.replace("\\", "/").lower()
+            if "/" in key:
+                matches = [n for n in names
+                           if n.lower() == key or
+                           n.lower().endswith("/" + key)]
+            else:
+                matches = lookup.get(Path(wanted).name.lower(), [])
             if not matches:
                 available = ", ".join(sorted(Path(n).name for n in names)[:20])
                 raise SetupError(

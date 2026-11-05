@@ -58,6 +58,7 @@ separate, explicitly triggered workflow.
 | `vedit` | VEDIT Plus 2.33 (CRT) | Installer (VT-52), then open/edit a file | Pass |
 | `cobol80` | Microsoft COBOL-80 4.01 | Compile `=HELLO` to `HELLO.REL` | Pass (compile only) |
 | `clck3` | Spectrum +3 clock extractor | Self-extract, `CLOCKCLR` | Pass (FID not loaded) |
+| `bdsc` | BDS C 1.60 | Compiler part I/II banners | Partial (exit hangs) |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
 | `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
@@ -121,6 +122,10 @@ issues; the others are history):
   FID is not loaded: the clock is installed at boot through `CLOCK.FID`,
   while this BIOS only stages `RAMDISK.FID`.  A generic +3 FID loader is
   the remaining work.
+- **BDS C 1.60** compiles a HELLO fixture through both compiler parts
+  and prints `42K elbowroom` / `38K to spare`.  It then stops in a TPA
+  loop after the final directory write and never returns to the CCP, so
+  CLINK and the linked program are not exercised yet.
 - **BASCOM 5.3** used to exit immediately because the suite pulled
   `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
   machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`
