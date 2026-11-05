@@ -38,7 +38,8 @@ def main() -> int:
     ap.add_argument("--zx84", help="path to the zx84 checkout")
     ap.add_argument("--bin", default=str(ROOT / "references" / "binaries"),
                     help="directory containing your PIP.COM")
-    ap.add_argument("--dsk", default=str(ROOT / "build" / "cpm3.dsk"))
+    ap.add_argument("--dsk", default=str(ROOT / "build" / "cpm3-test.dsk"),
+                    help="DSK image to boot (the test image carries SMOKE.TXT)")
     ap.add_argument("--model", default="zx128kplus3")
     args = ap.parse_args()
 

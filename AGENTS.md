@@ -9,23 +9,37 @@ Clean-room CP/M 3.1 for the ZX Spectrum +3. All code is original Z80 assembly �
 ## Build
 
 ```bash
-build.cmd                    # Build cpm3.dsk
-build.cmd --add FILE ...     # Build with extra CP/M files on disk
+build.cmd                    # Build the distribution and test images
+build.cmd --add FILE ...     # Build with extra CP/M files on both images
 ```
+
+Two 180K images are produced from the same system files:
+
+- `build/cpm3.dsk` — **distribution**: system, the utilities we build
+  (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`) and
+  the local `references/binaries/` utilities (BBC BASIC, ED, PIP, ...).  No
+  test programs.
+- `build/cpm3-test.dsk` — the distribution files **plus** the `*TEST.COM`
+  programs and their fixtures; the smoke and the other on-disk test runners
+  boot this one.
+
+`build/cpm3_720.dsk` is a PCW 720K data image for the 16-bit block tests.
 
 Requires: `sjasmplus` (Z80 assembler at C:\Apps\sjasmplus.exe), `python3`.
 
-Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) → loader → boot sector → DSK image. The BIOS head is stored as `CPM3.SYS` and the common stub as `CPM3C.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0. The CCP is a separate file, `CCP.COM`, staged by the stage-2 loader during cold boot (see Boot Chain).
+Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) → loader → boot sector → DSK images. The BIOS head is stored as `CPM3.SYS` and the common stub as `CPM3C.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0. The CCP is a separate file, `CCP.COM`, staged by the stage-2 loader during cold boot (see Boot Chain).
 
 `CPM3.SYS` must fit the 16K `C000-FFFF` window and `CPM3C.SYS` the
 `F600-FFFF` window; the build prints both budgets and `build/memory.map`
 lists every region. Before adding a large feature, read `docs/boot.md`
 § *Image headroom and the growth plan*.
 
-`references/binaries/` is optional third-party software: `SUBMIT.COM` and
-`RENAME.COM` are excluded from the image (we build SUBMIT, and the CCP has a
-built-in REN); the smoke runner adds `RENAME.COM` to a scratch copy so a real
-third-party F23 caller is still covered.
+`references/binaries/` is optional third-party software added to both images
+(that is how BBC BASIC gets onto the distribution disk); `SUBMIT.COM` and
+`RENAME.COM` are excluded (we build SUBMIT, and the CCP has a built-in REN).
+The smoke runner adds `RENAME.COM` to a scratch copy so a real third-party
+F23 caller is still covered, and drops the two big utilities it never runs
+(`BBCBASIC.COM`, `NULU11.COM`) to leave room for DISKTEST's 17K file.
 
 ### ZPA Preprocessing
 
@@ -106,7 +120,8 @@ carries into the generated assembly for the linter to verify.
 ## Testing
 
 The zx84 MCP emulator (F:\src\zx84) provides debugging tools. Key workflow:
-- `model +3` → `load build/cpm3.dsk` → `disk_boot` → `run 1000`
+- `model +3` → `load build/cpm3-test.dsk` → `disk_boot` → `run 1000`
+  (use `build/cpm3.dsk` for the distribution image; it has no test programs)
 - Snapshots are supported: `save build/prompt.szx` and later `load build/prompt.szx`
   to resume from a known-good prompt state without rebooting the DSK.
 - Read screen via `char_buffer` in bank 6 (its `equ` value in `build/bios.lst`;

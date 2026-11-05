@@ -27,8 +27,8 @@ from zx84_smoke import MCP, ROOT, Smoke, SmokeError, find_zx84  # noqa: E402
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--zx84", help="path to the zx84 checkout")
-    ap.add_argument("--dsk", default=str(ROOT / "build" / "cpm3.dsk"),
-                    help="DSK image to boot")
+    ap.add_argument("--dsk", default=str(ROOT / "build" / "cpm3-test.dsk"),
+                    help="DSK image to boot (REGTEST.COM is on the test image)")
     ap.add_argument("--model", default="zx128kplus3")
     ap.add_argument("--report-only", action="store_true",
                     help="print REGTEST output without asserting")

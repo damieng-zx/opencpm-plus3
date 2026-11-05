@@ -234,9 +234,13 @@ build.cmd
 build.cmd --add FILE ...
 ```
 
-Output: `build/cpm3.dsk` — a standard +3 disk image ready for emulation —
-and `build/cpm3_720.dsk`, the PCW DS/DD 720K image used for 16-bit block
-tests.
+Output: two +3 images and one data image.
+
+| Image | Contents |
+|---|---|
+| `build/cpm3.dsk` | **Distribution.** The system files plus the utilities we build (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`) and, when `references/binaries/` is present, the local third-party utilities, including **BBC BASIC**. No test programs. |
+| `build/cpm3-test.dsk` | **Tests.** The distribution image plus `BDOSTEST`, `XTETEST`, `STLTEST`, `M80TEST`, `M80BIT`, `DISKTEST`, `TERMTEST`, `SYSTEST`, `REGTEST` and their fixtures (`SMOKE.TXT`, `PAGE.TXT`, `SMOKE.SUB`, `PARAM.SUB`). The smoke runner boots this image. |
+| `build/cpm3_720.dsk` | PCW DS/DD 720K data image used by the 16-bit block tests. |
 
 The system files on the disk are `CPM3.SYS` (BIOS + BDOS head),
 `CPM3C.SYS` (common stub), `CCP.COM` (the command processor),
@@ -245,9 +249,12 @@ The system files on the disk are `CPM3.SYS` (BIOS + BDOS head),
 diagnostic instead of a prompt; a disk without `CPM3C.SYS` does not boot.
 
 The third-party binaries under `references/binaries/` are untracked and
-optional. When present they are added automatically; a fresh clone (and CI)
-builds a source-only disk, and the smoke runner skips the checks that need
-them.
+optional. When present they are added to **both** images automatically, so
+the distribution disk carries BBC BASIC and your other tools; a fresh clone
+(and CI) builds a source-only disk, and the smoke runner skips the checks
+that need them.  `RENAME.COM` is deliberately excluded (the CCP's built-in
+`REN` covers it) and the smoke adds it to a scratch copy to keep a real
+third-party F23 caller covered.
 
 ### Testing
 
@@ -255,10 +262,14 @@ Use the [zx84](https://github.com/damieng-zx/zx84) MCP emulator:
 
 ```
 model +3
-load build/cpm3.dsk
+load build/cpm3.dsk          ; the distribution image
 disk_boot
 run 1000
 ```
+
+For the on-disk test programs (`SYSTEST`, `DISKTEST`, ...) use
+`build/cpm3-test.dsk` instead — the distribution image deliberately leaves
+them out.
 
 zx84 snapshots can also be saved and loaded through MCP. After reaching a clean
 prompt, use `save build/prompt.szx`; later use `load build/prompt.szx` to resume
@@ -273,6 +284,12 @@ python3 tools/zx84_dri.py                # DRI utilities (needs local copies)
 python3 tools/zx84_realworld.py          # the packages in the table above
 python3 -m unittest discover -s tests -t .
 ```
+
+The smoke runner defaults to `build/cpm3-test.dsk`; pass
+`--dsk build/cpm3.dsk` to boot the distribution image (the test programs are
+not there, so that only makes sense with `--quick`).  When BBC BASIC is in
+`references/binaries/` the smoke also boots a copy of the distribution image
+and checks that it starts (`BBC BASIC (Z80)` and the `>` prompt).
 
 ### Project Structure
 

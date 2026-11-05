@@ -1,7 +1,11 @@
 # zx84 MCP Smoke Test
 
-Manual pre-commit smoke test for the default `build/cpm3.dsk` image using the
-zx84 MCP emulator.
+Manual pre-commit smoke test for the built **test** image
+(`build/cpm3-test.dsk`) using the zx84 MCP emulator.  The distribution image
+(`build/cpm3.dsk`) carries the system and the utilities but none of the
+`*TEST.COM` programs, so the smoke boots the test image; the one check that
+needs the distribution image (BBC BASIC) boots a scratch copy of it at the
+end.
 
 ## Automated runner
 
@@ -37,7 +41,7 @@ track with `sector_read`.
 
 ```text
 python3 tools/zx84_smoke.py
-python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3.dsk
+python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3-test.dsk
 python3 tools/zx84_smoke.py --quick     # skip the destructive format test
 ```
 
@@ -115,7 +119,7 @@ Start the emulator and boot the image:
 
 ```text
 model +3
-load build/cpm3.dsk
+load build/cpm3-test.dsk
 disk_boot
 run 1000
 ```
@@ -162,7 +166,7 @@ Use this shorter gate whenever boot/common/BDOS layout changes:
 
 ```text
 model +3
-load build/cpm3.dsk
+load build/cpm3-test.dsk
 disk_boot
 run 1000
 ```

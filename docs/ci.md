@@ -110,7 +110,7 @@ Publish `ghcr.io/damieng-zx/zx84-mcp` containing Node, the zx84 source, and
 - run: |
     docker run --rm -i \
       -v "$PWD/zx84-cache:/app/mcp/.cache" \
-      -v "$PWD/build/cpm3.dsk:/cpm3.dsk:ro" \
+      -v "$PWD/build/cpm3-test.dsk:/cpm3-test.dsk:ro" \
       ghcr.io/damieng-zx/zx84-mcp \
       ...
 ```

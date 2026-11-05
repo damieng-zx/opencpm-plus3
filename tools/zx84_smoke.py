@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Automated zx84 smoke test for the built CP/M +3 image.
 
-Boots build/cpm3.dsk through the zx84 MCP server, runs the on-disk test
+Boots build/cpm3-test.dsk through the zx84 MCP server, runs the on-disk test
 programs and a few CCP flows, and asserts the 51x24 character buffer.  This
 is the automated counterpart of docs/mcp-smoke-test.md.
 
 Usage:
     python3 tools/zx84_smoke.py
-    python3 tools/zx84_smoke.py --zx84 F:/src/zx/zx84 --dsk build/cpm3.dsk
+    python3 tools/zx84_smoke.py --zx84 F:/src/zx/zx84 --dsk build/cpm3-test.dsk
     ZX84_DIR=F:/src/zx/zx84 python3 tools/zx84_smoke.py
 
 Exit codes: 0 = all checks passed, 1 = assertion/run failure, 2 = setup error.
@@ -644,6 +644,45 @@ class Smoke:
             except OSError:
                 pass
 
+    def run_bbcbasic(self) -> None:
+        """BBC BASIC must start from the distribution image when it is on it.
+
+        BBC BASIC (Z80) is an optional local reference binary; a fresh
+        checkout (and CI) has no copy, so this check skips quietly then.
+        """
+        dist = ROOT / "build" / "cpm3.dsk"
+        if not dist.exists():
+            self.log("BBC BASIC: no distribution image; skipped")
+            return
+        tools = str(ROOT / "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import mkdsk  # noqa: E402
+
+        image = mkdsk.DSKImage().load(dist)
+        names = {image._read_dir_entry(i)[1:12]
+                 for i in range(mkdsk.DIR_ENTRIES)
+                 if image._read_dir_entry(i)[0] != 0xE5}
+        if b"BBCBASICCOM" not in names:
+            self.log("BBC BASIC not on the distribution image; skipped")
+            return
+
+        scratch = ROOT / "build" / "bbcbasic-test.dsk"
+        shutil.copyfile(dist, scratch)
+        self.log("BBC BASIC on the distribution image")
+        old_dsk = self.dsk
+        self.dsk = scratch
+        try:
+            self.boot()
+            self.command("BBCBASIC", 2500)
+            self.wait_for(["BBC BASIC (Z80)", ">"], frames=500, attempts=12)
+        finally:
+            self.dsk = old_dsk
+            try:
+                scratch.unlink()
+            except OSError:
+                pass
+
     def run_stltest(self) -> None:
         """Status line: TE_STL contract and the 23-row fast scroll."""
         self.log("STLTEST")
@@ -1176,6 +1215,8 @@ class Smoke:
             self.log("quick mode: skipping the destructive format test")
         else:
             self.run_xtetest_format()
+        # The distribution image is a different file; this reboots into it.
+        self.run_bbcbasic()
         self.check_fdc()
         self.log("all checks passed")
 
@@ -1240,8 +1281,9 @@ def find_zx84(arg: str | None) -> Path:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--zx84", help="path to the zx84 checkout")
-    ap.add_argument("--dsk", default=str(ROOT / "build" / "cpm3.dsk"),
-                    help="DSK image to boot")
+    ap.add_argument("--dsk", default=str(ROOT / "build" / "cpm3-test.dsk"),
+                    help="DSK image to boot (the test image carries the "
+                         "on-disk test programs)")
     ap.add_argument("--model", default="zx128kplus3")
     ap.add_argument("--quick", action="store_true",
                     help="skip the destructive DD_FORMAT test on a scratch image")

@@ -75,8 +75,8 @@ def main() -> int:
 
     sys.path.insert(0, str(ROOT / "tools"))
 
-    # Build a clean scratch image: the shipped build/cpm3.dsk is packed with
-    # the smoke-test programs and has no room for the DRI tools.
+    # Build a clean scratch image from the boot/system files: the DRI tools
+    # need room and the distribution image may already carry local utilities.
     base_files = ["build/CPM3.SYS", "build/CPM3C.SYS", "build/CCP.COM",
                   "src/bios/font51.bin", "src/bios/font32.bin",
                   "src/bios/font64.bin", "build/RAMDISK.FID"]

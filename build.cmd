@@ -105,7 +105,14 @@ shift
 goto collect_extra_files
 :extra_files_done
 
-python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\bdostest.com build\xtetest.com build\stltest.com build\m80test.com build\m80bit.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\RAMDISK.FID src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
+:: Two images share the system and the utilities we build:
+::   build\cpm3.dsk       distribution - system, built-in utilities and the
+::                        local reference binaries (BBC BASIC, ED, PIP, ...)
+::   build\cpm3-test.dsk  the same plus the *TEST.COM programs and fixtures
+python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com !REF_BINS! !EXTRA_FILES!
+if errorlevel 1 goto :fail
+
+python3 tools\mkdsk.py create build\cpm3-test.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\bdostest.com build\xtetest.com build\stltest.com build\m80test.com build\m80bit.com build\disktest.com build\termtest.com build\systest.com build\regtest.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 python3 tools\mkdsk.py create build\cpm3_720.dsk --format 720k --add src\test\hello16.txt
@@ -116,6 +123,8 @@ for %%A in (build\bios.bin) do echo   BIOS blob: %%~zA bytes
 for %%A in (build\CPM3.SYS) do echo   CPM3.SYS:  %%~zA bytes
 for %%A in (build\CPM3C.SYS) do echo   CPM3C.SYS: %%~zA bytes
 for %%A in (build\CCP.COM) do echo   CCP.COM: %%~zA bytes
+echo   Images: build\cpm3.dsk (distribution), build\cpm3-test.dsk (tests)
+if exist references\binaries\BBCBASIC.COM echo   BBC BASIC: on the distribution image (local copy)
 
 echo === Done ===
 goto :eof

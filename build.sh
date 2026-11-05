@@ -92,11 +92,26 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     --system build/loader.bin \
     --add build/CPM3.SYS build/CPM3C.SYS build/CCP.COM \
     src/bios/font51.bin src/bios/font32.bin src/bios/font64.bin \
+    build/RAMDISK.FID \
+    build/date.com build/showxdpb.com build/dump.com build/setdef.com \
+    build/submit.com build/screen.com build/set24x80.com \
+    "${REF_FILES[@]}" \
+    $EXTRAFILES
+
+# The test image is the distribution image plus the on-disk test programs
+# and their fixtures.  Keep the two lists in step: distribution files never
+# include a *TEST.COM, and everything the smoke runs is on cpm3-test.dsk.
+python3 tools/mkdsk.py create build/cpm3-test.dsk \
+    --boot build/bootsect.bin \
+    --system build/loader.bin \
+    --add build/CPM3.SYS build/CPM3C.SYS build/CCP.COM \
+    src/bios/font51.bin src/bios/font32.bin src/bios/font64.bin \
+    build/RAMDISK.FID \
+    build/date.com build/showxdpb.com build/dump.com build/setdef.com \
+    build/submit.com build/screen.com build/set24x80.com \
     build/bdostest.com build/xtetest.com build/stltest.com \
     build/m80test.com build/m80bit.com \
     build/disktest.com build/termtest.com build/systest.com build/regtest.com \
-    build/date.com build/showxdpb.com build/dump.com build/setdef.com \
-    build/submit.com build/screen.com build/set24x80.com build/RAMDISK.FID \
     src/test/smoke.txt src/test/page.txt src/test/smoke.sub \
     src/test/param.sub \
     "${REF_FILES[@]}" \
@@ -110,5 +125,9 @@ echo "  BIOS blob: $(wc -c < build/bios.bin) bytes"
 echo "  CPM3.SYS: $(wc -c < build/CPM3.SYS) bytes"
 echo "  CPM3C.SYS: $(wc -c < build/CPM3C.SYS) bytes"
 echo "  CCP.COM: $(wc -c < build/CCP.COM) bytes"
+echo "  Images: build/cpm3.dsk (distribution), build/cpm3-test.dsk (tests)"
+if [ -f references/binaries/BBCBASIC.COM ]; then
+    echo "  BBC BASIC: on the distribution image (local copy)"
+fi
 
 echo "=== Done ==="

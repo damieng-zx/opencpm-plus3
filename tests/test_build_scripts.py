@@ -34,14 +34,36 @@ def assembled_programs(text: str) -> dict[str, str]:
     return out
 
 
-def disk_files(text: str) -> set[str]:
-    """The build/*.SYS, build/*.COM and src/* assets passed to mkdsk."""
+def disk_block(text: str, image: str, end_image: str) -> str:
+    """The mkdsk arguments between two image builds, lower-cased."""
     flat = _norm(text)
-    start = flat.index("mkdsk.py create build/cpm3.dsk")
-    end = flat.index("mkdsk.py create build/cpm3_720.dsk", start)
-    block = flat[start:end]
+    start = flat.index(f"mkdsk.py create build/{image}")
+    end = flat.index(f"mkdsk.py create build/{end_image}", start)
+    return flat[start:end]
+
+
+def disk_files(text: str, image: str = "cpm3.dsk",
+               end_image: str = "cpm3-test.dsk") -> set[str]:
+    """The build/*.SYS, build/*.COM and src/* assets passed to mkdsk."""
+    block = disk_block(text, image, end_image)
     return set(re.findall(
         r"(?:build|src)/[a-z0-9_./-]+\.(?:com|sys|fid|bin|txt|sub)", block))
+
+
+TEST_PROGRAMS = {
+    "build/bdostest.com", "build/xtetest.com", "build/stltest.com",
+    "build/m80test.com", "build/m80bit.com", "build/disktest.com",
+    "build/termtest.com", "build/systest.com", "build/regtest.com",
+}
+TEST_FIXTURES = {
+    "src/test/smoke.txt", "src/test/page.txt",
+    "src/test/smoke.sub", "src/test/param.sub",
+}
+UTILITIES = {
+    "build/date.com", "build/showxdpb.com", "build/dump.com",
+    "build/setdef.com", "build/submit.com", "build/screen.com",
+    "build/set24x80.com",
+}
 
 
 class BuildScripts(unittest.TestCase):
@@ -54,7 +76,31 @@ class BuildScripts(unittest.TestCase):
                          assembled_programs(self.sh))
 
     def test_package_the_same_files(self):
-        self.assertEqual(disk_files(self.cmd), disk_files(self.sh))
+        # Both images: the distribution and the test image must match between
+        # build.cmd and build.sh.
+        self.assertEqual(disk_files(self.cmd),
+                         disk_files(self.sh))
+        self.assertEqual(
+            disk_files(self.cmd, "cpm3-test.dsk", "cpm3_720.dsk"),
+            disk_files(self.sh, "cpm3-test.dsk", "cpm3_720.dsk"))
+
+    def test_distribution_has_utilities_but_no_test_programs(self):
+        for name, text in (("build.cmd", self.cmd), ("build.sh", self.sh)):
+            dist = disk_files(text)
+            self.assertFalse(dist & TEST_PROGRAMS, name)
+            self.assertFalse(dist & TEST_FIXTURES, name)
+            self.assertTrue(UTILITIES <= dist, name)
+            for shared in ("build/cpm3.sys", "build/cpm3c.sys",
+                           "build/ccp.com", "build/ramdisk.fid"):
+                self.assertIn(shared, dist, name)
+
+    def test_test_image_adds_the_test_programs(self):
+        for name, text in (("build.cmd", self.cmd), ("build.sh", self.sh)):
+            dist = disk_files(text)
+            test = disk_files(text, "cpm3-test.dsk", "cpm3_720.dsk")
+            self.assertTrue(dist <= test, name)
+            self.assertTrue(TEST_PROGRAMS <= test, name)
+            self.assertTrue(TEST_FIXTURES <= test, name)
 
     def test_both_split_the_system_image(self):
         for name, text in (("build.cmd", self.cmd), ("build.sh", self.sh)):
