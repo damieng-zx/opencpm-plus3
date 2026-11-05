@@ -941,6 +941,35 @@
         }
       ],
       "notes": "Compile-only coverage. The 4.01 archive has no CRT driver, so the REL cannot be linked/run on this image; the complete 4.65 set needs more than the 174 KB data area."
+    },
+    {
+      "id": "clck3",
+      "title": "Spectrum +3 status-line clock (extractor)",
+      "url": "https://www.seasip.info/Cpm/software/3clcksea.com",
+      "archive": "file",
+      "save_as": "3CLCKSEA.COM",
+      "command": "3CLCKSEA",
+      "expect": [
+        "PMsfx v2.10",
+        "Extract? (Y/N)"
+      ],
+      "frames": 2500,
+      "steps": [
+        {
+          "key": "shift+y",
+          "frames": 3000,
+          "expect": [
+            "CLOCK   .FID Extracting OK",
+            "CLOCKCLR.COM Extracting OK"
+          ]
+        },
+        {
+          "text": "CLOCKCLR",
+          "frames": 1500,
+          "expect": ["CLOCK.FID is not loaded"]
+        }
+      ],
+      "notes": "The self-extractor and CLOCKCLR work. The clock itself is CLOCK.FID, installed at boot; this BIOS only loads RAMDISK.FID, so CLOCKCLR reports that it is not loaded. A generic +3 FID loader is the remaining piece."
     }
   ]
 }

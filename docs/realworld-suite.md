@@ -57,6 +57,7 @@ separate, explicitly triggered workflow.
 | `multiplan_80` | Microsoft Multiplan 1.05 (24x80) | 80-column command bar/grid, right-half flip | Pass |
 | `vedit` | VEDIT Plus 2.33 (CRT) | Installer (VT-52), then open/edit a file | Pass |
 | `cobol80` | Microsoft COBOL-80 4.01 | Compile `=HELLO` to `HELLO.REL` | Pass (compile only) |
+| `clck3` | Spectrum +3 clock extractor | Self-extract, `CLOCKCLR` | Pass (FID not loaded) |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
 | `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
@@ -115,6 +116,11 @@ issues; the others are history):
   REL cannot be linked/run; the complete 4.65 distribution includes
   `COBLIB.REL`/`CRTDRV.REL`/`L80.COM` but is too large for the 174 KB
   data area.  The package is therefore compile-only.
+- **3CLCK** extracts `CLOCK.FID`, `CLOCK.F64`, `CLOCK.DOC` and
+  `CLOCKCLR.COM`.  CLOCKCLR runs and correctly reports that the clock
+  FID is not loaded: the clock is installed at boot through `CLOCK.FID`,
+  while this BIOS only stages `RAMDISK.FID`.  A generic +3 FID loader is
+  the remaining work.
 - **BASCOM 5.3** used to exit immediately because the suite pulled
   `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
   machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`

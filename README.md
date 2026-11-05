@@ -98,6 +98,7 @@ emulator.
 | Microsoft Multiplan 1.05 | Pass | overlays, 80-column grid; the 24x80 variant fits it |
 | VEDIT Plus 2.33 | Pass | CRT installer (VT-52), generated `VPLUS.COM`, opens a file |
 | Microsoft COBOL-80 4.01 | Pass (compile) | `=HELLO` produces `HELLO.REL`; link/runtime needs the missing CRT driver |
+| Spectrum +3 clock (3CLCK) | Partial | Extractor and CLOCKCLR pass; the clock FID needs the boot FID loader |
 | WordStar 3.0 | Pass | starts and draws its no-file menu; use `SET24X80` for its 80-column menus |
 | WordMaster 1.07A | Pass | full edit/save cycle, BREAK = ESC |
 | Microsoft BASIC-80 5.21 | Pass | interpreter, console and file I/O |
@@ -112,9 +113,9 @@ emulator.
 | Microsoft ZSID 1.4 | Pass | debugger: load, dump, `G0` |
 | SLR Z80ASM 1.32 | Pass | direct-to-`.COM` assembler; exercises F44 multi-sector reads |
 
-All 22 packages pass (some rows above group several packages). The suite is
-run on demand rather than in CI because it downloads third-party software.
-The 24x80 variants (`wordstar30_80`, `turbo3_80`, `supercalc2_80`,
+All 23 packages are automated (some rows above group several packages);
+the partial entries note what is still blocked. The suite is run on demand
+rather than in CI because it downloads third-party software. The 24x80 variants (`wordstar30_80`, `turbo3_80`, `supercalc2_80`,
 `multiplan_80`) are additional runs of four of those packages.
 
 The default screen is 51 columns, the +3's native width.  For 80-column

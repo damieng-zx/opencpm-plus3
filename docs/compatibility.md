@@ -26,6 +26,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **Multiplan** | 1.05 | Banner, command bar, 80-column grid; the 24x80 variant flips to the right half | Needs the `MP80` data overlay; terminal escapes leave artifacts |
 | **VEDIT Plus** | 2.33 | CRT installer selects VT-52 and writes `VPLUS.COM`; opens `SMOKE.TXT` and shows the `LINE:`/`FILE:` status line | The installer is interactive; the manifest drives it |
 | **Microsoft COBOL-80** | 4.01 | Compiles `=HELLO` and writes `HELLO.REL` | Link/runtime blocked: the 4.01 archive lacks the CRT driver and the complete 4.65 set does not fit 174 KB |
+| **3CLCK** | 2.10 | Extractor writes `CLOCK.FID`/`CLOCK.F64`/`CLOCK.DOC`/`CLOCKCLR.COM`; CLOCKCLR reports the FID state | The clock FID is not loaded at boot; see below |
 | **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | ⚠️ VT-100 escapes such as `ESC[?3h`, `ESC[2J`, `ESC[H` remain visible; `supercalc2_80` confirms 24x80 fixes only the width, not the terminal |
 | **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
 | **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE wraps on the 51-column screen; TINST+`SCREEN 64` or `turbo3_80` (24x80) fit it, though Kaypro escapes leave stray `1` characters |
@@ -52,6 +53,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. `supercalc2_80` fits the banner and right half in 24x80; the escapes remain. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
 | **ED `E` (save)** | Writes the data and directory sector, then stops with `*e` still on the line; no further BDOS/XBIOS calls. | Found with `tools/zx84_dri.py`; `Q`/`Y` exits normally, so the failure is in ED's end-of-edit path after the write. |
 | **SET** | Reads the disk indefinitely instead of drawing its menu. | Found with `tools/zx84_dri.py`; not investigated yet. |
+| **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The clock is a FID installed at cold boot. This loader only stages `RAMDISK.FID`; a generic +3 FID loader is needed. |
 | **SETKEYS** | Stops after opening its key file. | Found with `tools/zx84_dri.py`; try it with a known `.KEY` file. |
 
 Recently fixed: **SLR Z80ASM 1.32** used to fail with `Line Too Long`
@@ -153,7 +155,7 @@ It does not help WordStar, whose 80-column layout is unchanged.
 
 - [ ] Kaypro 2X application bundle
 - [ ] Mallard BASIC / LocoScript CP/M suite
-- [ ] +3 3CLCK clock
+- [x] +3 3CLCK clock - extractor/CLOCKCLR work; the FID is not loaded yet
 - [ ] +3 3SAVR screensaver
 - [ ] +3 P3CPM utilities
 - [ ] +3 P3GIF viewer
