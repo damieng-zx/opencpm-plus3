@@ -112,6 +112,15 @@ lg_col:      equ 0xA8C9
 lg_src:      equ 0xA8CA
 lg_dst:      equ 0xA8CC
 lg_loop:     equ 0xA8CE
+lg_loop2:    equ 0xA8CF
+lg_old:      equ 0xA8D0
+lg_delta:    equ 0xA8D1
+lg_dir:      equ 0xA8D2
+lg_dcount:   equ 0xA8D3
+lg_bytes:    equ 0xA8D4
+lg_bits:     equ 0xA8D5
+lg_ptr:      equ 0xA8D6
+lg_first:    equ 0xA8D8
 LG_BUF       equ 0x5B00         ; 80*24 bytes in bank 5, after the attributes
 
 ; --- XBIOS colour state ---
@@ -3268,6 +3277,7 @@ _lg_autoflip:
     ld a, (cursor_col)
     ld c, a                    ; C = cursor column
     ld a, (lg_off)
+    ld (lg_old), a
     ld b, a                    ; B = current page
     ld a, (scr_cols)
     add a, b
@@ -3311,9 +3321,7 @@ _lg_autoflip:
     cp b
     ret z
     ld a, b
-    ld (lg_off), a
-    call _lg_redraw
-    jp _stl_draw
+    jp _lg_set_page
 .laf_ok:
     ret
 
@@ -3330,6 +3338,7 @@ _lg_flip:
     push ix
     push iy
     ld a, (lg_off)
+    ld (lg_old), a
     ld b, a
     ld a, (lg_step)
     add a, b
@@ -3346,12 +3355,69 @@ _lg_flip:
     ld b, a
 .lf_ok:
     ld a, b
-    ld (lg_off), a
-    call _lg_redraw
-    call _stl_draw
+    call _lg_set_page
+.lf_done:
     pop iy
     pop ix
     ret
+
+
+; @proc _lg_set_page
+;   Show the page in A, using the fast bitmap shift when the viewport is
+;   the full window, otherwise a full redraw.
+;   In: A = new page offset; lg_old must hold the current page.
+;   @param %page:u8 a
+;   @clobbers af,bc,de,hl,ix
+;   @end
+_lg_set_page:
+    ld c, a                    ; C = new page
+    ld a, (lg_old)
+    cp c
+    ret z                      ; same page: nothing to do
+    ld a, c
+    ld (lg_off), a
+    ; delta = new - old (signed)
+    ld a, (lg_old)
+    ld b, a
+    ld a, c
+    sub b
+    ld (lg_delta), a
+    ; offset/narrow viewports cannot be shifted reliably: redraw them
+    ld a, (vp_top)
+    or a
+    jr nz, .sp_full
+    ld a, (vp_left)
+    or a
+    jr nz, .sp_full
+    ld a, (vp_width)
+    ld b, a
+    ld a, (scr_cols)
+    cp b
+    jr nz, .sp_full
+    ld a, (lg_delta)
+    or a
+    jp m, .sp_right
+    ; window moved right: shift left and paint the new right columns
+    ld b, a
+    ld a, (scr_cols)
+    cp b
+    jr c, .sp_full
+    jr z, .sp_full
+    call _lg_flip_left
+    jr .sp_drawn
+.sp_right:
+    neg
+    ld b, a
+    ld a, (scr_cols)
+    cp b
+    jr c, .sp_full
+    jr z, .sp_full
+    call _lg_flip_right
+    jr .sp_drawn
+.sp_full:
+    call _lg_redraw
+.sp_drawn:
+    jp _stl_draw
 
 
 ; @proc _flip_chord
@@ -3548,6 +3614,330 @@ _lg_delete_char:
     call _page_out
     ld a, (lg_row)
     jp _lg_render_row
+
+
+; ==========================================================================
+; Fast page flip
+; ==========================================================================
+; Both pages show the same logical text shifted horizontally, so instead of
+; redrawing every column we shift the bitmap of each text scan line by
+; delta * font_pitch bits and render only the newly exposed columns.
+; 32 columns use the 8px font (byte-aligned), 51 the 5px font (byte + one
+; bit) and 64 the 4px font (byte-aligned).
+
+; @proc _lg_line_left
+;   In: HL = 32-byte scan line, B = whole bytes, C = bits (0/1)
+;   Clobbers: AF, BC, DE, HL
+; @end
+_lg_line_left:
+    ld (lg_ptr), hl
+    ld a, b
+    ld (lg_bytes), a
+    ld a, c
+    ld (lg_bits), a
+    ld a, (lg_bytes)
+    or a
+    jr z, .ll_bits
+    ld hl, (lg_ptr)
+    ld a, (lg_bytes)
+    ld e, a
+    ld d, 0
+    push hl
+    add hl, de                 ; HL = source
+    pop de                     ; DE = dest
+    ld a, 32
+    ld b, a
+    ld a, (lg_bytes)
+    ld c, a
+    ld a, b
+    sub c                      ; 32 - bytes
+    ld c, a
+    ld b, 0
+    ldir
+    ex de, hl                  ; HL = one past the moved bytes
+    ld a, (lg_bytes)
+    ld b, a
+    ld (hl), 0
+    dec b
+    jr z, .ll_bits
+.ll_zero:
+    inc hl
+    ld (hl), 0
+    djnz .ll_zero
+.ll_bits:
+    ld a, (lg_bits)
+    or a
+    ret z
+    ; Left shift in pixel space: bit 7 is the leftmost pixel, so the
+    ; carry chain runs from the high byte down and the carry out of byte 0
+    ; is discarded.
+    ld hl, (lg_ptr)
+    ld de, 31
+    add hl, de
+    ld b, 32
+    xor a                      ; carry = 0
+.ll_roll:
+    rl (hl)
+    dec hl
+    djnz .ll_roll
+    ret
+
+
+; @proc _lg_line_right
+;   In: HL = 32-byte scan line, B = whole bytes, C = bits (0/1)
+;   Clobbers: AF, BC, DE, HL
+; @end
+_lg_line_right:
+    ld (lg_ptr), hl
+    ld a, b
+    ld (lg_bytes), a
+    ld a, c
+    ld (lg_bits), a
+    ld a, (lg_bits)
+    or a
+    jr z, .lr_move
+    ld hl, (lg_ptr)
+    ld b, 32
+    xor a                      ; carry = 0
+.lr_roll:
+    rr (hl)
+    inc hl
+    djnz .lr_roll
+.lr_move:
+    ld a, (lg_bytes)
+    or a
+    ret z
+    ld hl, (lg_ptr)
+    ld a, (lg_bytes)
+    ld c, a
+    ld a, 31
+    sub c
+    ld e, a
+    ld d, 0
+    add hl, de                 ; HL = source end (ptr + 31 - bytes)
+    push hl
+    ld a, (lg_bytes)
+    ld e, a
+    ld d, 0
+    add hl, de                 ; HL = dest end (ptr + 31)
+    ex de, hl                  ; DE = dest end
+    pop hl                     ; HL = source end
+    ld a, 32
+    sub c                      ; count = 32 - bytes
+    ld c, a
+    ld b, 0
+    lddr
+    ld hl, (lg_ptr)
+    ld a, (lg_bytes)
+    ld b, a
+    ld (hl), 0
+    dec b
+    ret z
+.lr_zero:
+    inc hl
+    ld (hl), 0
+    djnz .lr_zero
+    ret
+
+
+; @proc _lg_flip_left
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_flip_left:
+    xor a
+    ld (lg_dir), a
+    jr _lg_flip_shift
+
+
+; @proc _lg_flip_right
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_flip_right:
+    ld a, 1
+    ld (lg_dir), a
+    ; fall through
+
+
+; @proc _lg_flip_shift
+;   Shift the text bitmap and render the exposed columns.
+; @clobbers af,bc,de,hl,ix
+; @end
+_lg_flip_shift:
+    ; pixels = |delta| * font pitch
+    ld a, (lg_delta)
+    or a
+    jp p, .fs_abs
+    neg
+.fs_abs:
+    ld b, a                    ; B = |delta|
+    ld l, a
+    ld h, 0
+    ld a, (scr_cols)
+    cp 32
+    jr z, .fs_p8
+    cp 64
+    jr z, .fs_p4
+    add hl, hl
+    add hl, hl                 ; *4
+    ld e, b
+    ld d, 0
+    add hl, de                 ; *5
+    jr .fs_product
+.fs_p8:
+    add hl, hl
+    add hl, hl
+    add hl, hl                 ; *8
+    jr .fs_product
+.fs_p4:
+    add hl, hl
+    add hl, hl                 ; *4
+.fs_product:
+    ld a, l
+    ld b, a
+    and 7
+    ld (lg_bits), a
+    ld a, b
+    srl a
+    srl a
+    srl a
+    ld (lg_bytes), a
+    ; exposed columns and their screen position
+    ld a, (lg_delta)
+    or a
+    jp m, .fs_expr
+    ld a, (scr_cols)
+    ld b, a
+    ld a, (lg_delta)
+    ld c, a
+    ld a, b
+    sub c
+    ld (lg_first), a
+    ld (lg_vis), a             ; first screen column
+    ld a, c
+    ld (lg_dcount), a
+    jr .fs_rows
+.fs_expr:
+    xor a
+    ld (lg_first), a
+    ld (lg_vis), a
+    ld a, (lg_delta)
+    neg
+    ld (lg_dcount), a
+.fs_rows:
+    call _page_in
+    xor a
+    ld (lg_loop), a
+.fs_row:
+    ; paint the whole text row's attributes with the current colour
+    ld a, (lg_loop)
+    call _attr_row_offset
+    ld de, SCR_ATTR
+    add hl, de
+    ld a, (scr_attr)
+    ld b, 32
+.fs_attr:
+    ld (hl), a
+    inc hl
+    djnz .fs_attr
+    ; shift the eight scan lines of this text row
+    ld a, (lg_loop)
+    call _calc_row_addr
+    ld b, 8
+.fs_scan:
+    push bc
+    push hl
+    ld a, (lg_bytes)
+    ld b, a
+    ld a, (lg_bits)
+    ld c, a
+    ld a, (lg_dir)
+    or a
+    jr nz, .fs_scan_right
+    call _lg_line_left
+    jr .fs_scan_done
+.fs_scan_right:
+    call _lg_line_right
+.fs_scan_done:
+    pop hl                     ; line base
+    ; 51 columns use 255 of the 256 pixels; the last one belongs to the
+    ; column just outside the window, so blank it after a shift.
+    ld a, (scr_cols)
+    cp 51
+    jr nz, .fs_scan_clipped
+    push hl
+    ld de, 31
+    add hl, de
+    res 0, (hl)
+    pop hl
+.fs_scan_clipped:
+    inc h
+    pop bc
+    djnz .fs_scan
+    ; mirror the new window into char_buffer
+    ld a, (lg_loop)
+    call _mul_row_scr_cols
+    ld de, char_buffer
+    add hl, de
+    push hl
+    ld a, (lg_loop)
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ld a, (lg_off)
+    ld e, a
+    ld d, 0
+    add hl, de
+    pop de
+    ld a, (scr_cols)
+    ld c, a
+    ld b, 0
+    ldir
+    ; render the newly exposed columns from the logical row
+    ld a, (lg_loop)
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ld a, (lg_off)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, (lg_first)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld (lg_src), hl
+    ld a, (lg_first)
+    ld (lg_vis), a
+    ld a, (lg_dcount)
+    ld (lg_loop2), a
+.fs_cell:
+    ld hl, (lg_src)
+    ld a, (hl)
+    inc hl
+    ld (lg_src), hl
+    ld b, a
+    ld a, (lg_vis)
+    ld c, a
+    ld a, (lg_loop)
+    ld d, a
+    call _render_char
+    ld a, (lg_vis)
+    inc a
+    ld (lg_vis), a
+    ld a, (lg_loop2)
+    dec a
+    ld (lg_loop2), a
+    jr nz, .fs_cell
+    ; next text row
+    ld a, (lg_loop)
+    inc a
+    ld (lg_loop), a
+    ld b, a
+    ld a, (vp_height)
+    cp b
+    jp nz, .fs_row
+    call _page_out
+    ret
 
 
 ; ==========================================================================

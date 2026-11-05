@@ -870,7 +870,7 @@ class Bank6Scratch(unittest.TestCase):
     def test_smoke_sentinels_free_bank6_gaps(self):
         smoke = source("tools/zx84_smoke.py")
         for token in ("BANK6_GAPS", "(0xA6FC, 4)", "(0xA83D, 3)",
-                      "(0xA870, 0x10)", "(0xA882, 0x0E)", "(0xA8CF, 0x31)",
+                      "(0xA870, 0x10)", "(0xA882, 0x0E)", "(0xA8D9, 0x27)",
                       "(0xADA4, 0x25C)",
                       "self.run_bank6_sentinels()",
                       "self.check_bank6_sentinels()"):

@@ -131,6 +131,9 @@ Also supported:
 ## Test programs
 
 - `BDOSTEST` — BDOS function tests (F1-F35, F104/F105).
+- `M80TEST` — 24x80 mode: TE_ASK width, auto-flip and leaving.
+- `M80BIT` — 24x80 fast page flip, checked against a reference
+  render of the logical buffer.
 - `DISKTEST` — file, directory, extent and SCB tests (T1-T22).
 - `REGTEST` — BDOS register preservation (BC/DE/IX/IY across calls).
 - `SYSTEST` — stack/MOVE/clock, page-zero, TAB and delimiter checks.

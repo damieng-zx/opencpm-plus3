@@ -724,6 +724,15 @@ same EXTEND state).  The `<`/`>` markers on the status line show whether
 columns are hidden to the left/right; they are not drawn when the status
 line is off.
 
+A page change does not redraw the whole screen.  The two pages show the
+same text shifted horizontally, so the BIOS shifts each 32-byte scan line
+by `delta × font pitch` bits, stamps the row's attribute plane, and
+re-renders only the newly exposed columns from `LG_BUF`.  Both the manual
+chord and auto-flip use this path.  If the viewport is not the full
+window (`ESC X` moved it or narrowed it), it falls back to a full redraw.
+At 51 columns the 256th screen pixel lies outside the 51×5 = 255-pixel
+text area, so it is cleared after the shift.
+
 In 24×80 mode `TE_ASK` reports width − 1 = 79, the cursor column is
 logical (0-79), the line/erase sequences work on the 80-column line, and
 `TE_STL_ASK` sets Zero (as if disabled) while the status-line flag itself

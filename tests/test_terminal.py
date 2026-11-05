@@ -197,6 +197,37 @@ class Wide80(unittest.TestCase):
         self.assertIn("ld a, 'x'", text)
         self.assertIn("ld a, 'y'", text)
 
+    def test_page_change_shifts_the_bitmap(self):
+        """Both flips go through the fast shift path, not a full redraw."""
+        text = source("src/bios/screen.zpa")
+        self.assertIn("_lg_set_page:", text)
+        page = text[text.index("_lg_set_page:"):text.index("_flip_chord:")]
+        self.assertIn("_lg_flip_left", page)
+        self.assertIn("_lg_flip_right", page)
+        self.assertIn("_lg_redraw", page)       # offset-viewport fallback
+        # auto-flip uses the shared page-change helper
+        auto = text[text.index("_lg_autoflip:"):text.index("_lg_flip:")]
+        self.assertIn("jp _lg_set_page", auto)
+        self.assertNotIn("call _lg_redraw", auto)
+        # and the manual flip does too
+        flip = text[text.index("_lg_flip:"):text.index("_lg_set_page:")]
+        self.assertIn("call _lg_set_page", flip)
+
+    def test_right_shift_uses_16_bit_addresses(self):
+        """Regression: the dest/source ends must not assume a zero low byte."""
+        text = source("src/bios/screen.zpa")
+        right = text[text.index("_lg_line_right:"):]
+        body = right[:right.index("_lg_flip_left:")]
+        self.assertIn("add hl, de", body)
+        self.assertIn("push hl", body)
+        self.assertIn("pop hl", body)
+        # the old, broken low-byte-only form
+        self.assertNotIn("ld l, a                    ; HL = source end", body)
+
+    def test_51_columns_clip_the_last_pixel(self):
+        text = source("src/bios/screen.zpa")
+        self.assertIn("res 0, (hl)", text)
+
 
 class PromptEscapeEcho(unittest.TestCase):
     """F10 must pass ESC to the screen: BREAK 3 0 works at the A> prompt."""

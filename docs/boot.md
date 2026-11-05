@@ -107,7 +107,7 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 15,694 | 16,384 (`C000-FFFF`) | 690   |
+| `CPM3.SYS` head         | 16,253 | 16,384 (`C000-FFFF`) | 131   |
 | `CPM3C.SYS` common stub | 1,807  | 2,560 (`F600-FFFF`)  | 753   |
 | loader                  | 1,221  | 8,704 (17 sectors)   | 7,483 |
 
@@ -132,9 +132,11 @@ Remaining strategies, in order:
    bitmap/attributes. The 24×80 virtual buffer (1,920 bytes) belongs there,
    not in bank 6 or the TPA, so 80-column mode costs code space only.
 
-The status line and the 24×80 virtual screen are implemented; together
-they cost about 1,300 bytes, leaving ~690 bytes of head slack. The 24×80
-buffer lives in bank 5 (`5B00-62BF`), not in the image.
+The status line, the 24×80 virtual screen and the fast page flip are
+implemented; together they cost about 1,850 bytes, leaving 131 bytes of
+head slack. The 24×80 buffer lives in bank 5 (`5B00-62BF`), not in the
+image.  A flip shifts each scan line and re-renders only the exposed
+columns, so the code grew but the visible pause shrank.
 
 ### Stage 4 — `cold_boot` (`src/bios/bios.zpa`, runs in bank 4)
 

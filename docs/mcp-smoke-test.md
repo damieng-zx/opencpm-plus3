@@ -389,6 +389,17 @@ The runner then exercises `SET24X80.COM` from the prompt: no argument and
 and `SET24X80 JUNK` must print `SET24X80 [ON|OFF]`.  After each switch it
 reads `mode80` (bank 6, `A8C1h`) and requires the expected state.
 
+`M80BIT` covers the fast page flip itself.  It writes `W` at logical column
+29, moves to column 51 (which leaves the first 51-column page) and writes
+`Q` there, then prints `M80BIT..OK` without a newline so the cursor stays
+on page 29.  The runner reads the logical buffer (`LG_BUF`, bank 5
+`5B00h`), the page offset (`A8C2h`) and the bitmap, renders rows 0-2 with
+an independent reference (5px font) and requires an exact match for all
+eight scan lines.  A wrong shift direction, a bad source address in the
+exposed-column re-render or a missing 51-column clip all fail here.  After
+the check a key press makes `M80BIT` leave 24x80 itself, so the following
+tests start at a 51-column prompt.
+
 ### BDOS file regression suite
 
 Run:

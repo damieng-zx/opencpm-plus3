@@ -440,7 +440,7 @@ class Smoke:
     # A880-A881 is f111_addr, A890-A8BF is the loader-staged row table and
     # A8C0 is the status-line flag, so the old A870-A8FF gap is split.
     BANK6_GAPS = ((0xA6FC, 4), (0xA83D, 3), (0xA870, 0x10),
-                  (0xA882, 0x0E), (0xA8CF, 0x31), (0xADA4, 0x25C))
+                  (0xA882, 0x0E), (0xA8D9, 0x27), (0xADA4, 0x25C))
 
     def run_bank6_sentinels(self) -> None:
         self.sentinels: list[tuple[int, bytes]] = []
@@ -659,6 +659,57 @@ class Smoke:
         self.wait_for(["M80..OK"], frames=300, attempts=10)
         if "FAIL" in self.text():
             raise SmokeError("M80TEST reported a failure")
+
+    @staticmethod
+    def _m80_row_ref(buf: bytes, off: int, row: int, scan: int,
+                     cols: int) -> bytes:
+        """Render one 51-column text row the way the BIOS should."""
+        font = (ROOT / "src" / "bios" / "font51.bin").read_bytes()
+        line = bytearray(32)
+        for c in range(cols):
+            glyph = font[buf[row * 80 + off + c] * 8 + scan]
+            x = c * 5
+            for k in range(5):
+                if (glyph >> (7 - k)) & 1:
+                    p = x + k
+                    line[p >> 3] |= 0x80 >> (p & 7)
+        return bytes(line)
+
+    def run_m80bit(self) -> None:
+        """24x80: the fast page flip leaves the right bitmap.
+
+        M80BIT puts 'W' at logical column 29, moves to column 51 (which flips
+        to page 29) and writes 'Q' there.  The visible bitmap is compared with
+        a reference render of the logical buffer, so a wrong shift direction
+        or a bad re-render source is caught.
+        """
+        self.log("M80BIT")
+        self.command("M80BIT", 2000)
+        self.wait_for(["M80BIT..OK"], frames=300, attempts=10)
+        cols = self.memory(4, label_address("scr_cols"), 1)[0]
+        off = self.memory(6, 0xA8C2, 1)[0]
+        if (cols, off) != (51, 29):
+            raise SmokeError(f"M80BIT: cols={cols}, off={off}, expected 51/29")
+        buf = self.memory(5, 0x5B00, 80 * 24)
+        for row in range(3):
+            for scan in range(8):
+                y = row * 8 + scan
+                addr = 0x4000 + ((y & 0xC0) << 5) + ((y & 7) << 8) + \
+                       ((y & 0x38) << 2)
+                got = self.memory(5, addr, 32)
+                want = self._m80_row_ref(buf, off, row, scan, cols)
+                if got != want:
+                    raise SmokeError(
+                        f"M80BIT: bitmap mismatch at row {row} scan {scan}: "
+                        f"{got.hex()} != {want.hex()}")
+        # The program waits for a key, then leaves 24x80 itself.
+        self.key("z")
+        for _ in range(10):
+            if self.memory(6, 0xA8C1, 1)[0] == 0:
+                break
+            self.mcp.call("run", {"frames": 100})
+        if self.memory(6, 0xA8C1, 1)[0] != 0:
+            raise SmokeError("M80BIT: 24x80 mode was not left")
 
     def run_set24x80(self) -> None:
         """SET24X80.COM enters/leaves 24x80 from the prompt."""
@@ -1098,6 +1149,7 @@ class Smoke:
         self.run_xtetest()
         self.run_stltest()
         self.run_m80test()
+        self.run_m80bit()
         self.run_set24x80()
         # SYSTEST deliberately changes and restores the delimiter; DIR must
         # still be clean afterwards.
