@@ -107,12 +107,23 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 16,253 | 16,384 (`C000-FFFF`) | 131   |
-| `CPM3C.SYS` common stub | 1,807  | 2,560 (`F600-FFFF`)  | 753   |
+| `CPM3.SYS` head         | 15,734 | 16,384 (`C000-FFFF`) | 650   |
+| `CPM3C.SYS` common stub | 2,476  | 2,560 (`F600-FFFF`)  | 84    |
 | loader                  | 1,221  | 8,704 (17 sectors)   | 7,483 |
 
 Total code capacity is `16,384 + 2,560 = 18,944` bytes, up from 16,058
 before the split. The old 326-byte ceiling is gone.
+
+The BDOS directory/FCB block (`find_free_block`, `read_dir_entry`,
+`write_dir_entry`, `dir_sector_to_bios`, `search_next_entry`, `match_fcb`,
+`bf_f15`-`bf_f18` and `close_dir_update`) was moved from bank 4 into the
+**tail of the common stub**, after `ccp_run_prog`.  That is what took the
+head from 47 bytes of slack to 650.  The move is safe because those
+routines only ever run in system mode (the BDOS dispatch switches banks
+before calling any handler), and appending them after the fixed layout
+keeps `copy_record_to_tpa/from_tpa`, `ccp_fcb` and `ccp_run_prog` at the
+addresses RAMDISK.FID and the CCP hardcode.  `tests/test_boot_split.py`
+pins both facts.
 
 Remaining strategies, in order:
 
@@ -121,22 +132,24 @@ Remaining strategies, in order:
    built into the loader and copied to its fixed bank-6 address at boot.
    Bank 6 is mapped for the whole system lifetime, so no call site changes.
    Cost: loader space only (7.4K spare).
-2. **Compression, if 18.9K ever runs out.** A simple LZ (literal runs plus
-   12-bit offsets) compresses the current blob to about 78%, a ZX0-style
-   format to about 60%; that buys roughly +4.8K / +10K of code. It needs a
-   compressor in `tools/` and a decoder in the loader (which has room), and
-   turns the two boot files into packed containers. The decoder can write
-   straight to `C000` and `9C00`, so it composes with the current split.
+2. **Pack the two boot files if *disk* space runs out.** Note the arithmetic
+   in older revisions was wrong: the head is decompressed into the same 16K
+   `C000-FFFF` window, so packing cannot buy code space.  A ZX0-style
+   container (literal runs, gamma-coded lengths and offsets, reuse of the
+   last offset) shrinks the current 18.2K of boot files to about 13.5K
+   (74%), i.e. ~4.7K more free disk, and the decoder fits in the loader.
+   It also costs one extra disk block today because the 1K-block split would
+   move `CPM3C.SYS` past 2K.
 3. **Do not spend image space on screen RAM.** Bank 5 is only mapped while
    the screen is paged in and has `5B00-7FFF` (9,472 bytes) free after the
    bitmap/attributes. The 24×80 virtual buffer (1,920 bytes) belongs there,
    not in bank 6 or the TPA, so 80-column mode costs code space only.
 
 The status line, the 24×80 virtual screen and the fast page flip are
-implemented; together they cost about 1,850 bytes, leaving 131 bytes of
-head slack. The 24×80 buffer lives in bank 5 (`5B00-62BF`), not in the
-image.  A flip shifts each scan line and re-renders only the exposed
-columns, so the code grew but the visible pause shrank.
+implemented; together they cost about 1,850 bytes.  The 24×80 buffer lives
+in bank 5 (`5B00-62BF`), not in the image.  A flip shifts each scan line and
+re-renders only the exposed columns, so the code grew but the visible pause
+shrank.
 
 ### Stage 4 — `cold_boot` (`src/bios/bios.zpa`, runs in bank 4)
 

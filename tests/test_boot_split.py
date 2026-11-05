@@ -51,5 +51,48 @@ class BootSplit(unittest.TestCase):
         self.assertLessEqual(0x9C00 + 3 * 1024, 0xA860)
 
 
+class Headroom(unittest.TestCase):
+    """The BDOS directory/FCB block lives in the common stub for headroom."""
+
+    RELOCATED = ("find_free_block", "read_dir_entry", "write_dir_entry",
+                 "dir_sector_to_bios", "search_next_entry", "match_fcb",
+                 "bf_f15", "bf_f16", "bf_f17", "bf_f18", "close_dir_update")
+
+    def test_relocated_helpers_are_in_common_memory(self):
+        table = labels()
+        if not table:
+            self.skipTest("build/bios.lst not present; run build.cmd first")
+        for name in self.RELOCATED:
+            self.assertIn(name, table)
+            self.assertGreaterEqual(table[name].addr, 0xF600, name)
+
+    def test_head_keeps_a_working_margin(self):
+        table = labels()
+        if not table:
+            self.skipTest("build/bios.lst not present; run build.cmd first")
+        head = table["common_image"].addr - 0xC000
+        self.assertGreaterEqual(0x4000 - head, 256,
+                                "head slack dropped below 256 bytes")
+
+    def test_fixed_common_addresses_did_not_move(self):
+        # RAMDISK.FID hardcodes the copy routines and miniccp.zpa the FCB;
+        # the relocation is appended after these, so they must not shift.
+        table = labels()
+        if not table:
+            self.skipTest("build/bios.lst not present; run build.cmd first")
+        self.assertEqual(table["copy_record_to_tpa"].addr, 0xF9BF)
+        self.assertEqual(table["copy_record_from_tpa"].addr, 0xF9C5)
+        self.assertEqual(table["ccp_fcb"].addr, 0xFB66)
+        self.assertEqual(table["ccp_run_prog"].addr, 0xFD0F)
+
+    def test_common_window_still_has_room(self):
+        table = labels()
+        if not table:
+            self.skipTest("build/bios.lst not present; run build.cmd first")
+        common = table["common_image_end"].addr - table["common_image"].addr
+        self.assertLessEqual(common, 0x10000 - 0xF600)
+        self.assertLessEqual(common, 0xC00)          # 3-block staging area
+
+
 if __name__ == "__main__":
     unittest.main()

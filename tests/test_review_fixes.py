@@ -144,7 +144,8 @@ class Issue07WriteProtect(unittest.TestCase):
     """F28 must actually block writes and F45 must select return/abort."""
 
     def test_write_functions_check_readonly(self):
-        text = source("src/bdos/bdos.zpa")
+        # Some handlers live in the common stub now.
+        text = source("src/bdos/bdos.zpa") + source("src/bios/common.zpa")
         for start, end in (
             ("bf_f16:", "; @proc close_dir_update"),
             ("bf_f19:", "; F20:"),
@@ -381,7 +382,7 @@ class VerificationDirCacheKey(unittest.TestCase):
     """
 
     def test_sector_is_saved_before_bios_calls(self):
-        text = source("src/bdos/bdos.zpa")
+        text = source("src/bdos/bdos.zpa") + source("src/bios/common.zpa")
         body = text[text.index("read_dir_entry:"):text.index("write_dir_entry:")]
         self.assertRegex(
             body, r"\.need_read:\s*\n\s*ld a, b\s*\n\s*push af")
@@ -392,7 +393,7 @@ class VerificationDirCacheKey(unittest.TestCase):
         self.assertIn("ld a, (disk_drive)\n    ld (last_dir_drv), a", body)
 
     def test_error_path_pops_the_saved_sector(self):
-        text = source("src/bdos/bdos.zpa")
+        text = source("src/bdos/bdos.zpa") + source("src/bios/common.zpa")
         body = text[text.index(".read_error_dma:"):text.index("write_dir_entry:")]
         self.assertRegex(body, r"pop hl[^\n]*\n\s*ld \(bdos_dma\), hl")
         self.assertRegex(body, r"pop bc[^\n]*\n\s*pop af")

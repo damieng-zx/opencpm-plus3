@@ -61,8 +61,10 @@ class BlockAccessors(unittest.TestCase):
             self.assertIn("rr l", body, name)
 
     def test_find_free_block_returns_hl(self):
-        text = source("src/bdos/bdos.zpa")
-        body = text[text.index("find_free_block:"):text.index("; Internal: Directory operations")]
+        # The helper lives in the common stub (relocated for headroom).
+        text = source("src/bdos/bdos.zpa") + source("src/bios/common.zpa")
+        body = text[text.index("find_free_block:"):
+                    text.index("read_dir_entry:", text.index("find_free_block:"))]
         self.assertIn("ld h, b", body)
         self.assertIn("ld l, c", body)
         self.assertIn("(cached_dsm)", body)

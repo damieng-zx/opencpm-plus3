@@ -203,7 +203,11 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/bios/fdc765.asm` — uPD765A driver with sector deblocking (512→128 byte)
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
 - `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/compression.ch8` by `tools/mkfont64.py`
-- `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O)
+- `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O).  The directory/FCB
+  helpers (`find_free_block`, `read_dir_entry`, `write_dir_entry`,
+  `dir_sector_to_bios`, `search_next_entry`, `match_fcb`, `bf_f15`-`bf_f18`,
+  `close_dir_update`) live at the end of `common.asm` instead, in common
+  memory, to leave room in the 16K bank-4 image; see `docs/boot.md`
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
 - `tools/mkdsk.py` — DSK image builder (`--format 180k` or `720k`); the

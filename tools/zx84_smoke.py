@@ -1186,6 +1186,12 @@ def prepare_test_image(dsk: Path) -> Path:
     RENAME.COM is deliberately not bundled into the distribution image - the
     CCP's built-in REN covers renaming - but the smoke keeps exercising a real
     third-party F23 caller when references/binaries/ is present.
+
+    DISKTEST writes a 17K multi-extent file, and a developer image that
+    build.cmd populated from references/binaries/ can be too full for that.
+    The two big optional utilities the suite never runs (BBCBASIC.COM and
+    NULU11.COM) are therefore dropped from the scratch copy, which is
+    disposable anyway.
     """
     rename = ROOT / "references" / "binaries" / "RENAME.COM"
     if not rename.exists():
@@ -1203,6 +1209,10 @@ def prepare_test_image(dsk: Path) -> Path:
     out = ROOT / "build" / "smoke.dsk"
     shutil.copyfile(dsk, out)
     image = mkdsk.DSKImage().load(out)
+    for name in ("BBCBASIC.COM", "NULU11.COM"):
+        if image.delete_cpm_file(name):
+            print(f"[smoke] {name} dropped from {out.name} "
+                  "(optional, keeps room for DISKTEST)")
     if image.add_cpm_file("RENAME.COM", rename.read_bytes()) is False:
         return dsk
     image.save(out)

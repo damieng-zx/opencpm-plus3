@@ -236,6 +236,28 @@ class DSKImage:
                 return i
         return None
 
+    def delete_cpm_file(self, filename):
+        """Delete a file: mark every matching directory entry as free (0xE5).
+
+        The allocation vector is not stored on disk - CP/M rebuilds it from
+        the directory - so clearing the entries is enough to release the
+        blocks.  Returns True if at least one entry was removed.
+        """
+        name, ext = self._parse_cpm_filename(filename)
+        wanted = name + ext
+        removed = False
+        for i in range(self.dir_entries):
+            entry = self._read_dir_entry(i)
+            if entry[0] == 0xE5:
+                continue
+            if bytes(b & 0x7F for b in entry[1:12]) != wanted:
+                continue
+            entry = bytearray(entry)
+            entry[0] = 0xE5
+            self._write_dir_entry(i, entry)
+            removed = True
+        return removed
+
     def _parse_cpm_filename(self, filename):
         filename = filename.upper().strip()
         if '.' in filename:
