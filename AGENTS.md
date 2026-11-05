@@ -17,6 +17,10 @@ Requires: `sjasmplus` (Z80 assembler at C:\Apps\sjasmplus.exe), `python3`.
 
 Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) → loader → boot sector → DSK image. The BIOS is stored as `CPM3.SYS` on the CP/M filesystem, loaded by a small stage-2 loader in track 0. The CCP is a separate file, `CCP.COM`, staged by the stage-2 loader during cold boot (see Boot Chain).
 
+`CPM3.SYS` must fit the 16K `C000-FFFF` window; the build prints the exact
+budget and `build/memory.map` lists every region. Before adding a large
+feature, read `docs/boot.md` § *Image headroom and the growth plan*.
+
 `references/binaries/` is optional third-party software: `SUBMIT.COM` and
 `RENAME.COM` are excluded from the image (we build SUBMIT, and the CCP has a
 built-in REN); the smoke runner adds `RENAME.COM` to a scratch copy so a real
