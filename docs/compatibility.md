@@ -9,7 +9,7 @@ on the ZX Spectrum +3.
 - **Doesn't work:** the observed failure is described below.
 - **Not yet tested:** candidate software; no claim either way.
 
-Build used for the current results: `CPM3.SYS` 14,251 bytes + `CPM3C.SYS` 1,807 bytes plus `CCP.COM` 3,620 bytes (the CCP is loaded from the disk), no FDC retries.
+Build used for the current results: `CPM3.SYS` 16,253 bytes + `CPM3C.SYS` 1,807 bytes plus `CCP.COM` 3,620 bytes (the CCP is loaded from the disk), no FDC retries.
 Tests were run on 2026-10-28 through the zx84 MCP server.
 
 ## ✅ Works
@@ -37,6 +37,8 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **muLISP-80** | 10/06/80 | `MULISP`, `(PLUS 2 3)` → `5`, `(TIMES 6 7)` → `42` | The Soft Warehouse LISP read-eval-print loop at the `$` prompt |
 | **APL/Z** | 1.1 | `APL`, date `010180`, `2+2` → `4`, `1 2 3 + 4 5 6` → `5 7 9` | Start-up asks for `mmddyy`; 30 KB workspace |
 | **SUBMIT** (our build) | — | Explicit `SUBMIT SMOKE.SUB`, implicit `SMOKE`, `$1`/`$2` substitution, missing-file/missing-parameter paths | Project tool, not third-party |
+| **SHOW** | DRI CP/M 3 | Prints `A: RW, Space: ...` | Local-only harness `tools/zx84_dri.py` |
+| **ED** | DRI CP/M 3 | Appends/types a line, inserts text, `Q`/`Y` quits | Read/edit and quit work; `E` (save) hangs, see below |
 
 ## ❌ Doesn’t work yet
 
@@ -45,6 +47,9 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **WordStar 3.0 display** | The program runs and draws its menu, but WordStar is an 80×24 program and the character buffer is 51 columns, so each 80-column line wraps and overlaps the next. | The crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: an 80-column screen mode (3px font) or a WordStar install with a ≤51-column terminal. |
 | **Turbo Pascal display** | Runs correctly; the 80-column IDE frames wrap on screen. | Same root cause as WordStar's display: no 80-column mode. |
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
+| **ED `E` (save)** | Writes the data and directory sector, then stops with `*e` still on the line; no further BDOS/XBIOS calls. | Found with `tools/zx84_dri.py`; `Q`/`Y` exits normally, so the failure is in ED's end-of-edit path after the write. |
+| **SET** | Reads the disk indefinitely instead of drawing its menu. | Found with `tools/zx84_dri.py`; not investigated yet. |
+| **SETKEYS** | Stops after opening its key file. | Found with `tools/zx84_dri.py`; try it with a known `.KEY` file. |
 
 Recently fixed: **SLR Z80ASM 1.32** used to fail with `Line Too Long`
 because it sets a multi-sector count (8) with F44 and assumes one F20 moved

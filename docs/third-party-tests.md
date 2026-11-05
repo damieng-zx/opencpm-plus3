@@ -49,6 +49,35 @@ requiring `SMOKE OK`.  PIP is a real F44 multi-sector caller, so this also
 checks the BDOS read/write path with a third-party program.  Without a
 local copy the tool prints the notice and exits 0.
 
+## DRI CP/M 3 utilities
+
+The DRI utilities (`SHOW`, `ED`, `SET`, `SETKEYS`, `PIP`, ...) are Copyright
+Digital Research and are not included or redistributed.  The harness reads
+your own copies from `references/binaries/` (git-ignored) or `--bin DIR`:
+
+```text
+python tools/zx84_dri.py
+python tools/zx84_dri.py --bin /path/to/your/cpm/tools
+```
+
+It copies the built image to `build/dri-test.dsk`, adds the local
+`SHOW.COM`/`ED.COM` and checks:
+
+* `SHOW` prints the drive status and free space (`A: RW, Space: ...`).
+* `ED SMOKE.TXT` appends and types a line (`SMOKE OK`), then quits with
+  `Q` and `Y`.
+* `ED NEW.TXT` inserts a line and discards it with `Q`/`Y`.
+
+Known issues, found with this harness and not yet run by it:
+
+* **ED `E` (end/save)** writes the data and directory sector, then stops
+  with `*e` still on the line; no further BDOS or XBIOS calls are made.
+* **SET** keeps reading the disk instead of drawing its menu.
+* **SETKEYS** stops after opening its key file.
+
+Without `SHOW.COM`/`ED.COM` the tool prints the notice and exits 0, so CI
+never needs the binaries.
+
 ## Other local utilities
 
 `references/binaries/` may also contain tools with different provenance

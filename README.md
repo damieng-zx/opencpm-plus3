@@ -252,6 +252,7 @@ Automated runners:
 ```bash
 python3 tools/zx84_smoke.py              # boot, system tests, CCP, terminal
 python3 tools/zx84_negative.py           # corrupted images must not boot
+python3 tools/zx84_dri.py                # DRI utilities (needs local copies)
 python3 tools/zx84_realworld.py          # the packages in the table above
 python3 -m unittest discover -s tests -t .
 ```
