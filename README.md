@@ -9,15 +9,23 @@ for this project.
 - **Three text modes**: 32x24 (8px font), 51x24 (5px, the +3's native width)
   and 64x24 (4px "Compression" font, two characters per attribute cell).
   `SCREEN 32|51|64` (the `SCREEN` utility), or BIOS function 32.
-- **24x80 virtual screen**: `SET24X80` / `ESC x` shows 80 columns through a
-  window of the current width.  Paging is automatic (follows the cursor,
-  `ESC 5`), or manual with EXTEND+Enter; at 64 columns only a 16-column
-  shift is needed, so there is less paging than the original +3.
-- **Status line**: `ESC 0`/`ESC 1` reserve the bottom row for BIOS messages
-  (23 text rows), with `<`/`>` 80-column markers when the status line is on.
+- **24x80 virtual screen**: an 80x24 buffer in bank 5, shown through a
+  window of the current width.  `SET24X80` / `ESC x` enters it, `ESC y`
+  leaves, `ESC 3 2` enters at the current width and `ESC 5 n` selects
+  automatic or manual paging.  Automatic paging follows the cursor;
+  otherwise EXTEND+Enter (or CAPS SHIFT+SYMBOL SHIFT+Enter) flips.  The
+  window steps by 24, 29 or 16 columns at 32/51/64 columns, so our
+  64-column mode needs only a 16-column shift — less paging than the
+  original +3.  A flip shifts the bitmap and re-renders only the exposed
+  columns; `<`/`>` on the status line mark hidden text.
+- **Status line**: `ESC 0`/`ESC 1` toggle the bottom row for BIOS messages
+  (23 text rows while it is on).  In 24x80 it carries the `<`/`>`
+  hidden-column markers; `TE_STL_ASK` reports it as disabled in 24x80,
+  as the +3 manual specifies.
 - **Terminal**: VT52/ADM-3A cursor and erase sequences, colour and BRIGHT via
-  `ESC b`/`ESC c`, wrap control (`ESC v`/`ESC w`), and the `ESC 3`/`ESC 4`
-  screen-size and page-mode controls from the +3 CP/M manual.
+  `ESC b`/`ESC c`, wrap control (`ESC v`/`ESC w`), a settable viewport
+  (`ESC X`), and the `ESC 3`/`ESC 4` screen-size and page-mode controls from
+  the +3 CP/M manual.
 - **XBIOS/TE**: the +3 extended BIOS terminal calls `TE_ASK`, `TE_RESET`,
   `TE_SET_INK`, `TE_SET_BORDER`, `TE_SET_SPEED` and `SCR_RUN_ROUTINE`, plus
   the disc calls (`DD_INIT`, `DD_SETUP`, `DD_LOGIN`, `DD_SEL_FORMAT`,
@@ -27,14 +35,15 @@ for this project.
   `KM_SET_KEY`, `KM_SET_EXPAND`, `KM_KT_PUT`/`KM_KT_GET`), through BIOS
   function 30 (`USERF`); see [XBIOS/TE Interface](docs/cpm-plus-xbios.md).
 - **Keyboard**: the +3 CP/M matrix — BREAK (`Caps Shift`+`Space`) sends ESC,
-  `Caps Shift`+`Symbol` sends control codes, plus the function-key mappings.
+  `Caps Shift`+`Symbol` sends control codes, EXTEND+Enter flips the 24x80
+  halves, plus the function-key mappings.
 - **BDOS**: console and file I/O plus the CP/M 3 extensions real software
   uses — F44/F45/F46/F47/F48/F49/F50, F59, F99, F104/F105, F107-F112 and
   F120-F123 (SETDEF order/path). F46 computes free space from the allocation
   vector; F47 chains to a program without a prompt.
-- **uPD765A FDC driver** with 512→128 byte sector deblocking. Reads and writes
-  the formats described by the XDPB (8-bit blocks), probing the geometry from
-  the boot sector.
+- **uPD765A FDC driver** with 512→128 byte sector deblocking.  Reads and
+  writes the formats described by the XDPB, including 8-bit and 16-bit block
+  numbers (DSM > 255), probing the geometry from the boot sector.
 - **Banked memory**: 61K TPA, a separate system bank, and a common-memory stub
   that bridges TPA calls into the BIOS/BDOS.
 - **MiniCCP**: `CCP.COM`, loaded from the boot disk at cold boot like real
@@ -45,6 +54,18 @@ for this project.
   memory so it keeps running while a TPA program executes.
 - **Tooling**: a DSK image builder, font generator and emulator-driven test
   runners.
+
+### Screen modes
+
+| Mode | Size | Font | Notes |
+|---|---|---|---|
+| 32x24 | 32x24 | 8px | `SCREEN 32` |
+| 51x24 | 51x24 | 5px | native +3 width, `SCREEN 51` |
+| 64x24 | 64x24 | 4px | Compression font, `SCREEN 64` |
+| 24x80 | 80x24 | current | virtual, paged, `SET24X80` |
+
+The 24x80 buffer lives in bank 5 at `5B00-62BF`, outside the image and the
+visible character buffer, so it costs no TPA or bank-6 space.
 
 ## CCP commands
 
@@ -74,7 +95,7 @@ emulator.
 | Zork I / II / III | Pass | large `.DAT` files, random reads, save files |
 | dBASE II 2.43 | Pass | overlays, FCB random I/O, dot prompt |
 | SuperCalc 1.05 / SuperCalc2 1.00 | Pass | overlays, cell entry, quit |
-| WordStar 3.0 | Pass | starts and draws its no-file menu; 80-column menus wrap at 51 (see below) |
+| WordStar 3.0 | Pass | starts and draws its no-file menu; use `SET24X80` for its 80-column menus |
 | WordMaster 1.07A | Pass | full edit/save cycle, BREAK = ESC |
 | Microsoft BASIC-80 5.21 | Pass | interpreter, console and file I/O |
 | Turbo Pascal 3.0 | Pass | IDE starts; fits `SCREEN 64` after a TINST 64-column install |
@@ -91,12 +112,14 @@ emulator.
 All 19 packages pass (some rows above group several packages). The suite is
 run on demand rather than in CI because it downloads third-party software.
 
-Two display caveats, both from the same root cause — the default screen is 51
-columns:
+The default screen is 51 columns, the +3's native width.  For 80-column
+software, enter the virtual 80-column screen with `SET24X80` (or `ESC x`);
+it pans automatically or on EXTEND+Enter.
 
-- **WordStar** is an 80-column program; its menus wrap at 51 columns.
-- **Turbo Pascal**'s 80-column IDE wraps with its default install; TINST can
-  install the editor for a 64-column terminal, which `SCREEN 64` then fits.
+- **WordStar**'s menus wrap at 51 in the default mode; 24x80 gives them the
+  full 80 columns.
+- **Turbo Pascal**'s IDE wraps with its default install; TINST can install
+  the editor for a 64-column terminal, which `SCREEN 64` fits, or use 24x80.
 
 Also supported:
 
@@ -131,6 +154,7 @@ Also supported:
 ## Test programs
 
 - `BDOSTEST` — BDOS function tests (F1-F35, F104/F105).
+- `STLTEST` — status line (`TE_STL`), 23-row viewport and scroll.
 - `M80TEST` — 24x80 mode: TE_ASK width, auto-flip and leaving.
 - `M80BIT` — 24x80 fast page flip, checked against a reference
   render of the logical buffer.
@@ -145,9 +169,9 @@ Also supported:
 ## Wishlist / TODO
 
 - **FORMAT** command (and a disk copy/verify tool).
-- **80-column mode** — a 3px font, or an 80-column buffer with a panned
-  viewport. This is the remaining gap for WordStar and other 80-column
-  layouts.
+- **VT-100/CSI parser** — in addition to the VT-52/ADM-3A sequences.
+- **3px 80-column font** — a true 80x24 display with no paging (optional;
+  24x80 already provides the width).
 - **Larger multi-sector counts** — F44 currently accepts 1..127; 128 (a full
   16K buffer) is rejected so PIP falls back to its compatible path. Larger
   counts may be possible once PIP's buffering is fully understood.
@@ -168,8 +192,12 @@ Also supported:
 | 0000–3FFF | Bank 0 — TPA | Bank 4 — BIOS, BDOS, drivers |
 | 4000–7FFF | Bank 1 — TPA | Bank 7 — C: RAM disk (16K) |
 | 8000–BFFF | Bank 2 — TPA | Bank 6 — fonts, FID, FDC/text buffers |
-| C000–F5FF | Bank 3 — TPA | Bank 3 — loaded image (unused after init) |
+| C000–F5FF | Bank 3 — TPA | Bank 3 — `CPM3.SYS` head (unused after init) |
 | F600–FFFF | Common stub (bank 3) | Common stub (bank 3) |
+
+`CPM3.SYS` is loaded at `C000` and can run past `F600` during the load;
+`init` copies it to bank 4, then copies the common stub from bank 6 to
+`F600–FFFF`.
 
 Banking is controlled via port `0x1FFD`. See [AGENTS.md](AGENTS.md) for the
 full architecture and [docs/boot.md](docs/boot.md) for the boot sequence.
@@ -189,7 +217,9 @@ build.cmd
 build.cmd --add FILE ...
 ```
 
-Output: `build/cpm3.dsk` — a standard +3 disk image ready for emulation.
+Output: `build/cpm3.dsk` — a standard +3 disk image ready for emulation —
+and `build/cpm3_720.dsk`, the PCW DS/DD 720K image used for 16-bit block
+tests.
 
 The system files on the disk are `CPM3.SYS` (BIOS + BDOS head),
 `CPM3C.SYS` (common stub), `CCP.COM` (the command processor),
