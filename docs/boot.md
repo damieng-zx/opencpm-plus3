@@ -56,7 +56,9 @@ DI not yet asserted.
 - Scans the directory (track 1, sectors 1-4) for each file in turn:
   `FONT51.BIN` to `8000`, `FONT32.BIN` to `8800`, `FONT64.BIN` to `9400`,
   `CCP.COM` to `B000` (max 4K) and `RAMDISK.FID`'s first block to `9000`.
-  Missing optional files are skipped.
+  Missing optional files are skipped.  It also copies the built-in 48-byte
+  screen row-address table to `A890`; that pure data would otherwise cost
+  `CPM3.SYS` image space.
 - Records what it staged in `LF_FLAGS`/`LF_CCP_LEN` in bank 6 (`A860h`),
   which survive the system-image copy into bank 4.
 - Finally finds `CPM3    SYS`, walks its allocation map (16 block pointers,
@@ -171,7 +173,7 @@ and trampolines. `scb_tpa` is patched to `TPA_TOP` too.
 | `0000-3FFF` | Bank 4. BIOS jump table at 0000, then state, drivers, font/CCP/FID loaders, BDOS. Asserted ≤ 16K (`system_end <= 0x4000`). |
 | `0038`      | ISR vector — JP isr_handler (in common memory).           |
 | `4000-7FFF` | Bank 7. C: RAM disk (16K) when RAMDISK.FID is loaded.     |
-| `8000-BFFF` | Bank 6. FONT51 at `8000`, FONT32 at `8800`, RAMDISK.FID at `9000` if loaded, FONT64 at `9400`, FDC deblock buffer at `9C00`, `DD_CHECK_SECTOR` compare buffer at `9E00`; text/scroll buffers at `A000-A5FF`; BIOS/BDOS scratch at `A600-A6FF` and `A82D-A83C`; screen cursor/ESC scratch at `A730-A739`; row table at `A700`, CSV/ALV at `A740-A82C`; `KM_SET_KEY` translation table at
+| `8000-BFFF` | Bank 6. FONT51 at `8000`, FONT32 at `8800`, RAMDISK.FID at `9000` if loaded, FONT64 at `9400`, FDC deblock buffer at `9C00`, `DD_CHECK_SECTOR` compare buffer at `9E00`; text/scroll buffers at `A000-A5FF`; BIOS/BDOS scratch at `A600-A6FF` and `A82D-A83C`; row-address table at `A700`, CSV/ALV at `A740-A82C`; screen cursor/ESC scratch at `A730-A739` and viewport scratch at `A73A-A73F`; loader-staged screen row table at `A890-A8BF`; `KM_SET_KEY` translation table at
 `A900-A99F`, `KM_SET_EXPAND` slots at `A9A0-AD7F`, FCB shadow at `AD80-ADA3`, loader hand-off at `A860-A862`; staged `CCP.COM` at
 `B000-BFFF`. |
 | `F600-FFFF` | Common stub (bank 3). Same content as in mode 0 — that's the point. |

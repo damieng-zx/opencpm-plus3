@@ -2092,6 +2092,82 @@ start:
     ld c, 9
     call BDOS
 
+    ; === Test 33: ESC X viewport and TE_ASK ===
+    ; The marker is printed after the viewport is restored: text written
+    ; inside the small viewport would not sit next to it on screen.
+    ; Home the cursor while the viewport is still the whole screen.
+    ld a, 0x1B
+    call t33_put
+    ld a, 'Y'
+    call t33_put
+    ld a, 32
+    call t33_put
+    ld a, 32
+    call t33_put
+
+    ; ESC X top=2 left=3 height=4 width=10
+    ld a, 0x1B
+    call t33_put
+    ld a, 'X'
+    call t33_put
+    ld a, 2 + 32
+    call t33_put
+    ld a, 3 + 32
+    call t33_put
+    ld a, (4 - 1) + 32
+    call t33_put
+    ld a, (10 - 1) + 32
+    call t33_put
+
+    ld hl, TE_ASK
+    ld (userf_dw), hl
+    call userf_trampoline
+    ; B=2 C=3 D=3 E=9, cursor clamped to H=0 L=0
+    ld a, b
+    cp 2
+    jp nz, .t33_fail
+    ld a, c
+    cp 3
+    jp nz, .t33_fail
+    ld a, d
+    cp 3
+    jp nz, .t33_fail
+    ld a, e
+    cp 9
+    jp nz, .t33_fail
+    ld a, h
+    or a
+    jp nz, .t33_fail
+    ld a, l
+    or a
+    jp nz, .t33_fail
+
+    ; Restore the whole-screen viewport: ESC X 0 0 23 50
+    ld a, 0x1B
+    call t33_put
+    ld a, 'X'
+    call t33_put
+    ld a, 32
+    call t33_put
+    ld a, 32
+    call t33_put
+    ld a, 23 + 32
+    call t33_put
+    ld a, 50 + 32
+    call t33_put
+
+    ; Back on the full screen: print the marker and the result together.
+    ld de, msg_t33
+    ld c, 9
+    call BDOS
+    ld de, msg_ok
+    jr .t33_print
+.t33_fail:
+    ld de, msg_fail
+.t33_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -2103,6 +2179,12 @@ start:
 ; ============================================================
 ; USERF trampoline — self-modifying code
 ; ============================================================
+t33_put:
+    ld e, a
+    ld c, 2
+    call BDOS
+    ret
+
 userf_trampoline:
     call 0                      ; Patched to USERF address (3 bytes)
 userf_dw:
@@ -2349,6 +2431,7 @@ msg_t31:    db 0x0D, 0x0A, "31.KREPEAT..", '$'
 msg_t31b:   db 0x0D, 0x0A, "31.SLOWX..", '$'
 msg_t31ok:  db "31.KREPEAT..OK", 0x0D, 0x0A, '$'
 msg_t32:    db 0x0D, 0x0A, "32.FMTBAD..", '$'
+msg_t33:    db 0x0D, 0x0A, "33.VIEWPORT..", '$'
 exp_string: db "HELLO"
 exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'

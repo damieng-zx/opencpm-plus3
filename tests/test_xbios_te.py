@@ -29,19 +29,40 @@ class TeAsk(unittest.TestCase):
 
     def test_returns_viewport_and_cursor(self):
         body = handler_body(".te_ask:", ".dd_drive_status:")
-        # B/C = top-left of the full-screen viewport.
-        self.assertIn("ld b, 0", body)
-        self.assertIn("ld c, 0", body)
+        # B/C = viewport top/left from the ESC X state.
+        self.assertIn("ld a, (vp_top)", body)
+        self.assertIn("ld b, a", body)
+        self.assertIn("ld a, (vp_left)", body)
+        self.assertIn("ld c, a", body)
         # D/E = height-1 / width-1.
-        self.assertIn("ld d, SCR_ROWS - 1", body)
-        self.assertIn("ld a, (scr_cols)", body)
-        self.assertIn("dec a", body)
+        self.assertIn("ld a, (vp_height)", body)
+        self.assertIn("ld d, a", body)
+        self.assertIn("ld a, (vp_width)", body)
         self.assertIn("ld e, a", body)
-        # H/L = cursor row/column.
+        # H/L = cursor row/column (viewport-relative).
         self.assertIn("ld a, (cursor_row)", body)
         self.assertIn("ld h, a", body)
         self.assertIn("ld a, (cursor_col)", body)
         self.assertIn("ld l, a", body)
+
+    def test_viewport_state_is_in_bank6(self):
+        text = source("src/bios/screen.zpa")
+        for name in ("vp_top", "vp_left", "vp_height", "vp_width"):
+            self.assertRegex(text, rf"{name}:\s+equ 0xA73[0-9A-F]")
+
+    def test_esc_x_stores_all_four_parameters(self):
+        text = source("src/bios/screen.zpa")
+        body = text[text.index(".esc_X_start:"):text.index(".esc_x_tr:")]
+        self.assertIn("vp_tmp_row", body)
+        self.assertIn("vp_tmp_col", body)
+        height = text[text.index(".esc_x_h:"):text.index(".esc_x_w:")]
+        self.assertIn("ld (vp_height), a", height)
+        body = text[text.index(".esc_x_w:"):text.index("; _decode_colour")]
+        self.assertIn("ld (vp_width), a", body)
+        self.assertIn("ld (vp_top), a", body)
+        self.assertIn("ld (vp_left), a", body)
+        self.assertIn("ld (cursor_row), a", body)
+        self.assertIn("ld (cursor_col), a", body)
 
 class TeReset(unittest.TestCase):
     def test_dispatch_uses_jumpblock_entry(self):
@@ -371,6 +392,8 @@ class DiscPhase2(unittest.TestCase):
         # Non-destructive rejection cases: bad bank, low XDPB, unit 1.
         self.assertIn("32.FMTBAD", text)
         self.assertIn("0xB000", text)
+        # ESC X viewport check in the same destructive run.
+        self.assertIn("33.VIEWPORT", text)
 
     def test_smoke_runs_format_on_scratch(self):
         text = source("tools/zx84_smoke.py")
@@ -846,7 +869,8 @@ class Bank6Scratch(unittest.TestCase):
     def test_smoke_sentinels_free_bank6_gaps(self):
         smoke = source("tools/zx84_smoke.py")
         for token in ("BANK6_GAPS", "(0xA6FC, 4)", "(0xA83D, 3)",
-                      "(0xA870, 0x10)", "(0xA882, 0x7E)", "(0xADA4, 0x25C)",
+                      "(0xA870, 0x10)", "(0xA882, 0x0E)", "(0xA8C0, 0x40)",
+                      "(0xADA4, 0x25C)",
                       "self.run_bank6_sentinels()",
                       "self.check_bank6_sentinels()"):
             self.assertIn(token, smoke)

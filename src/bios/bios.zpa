@@ -766,12 +766,14 @@ xbios_handler:
     ;   Out: B = viewport top row, C = viewport left column,
     ;        D = viewport height - 1, E = viewport width - 1,
     ;        H = cursor row, L = cursor column.
-    ; Our viewport is always the whole screen, so the top-left corner is
-    ; (0,0) and the cursor coordinates are already viewport-relative.
-    ld b, 0
-    ld c, 0
-    ld d, SCR_ROWS - 1
-    ld a, (scr_cols)
+    ld a, (vp_top)
+    ld b, a
+    ld a, (vp_left)
+    ld c, a
+    ld a, (vp_height)
+    dec a
+    ld d, a
+    ld a, (vp_width)
     dec a
     ld e, a
     ld a, (cursor_row)

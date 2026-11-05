@@ -79,6 +79,16 @@ esc_p3:     equ 0xA737         ; Third param byte
 saved_row:  equ 0xA738         ; Saved cursor row  (ESC j / ESC k)
 saved_col:  equ 0xA739         ; Saved cursor col  (ESC j / ESC k)
 
+; --- Viewport (ESC X) ---
+; The cursor is stored relative to the viewport; buffer/screen accesses add
+; vp_top/vp_left.  The whole-screen defaults are set by scr_init.
+vp_top:     equ 0xA73A         ; viewport top row, absolute
+vp_left:    equ 0xA73B         ; viewport left column, absolute
+vp_height:  equ 0xA73C         ; viewport rows (1..24)
+vp_width:   equ 0xA73D         ; viewport columns (1..scr_cols)
+vp_tmp_row: equ 0xA73E         ; ESC X: cursor's old absolute row
+vp_tmp_col: equ 0xA73F         ; ESC X: cursor's old absolute column
+
 ; --- XBIOS colour state ---
 scr_ink:      db 7             ; Ink colour 0-7 (Spectrum GRB)
 scr_paper:    db 1             ; Paper colour 0-7
@@ -118,6 +128,14 @@ scr_init:
     ; A size change cancels any escape sequence in progress.
     xor a
     ld (esc_state), a
+    ; A mode change resets the viewport to the whole screen.
+    ld (vp_top), a
+    ld (vp_left), a
+    ld a, SCR_ROWS
+    ld (vp_height), a
+    ld a, (scr_cols)
+    ld (vp_width), a
+    xor a
     ; Build row_buf_tbl[r] = r * scr_cols for r in 0..SCR_ROWS-1
     ld hl, row_buf_tbl
     ld a, (scr_cols)
@@ -285,13 +303,9 @@ scr_putchar:
     call _page_in              ; Clobbers AF, BC
     pop af                     ; A = char
 
-    ; Set up args for _render_char: A=char, C=col, D=row (from memory)
-    ld b, a                    ; B = char (safe — not clobbered below)
-    ld a, (cursor_col)
-    ld c, a                    ; C = col
-    ld a, (cursor_row)
-    ld d, a                    ; D = row
-    ; B=char, C=col, D=row
+    ; Set up args for _render_char: B=char, C=abs col, D=abs row
+    ld b, a                    ; B = char (preserved by _abs_cursor)
+    call _abs_cursor           ; C = vp_left+col, D = vp_top+row
     call _render_char          ; Clobbers AF, BC, DE, HL, IX
     call _page_out             ; Clobbers AF, BC
 
@@ -348,10 +362,7 @@ scr_putchar:
     call _page_in
     pop af
     ld b, a
-    ld a, (cursor_col)
-    ld c, a
-    ld a, (cursor_row)
-    ld d, a
+    call _abs_cursor
     call _render_char
     call _page_out
     ; Advance cursor (wrap or clamp, per ESC v/w)
@@ -571,17 +582,20 @@ scr_putchar:
     ret
 
 .esc_B:
-    ; Cursor down (stop at last row)
+    ; Cursor down (stop at bottom of the viewport)
+    ld a, (vp_height)
+    dec a
+    ld b, a
     ld a, (cursor_row)
-    cp SCR_ROWS - 1
+    cp b
     ret z
     inc a
     ld (cursor_row), a
     ret
 
 .esc_C:
-    ; Cursor right (stop at last column)
-    ld a, (scr_cols)
+    ; Cursor right (stop at right edge of the viewport)
+    ld a, (vp_width)
     dec a
     ld b, a
     ld a, (cursor_col)
@@ -629,34 +643,36 @@ scr_putchar:
 
 ; ------- clear operations -------
 .esc_E:
-    ; Clear viewport (whole screen), cursor unchanged
-    ; Save cursor, clear, restore
-    ld a, (cursor_row)
-    push af
-    ld a, (cursor_col)
-    push af
-    call _clear_screen
-    pop af
-    ld (cursor_col), a
-    pop af
-    ld (cursor_row), a
+    ; Clear the viewport, cursor unchanged
+    call _clear_viewport
     ret
 
 .esc_J:
-    ; Erase from cursor to bottom of screen (inclusive).
-    ; _clear_row_a clobbers BC, so keep the loop counter on the stack
-    ; across each call.
+    ; Erase from cursor to the bottom of the viewport (inclusive).
     call _erase_line_from_cursor
     ld a, (cursor_row)
-    inc a                      ; start clearing from row+1
+    ld b, a
+    ld a, (vp_height)
+    dec a                      ; last relative row
+    sub b                      ; full rows below the cursor
+    ret z
+    ld b, a                    ; loop count
+    ld a, (vp_top)
+    ld c, a
+    ld a, (cursor_row)
+    add a, c
+    inc a                      ; first absolute row below
+    ld (_vp_row_ctr), a
 .esc_J_loop:
-    cp SCR_ROWS
-    ret nc
-    push af
-    call _clear_row_a
-    pop af
+    push bc
+    ld a, (_vp_row_ctr)
+    call _clear_vp_row_a
+    pop bc
+    ld a, (_vp_row_ctr)
     inc a
-    jr .esc_J_loop
+    ld (_vp_row_ctr), a
+    djnz .esc_J_loop
+    ret
 
 .esc_K:
     ; Erase from cursor to end of line (inclusive)
@@ -664,31 +680,34 @@ scr_putchar:
     ret
 
 .esc_d:
-    ; Erase from top of screen to cursor (inclusive).
-    ; _clear_row_a clobbers BC, so keep the loop counter on the stack
-    ; across the call instead of in a register.
+    ; Erase from the top of the viewport to the cursor (inclusive).
     ld a, (cursor_row)
     or a
-    jr z, .esc_d_cur           ; cursor on row 0 — only clear partial row 0
-    ld b, a                    ; B = number of full rows to clear (row 0..row-1)
-    xor a                      ; A = row to clear, starting at 0
+    jr z, .esc_d_cur           ; cursor on the first viewport row
+    ld b, a                    ; full rows above the cursor
+    ld a, (vp_top)
+    ld (_vp_row_ctr), a
 .esc_d_loop:
-    push af
     push bc
-    call _clear_row_a
+    ld a, (_vp_row_ctr)
+    call _clear_vp_row_a
     pop bc
-    pop af
+    ld a, (_vp_row_ctr)
     inc a
+    ld (_vp_row_ctr), a
     djnz .esc_d_loop
 .esc_d_cur:
-    ; Erase cursor row from column 0 to cursor col (inclusive)
+    ; Erase the cursor row from the viewport's left edge to the cursor
     call _erase_line_to_cursor
     ret
 
 .esc_l:
-    ; Erase entire current line
+    ; Erase the current line inside the viewport
+    ld a, (vp_top)
+    ld b, a
     ld a, (cursor_row)
-    call _clear_row_a
+    add a, b
+    call _clear_vp_row_a
     ret
 
 .esc_o:
@@ -742,9 +761,15 @@ scr_putchar:
     jr nc, .yr_ok
     xor a
 .yr_ok:
-    cp SCR_ROWS
-    jr c, .yr_store
-    ld a, SCR_ROWS - 1
+    ld b, a
+    ld a, (vp_height)
+    cp b                       ; carry set if height <= row (clamp needed)
+    jr z, .yr_clamp
+    jr c, .yr_clamp
+    ld a, b
+    jr .yr_store
+.yr_clamp:
+    dec a                      ; height - 1
 .yr_store:
     ld (esc_p1), a
     ld a, ESC_WAIT_Y_COL
@@ -758,13 +783,14 @@ scr_putchar:
     xor a
 .yc_ok:
     ld b, a                    ; B = decoded col
-    ld a, (scr_cols)
-    cp b                       ; carry set if scr_cols < col (clamp needed)
-    jr nc, .yc_in_range        ; scr_cols >= col: OK, use B
-    dec a                      ; A = scr_cols - 1 (clamped)
-    jr .yc_store
-.yc_in_range:
+    ld a, (vp_width)
+    cp b                       ; carry set if width <= col (clamp needed)
+    jr z, .yc_clamp
+    jr c, .yc_clamp
     ld a, b                    ; A = decoded col (valid)
+    jr .yc_store
+.yc_clamp:
+    dec a                      ; width - 1
 .yc_store:
     ld (cursor_col), a
     ld a, (esc_p1)
@@ -773,32 +799,173 @@ scr_putchar:
     ld (esc_state), a
     ret
 
-; ------- ESC X: viewport (4 params — consume all, ignore) -------
+; ------- ESC X: set viewport (4 params) -------
+; ESC X tr lc h w, all + 32.  tr/lc are absolute screen coordinates; h/w
+; are height/width minus 1.  The cursor is moved if it falls outside.
 .esc_X_start:
+    ; Remember the cursor's absolute position before the viewport changes
+    ld a, (vp_top)
+    ld b, a
+    ld a, (cursor_row)
+    add a, b
+    ld (vp_tmp_row), a
+    ld a, (vp_left)
+    ld b, a
+    ld a, (cursor_col)
+    add a, b
+    ld (vp_tmp_col), a
     ld a, ESC_WAIT_X_TR
     ld (esc_state), a
     ret
 
 .esc_x_tr:
-    pop af                     ; consume tr
+    pop af
+    sub 0x20
+    jr nc, .xt_ok
+    xor a
+.xt_ok:
+    ld (esc_p1), a
     ld a, ESC_WAIT_X_LC
     ld (esc_state), a
     ret
 
 .esc_x_lc:
-    pop af                     ; consume lc
+    pop af
+    sub 0x20
+    jr nc, .xl_ok
+    xor a
+.xl_ok:
+    ld (esc_p2), a
     ld a, ESC_WAIT_X_H
     ld (esc_state), a
     ret
 
 .esc_x_h:
-    pop af                     ; consume height
+    pop af
+    sub 0x20
+    jr nc, .xh_ok
+    xor a
+.xh_ok:
+    inc a                       ; height = h + 1
+    ld b, a
+    ld a, SCR_ROWS
+    cp b
+    jr c, .xh_clamp             ; height > SCR_ROWS
+    ld a, b                     ; height <= SCR_ROWS
+    jr .xh_have
+.xh_clamp:
+    ld a, SCR_ROWS
+.xh_have:
+    ld (vp_height), a
     ld a, ESC_WAIT_X_W
     ld (esc_state), a
     ret
 
 .esc_x_w:
-    pop af                     ; consume width — final param
+    pop af
+    sub 0x20
+    jr nc, .xw_ok
+    xor a
+.xw_ok:
+    inc a                       ; width = w + 1
+    ld b, a
+    ld a, (scr_cols)
+    cp b
+    jr c, .xw_clamp             ; width > scr_cols
+    ld a, b                     ; width <= scr_cols
+    jr .xw_have
+.xw_clamp:
+    ld a, (scr_cols)
+.xw_have:
+    ld (vp_width), a
+
+    ; top = min(tr, SCR_ROWS - height)
+    ld a, (esc_p1)
+    ld b, a
+    ld a, SCR_ROWS
+    ld c, a
+    ld a, (vp_height)
+    ld e, a
+    ld a, c
+    sub e                       ; SCR_ROWS - height
+    ld c, a
+    ld a, b
+    cp c
+    jr c, .xt_store
+    jr z, .xt_store
+    ld a, c
+.xt_store:
+    ld (vp_top), a
+
+    ; left = min(lc, scr_cols - width)
+    ld a, (esc_p2)
+    ld b, a
+    ld a, (scr_cols)
+    ld c, a
+    ld a, (vp_width)
+    ld e, a
+    ld a, c
+    sub e
+    ld c, a
+    ld a, b
+    cp c
+    jr c, .xl_store
+    jr z, .xl_store
+    ld a, c
+.xl_store:
+    ld (vp_left), a
+
+    ; --- move the cursor into the new viewport if necessary ---
+    ; row: rel = abs - top, clamped to height-1
+    ld a, (vp_tmp_row)
+    ld b, a
+    ld a, (vp_top)
+    ld c, a
+    ld a, b
+    cp c
+    jr c, .xcr_zero
+    sub c
+    ld b, a
+    ld a, (vp_height)
+    cp b
+    jr c, .xcr_max
+    jr z, .xcr_max
+    ld a, b
+    jr .xcr_store
+.xcr_max:
+    ld a, (vp_height)
+    dec a
+    jr .xcr_store
+.xcr_zero:
+    xor a
+.xcr_store:
+    ld (cursor_row), a
+
+    ; column: rel = abs - left, clamped to width-1
+    ld a, (vp_tmp_col)
+    ld b, a
+    ld a, (vp_left)
+    ld c, a
+    ld a, b
+    cp c
+    jr c, .xcc_zero
+    sub c
+    ld b, a
+    ld a, (vp_width)
+    cp b
+    jr c, .xcc_max
+    jr z, .xcc_max
+    ld a, b
+    jr .xcc_store
+.xcc_max:
+    ld a, (vp_width)
+    dec a
+    jr .xcc_store
+.xcc_zero:
+    xor a
+.xcc_store:
+    ld (cursor_col), a
+
     xor a
     ld (esc_state), a
     ret
@@ -948,11 +1115,11 @@ _adv_col:
     ld a, (cursor_col)
     inc a
     ld b, a
-    ld a, (scr_cols)
+    ld a, (vp_width)
     dec a
     cp b
     jr c, .ac_past
-    ; Still inside the row: store the new column.
+    ; Still inside the viewport row: store the new column.
     ld a, b
     ld (cursor_col), a
     ret
@@ -964,7 +1131,7 @@ _adv_col:
     ld (cursor_col), a
     jp _do_lf
 .ac_clamp:
-    ld a, (scr_cols)
+    ld a, (vp_width)
     dec a
     ld (cursor_col), a
     ret
@@ -1068,11 +1235,17 @@ _do_tab:
 _do_lf:
     ld a, (cursor_row)
     inc a
-    cp SCR_ROWS
-    jr c, .no_scroll
+    ld b, a
+    ld a, (vp_height)
+    cp b
+    jr nz, .lf_inside
     call _scroll_up            ; Clobbers AF, BC, DE, HL, IX, IY
-    ld a, SCR_ROWS - 1
-.no_scroll:
+    ld a, (vp_height)
+    dec a
+    jr .lf_store
+.lf_inside:
+    ld a, b                    ; new row is inside the viewport
+.lf_store:
     ld (cursor_row), a
     ret
 
@@ -1101,7 +1274,7 @@ _do_bs:
     ret z                      ; (0,0) — nothing left to back over
     dec a
     ld (cursor_row), a
-    ld a, (scr_cols)           ; col = scr_cols; dec below → scr_cols-1
+    ld a, (vp_width)           ; col = vp_width; dec below → vp_width-1
 .back_in_row:
     dec a
     ld (cursor_col), a
@@ -1113,10 +1286,7 @@ _do_bs:
     ; Render space to screen
     call _page_in              ; Clobbers AF, BC
     ld b, 0x20                 ; B = space
-    ld a, (cursor_col)
-    ld c, a                    ; C = col
-    ld a, (cursor_row)
-    ld d, a                    ; D = row
+    call _abs_cursor           ; C = abs col, D = abs row
     call _render_char          ; Clobbers AF, BC, DE, HL, IX
     call _page_out             ; Clobbers AF, BC
     ret
@@ -1178,9 +1348,15 @@ _page_out:
 ; @clobbers af,bc,de,hl
 ; @end
 _cursor_buf_addr:
+    ld a, (vp_top)             ; absolute row = vp_top + cursor_row
+    ld b, a
     ld a, (cursor_row)
+    add a, b
     call _mul_row_scr_cols     ; HL = row * scr_cols
+    ld a, (vp_left)            ; absolute col = vp_left + cursor_col
+    ld b, a
     ld a, (cursor_col)
+    add a, b
     ld e, a
     ld d, 0
     add hl, de                 ; HL += col
@@ -1190,7 +1366,57 @@ _cursor_buf_addr:
 
 
 ; ==========================================================================
-; _mul_row_scr_cols — Compute HL = A * scr_cols
+; _abs_cursor - Map the viewport-relative cursor to screen coordinates
+;   Out:     C = vp_left + cursor_col, D = vp_top + cursor_row
+;   Clobbers: AF, B
+; ==========================================================================
+; @proc _abs_cursor
+; @out   c
+; @out   d
+; @clobbers af,e
+; @end
+_abs_cursor:
+    ld a, (cursor_col)
+    ld e, a
+    ld a, (vp_left)
+    add a, e
+    ld c, a
+    ld a, (cursor_row)
+    ld e, a
+    ld a, (vp_top)
+    add a, e
+    ld d, a
+    ret
+
+
+; ==========================================================================
+; _vp_fullscreen - Is the viewport the whole screen?
+;   Out:     Z set when vp_top=0, vp_left=0, vp_height=SCR_ROWS and
+;            vp_width=scr_cols; NZ otherwise
+;   Clobbers: AF, B
+; ==========================================================================
+; @proc _vp_fullscreen
+; @clobbers af,b
+; @end
+_vp_fullscreen:
+    ld a, (vp_top)
+    or a
+    ret nz
+    ld a, (vp_left)
+    or a
+    ret nz
+    ld a, (vp_height)
+    cp SCR_ROWS
+    ret nz
+    ld a, (vp_width)
+    ld b, a
+    ld a, (scr_cols)
+    cp b
+    ret
+
+
+; ==========================================================================
+; _mul_row_scr_cols - Compute HL = A * scr_cols
 ;   In:  A = multiplier (row 0-23, or count up to SCR_ROWS)
 ;   Out: HL = A * scr_cols
 ;   Clobbers: AF, BC, DE, HL
@@ -1581,9 +1807,26 @@ _render_char:
 ;   Much faster than redrawing all 1224 characters.
 ; ==========================================================================
 ; @proc _scroll_up
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix,iy
 ; @end
 _scroll_up:
+    call _vp_fullscreen
+    jr z, .su_fast
+    ; Partial viewport: deleting the top viewport row is a scroll up
+    ; (delete_line blanks the bottom row and redraws the screen).
+    ld a, (cursor_row)
+    push af
+    ld a, (cursor_col)
+    push af
+    xor a
+    ld (cursor_row), a
+    call _delete_line
+    pop af
+    ld (cursor_col), a
+    pop af
+    ld (cursor_row), a
+    ret
+.su_fast:
     ; Scroll character buffer: rows 1-23 → rows 0-22
     ; HL = char_buffer + scr_cols (source = start of row 1)
     ld a, (scr_cols)
@@ -1693,13 +1936,10 @@ _calc_row_addr:
     ld l, a
     pop de
     ret
-
-; Row → screen-address table. For char row r at scan 0, byte col 0:
+_row_scr_tbl equ 0xA890
+; The loader stages the 24 words (row -> screen address at scan 0, byte
+; column 0) into bank 6 at A890, so they cost no CPM3.SYS image space.
 ;   H = 0x40 | ((r>>3) << 3),  L = (r & 7) << 5
-_row_scr_tbl:
-    dw 0x4000, 0x4020, 0x4040, 0x4060, 0x4080, 0x40A0, 0x40C0, 0x40E0
-    dw 0x4800, 0x4820, 0x4840, 0x4860, 0x4880, 0x48A0, 0x48C0, 0x48E0
-    dw 0x5000, 0x5020, 0x5040, 0x5060, 0x5080, 0x50A0, 0x50C0, 0x50E0
 
 ; @proc _scroll_clear
 ; @clobbers af,bc,de,hl
@@ -1753,6 +1993,23 @@ _scroll_clear:
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 _scroll_down:
+    call _vp_fullscreen
+    jr z, .sd_fast
+    ; Partial viewport: inserting a row at the top scrolls down
+    ; (insert_line blanks the top row and redraws the screen).
+    ld a, (cursor_row)
+    push af
+    ld a, (cursor_col)
+    push af
+    xor a
+    ld (cursor_row), a
+    call _insert_line
+    pop af
+    ld (cursor_col), a
+    pop af
+    ld (cursor_row), a
+    ret
+.sd_fast:
     ; Scroll char_buffer: rows 0-22 → rows 1-23
     ; LDDR source end = char_buffer + scr_cols*22 + scr_cols-1 = scr_cols*23-1
     ; LDDR dest end   = char_buffer + scr_cols*23 + scr_cols-1 = scr_cols*24-1
@@ -1955,117 +2212,231 @@ _cra_row: db 0                  ; scratch for _clear_row_a row value
 
 
 ; ==========================================================================
-; _erase_line_from_cursor — Erase cursor col..SCR_COLS-1 on cursor row
-;   In:      cursor_col, cursor_row
-;   Out:     nothing
+; _clear_vp_row_a - Clear one absolute row inside the viewport
+;   In:  A = absolute screen row
+;   Clears vp_left..vp_left+vp_width-1 in the buffer and on screen.
+;   Clobbers: AF, BC, DE, HL, IX
+; ==========================================================================
+; @proc _clear_vp_row_a
+; @param %row:u8 a
+; @clobbers af,bc,de,hl,ix
+; @end
+_clear_vp_row_a:
+    ; A = absolute row; clear vp_left..vp_left+vp_width-1
+    ld b, a                     ; B = row
+    ld a, (vp_left)
+    ld c, a                     ; C = start column
+    ld a, (vp_width)
+    ld e, a                     ; E = count
+    ld a, b                     ; A = row
+    ld b, e                     ; B = count
+    jp _blank_render_range
+
+_blank_render_range:
+    ; In: A = absolute row, C = absolute start column, B = count
+    ; Fills the range with spaces in char_buffer and re-renders it.
+    ; Clobbers: AF, BC, DE, HL, IX
+    ld (_brr_row), a
+    ld a, c
+    ld (_brr_col), a
+    ld a, b
+    ld (_brr_cnt), a
+
+    ld a, (_brr_row)
+    call _mul_row_scr_cols
+    ld de, char_buffer
+    add hl, de
+    ld a, (_brr_col)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld d, h
+    ld e, l
+    inc de
+    ld (hl), 0x20
+    ld a, (_brr_cnt)
+    dec a
+    ld c, a
+    ld b, 0
+    ld a, b
+    or c
+    jr z, .brr_render
+    ldir
+.brr_render:
+    call _page_in
+    ld a, (_brr_row)
+    ld d, a
+    ld a, (_brr_col)
+    ld c, a
+    ld a, (_brr_cnt)
+    ld b, a
+.brr_loop:
+    push bc
+    push de
+    ld b, 0x20
+    call _render_char
+    pop de
+    pop bc
+    inc c
+    djnz .brr_loop
+    call _page_out
+    ret
+
+_brr_row: db 0
+_brr_col: db 0
+_brr_cnt: db 0
+
+
+; ==========================================================================
+; _clear_viewport - Clear every row of the viewport (cursor unchanged)
+;   Clobbers: AF, BC, DE, HL, IX
+; ==========================================================================
+; @proc _clear_viewport
+; @clobbers af,bc,de,hl,ix
+; @end
+_clear_viewport:
+    ld a, (vp_top)
+    ld (_vp_row_ctr), a
+    ld a, (vp_height)
+    ld b, a
+.vp_row_loop:
+    push bc
+    ld a, (_vp_row_ctr)
+    call _clear_vp_row_a
+    pop bc
+    ld a, (_vp_row_ctr)
+    inc a
+    ld (_vp_row_ctr), a
+    djnz .vp_row_loop
+    ret
+
+_vp_row_ctr: db 0
+
+
+; ==========================================================================
+; _erase_line_from_cursor - Erase cursor col..vp_width-1 on the cursor row
 ;   Clobbers: AF, BC, DE, HL, IX
 ; ==========================================================================
 ; @proc _erase_line_from_cursor
 ; @clobbers af,bc,de,hl,ix
 ; @end
 _erase_line_from_cursor:
-    ; Fill char_buffer from (row, col) to end of row with spaces
-    call _cursor_buf_addr       ; HL = &char_buffer[row*scr_cols+col]
     ld a, (cursor_col)
-    ld b, a                     ; B = start col
-    ld a, (scr_cols)
-    ld c, a                     ; C = scr_cols
-    ; count = scr_cols - cursor_col
-    ld a, c
-    sub b                       ; A = count
-    or a
+    ld d, a
+    ld a, (vp_width)
+    sub d
     ret z
-    ld b, a                     ; B = count
-    ld d, h
-    ld e, l
-    inc de
-    ld (hl), 0x20
-    dec b
-    ld c, b
-    ld b, 0
-    ; BC = count - 1, if count was 1 then BC = 0 and no ldir needed
-    ld a, c
-    or b
-    jr z, .elfc_render
-    ldir
-.elfc_render:
-    ; Re-render the erased section on screen
-    call _page_in
-    ld a, (cursor_col)
-    ld c, a                     ; C = start col
+    ld b, a                     ; count
+    ld a, (vp_left)
+    add a, d
+    ld c, a                     ; absolute start column
+    ld a, (vp_top)
+    ld d, a
     ld a, (cursor_row)
-    ld d, a                     ; D = row
-.elfc_col:
-    ld b, 0x20                  ; space
-    push bc
-    push de
-    call _render_char
-    pop de
-    pop bc
-    inc c
-    ld a, (scr_cols)
-    cp c                        ; Z when c==scr_cols (done)
-    jr nz, .elfc_col
-    call _page_out
-    ret
+    add a, d                    ; absolute row
+    jp _blank_render_range
 
 
 ; ==========================================================================
-; _erase_line_to_cursor — Erase col 0..cursor_col on cursor row
-;   In:      cursor_col, cursor_row
-;   Out:     nothing
+; _erase_line_to_cursor - Erase viewport col 0..cursor_col on the cursor row
 ;   Clobbers: AF, BC, DE, HL, IX
 ; ==========================================================================
 ; @proc _erase_line_to_cursor
 ; @clobbers af,bc,de,hl,ix
 ; @end
 _erase_line_to_cursor:
-    ; Fill char_buffer from start of row to (row, cursor_col) inclusive
-    ld a, (cursor_row)
-    call _mul_row_scr_cols      ; HL = row * scr_cols
-    ld de, char_buffer
-    add hl, de                  ; HL = &char_buffer[row*scr_cols]
     ld a, (cursor_col)
-    inc a                       ; count = cursor_col + 1
+    inc a
+    ld b, a                     ; count
+    ld a, (vp_left)
+    ld c, a                     ; absolute start column
+    ld a, (vp_top)
+    ld d, a
+    ld a, (cursor_row)
+    add a, d                    ; absolute row
+    jp _blank_render_range
+
+
+; ==========================================================================
+; _delete_char - Delete the character under the cursor within the viewport
+;   Shifts the rest of the viewport row left, blanks the last column and
+;   re-renders the row from the cursor to the right edge.
+;   Clobbers: AF, BC, DE, HL, IX
+; ==========================================================================
+; @proc _delete_char
+; @clobbers af,bc,de,hl,ix
+; @end
+_delete_char:
+    ; --- shift the buffer left from the cursor ---
+    ld a, (vp_width)
+    dec a
     ld b, a
+    ld a, (cursor_col)
+    sub b
+    neg                         ; count = vp_width-1-cursor_col
+    jr z, .dc_blank
+    call _cursor_buf_addr       ; HL = &buffer[abs start]
     ld d, h
     ld e, l
-    inc de
-    ld (hl), 0x20
-    dec b
-    jr z, .eltc_render
-    ld c, b
+    inc hl                      ; HL = source (col+1)
+    ld a, (vp_width)
+    dec a
+    ld b, a
+    ld a, (cursor_col)
+    sub b
+    neg                         ; recompute after the call
+    ld c, a
     ld b, 0
     ldir
-.eltc_render:
-    ; Re-render on screen
-    call _page_in
-    ld c, 0                     ; start at col 0
-    ld a, (cursor_row)
+
+.dc_blank:
+    ; --- blank the rightmost viewport cell on this row ---
+    ld a, (vp_top)
     ld d, a
-.eltc_col:
-    ld b, 0x20
+    ld a, (cursor_row)
+    add a, d
+    ld d, a                     ; D = absolute row
+    ld a, (vp_left)
+    ld b, a
+    ld a, (vp_width)
+    dec a
+    add a, b
+    ld c, a                     ; C = absolute right column
+    ld a, d
+    ld b, 1
+    call _blank_render_range
+
+    ; --- re-render the shifted range from the buffer ---
+    call _cursor_buf_addr       ; HL = &buffer[abs start]
+    call _page_in               ; Clobbers AF, BC - set B after this
+    call _abs_cursor            ; C = absolute start, D = absolute row
+    ld a, (vp_width)
+    ld b, a
+    ld a, (cursor_col)
+    ld e, a
+    ld a, b
+    sub e
+    ld b, a                     ; B = columns to render
+.dc_col:
+    ld a, (hl)
+    inc hl
+    push hl
     push bc
     push de
+    ld b, a
     call _render_char
     pop de
     pop bc
-    ld a, c
-    ld e, a
-    ld a, (cursor_col)
-    cp e
-    jr z, .eltc_done
+    pop hl
     inc c
-    jr .eltc_col
-.eltc_done:
+    djnz .dc_col
     call _page_out
     ret
 
 
 ; ==========================================================================
-; _insert_line — Insert blank line at cursor row; push rows down; lose row 23
-;   In:      cursor_row
-;   Out:     nothing
+; _insert_line - Insert a blank line at the cursor row (within the viewport)
+;   Rows below the cursor move down; the last viewport row is lost.
 ;   Clobbers: AF, BC, DE, HL, IX, IY
 ; ==========================================================================
 ; @proc _insert_line
@@ -2074,38 +2445,44 @@ _erase_line_to_cursor:
 _insert_line:
     ld a, (cursor_row)
     ld (_il_row), a
-
-    ; char_buffer: LDDR rows cursor_row..SCR_ROWS-2 down by one row
-    ;              count = (SCR_ROWS-1 - cursor_row) * scr_cols
-    ld b, a                     ; B = cursor_row
-    ld a, SCR_ROWS - 1
-    sub b                       ; A = SCR_ROWS-1 - cursor_row
-    jr z, .il_blank             ; at last row: nothing to push
-    call _mul_row_scr_cols      ; HL = (SCR_ROWS-1 - cursor_row) * scr_cols
+    ld b, a
+    ld a, (vp_height)
+    dec a
+    sub b                       ; rows below the cursor
+    jr z, .il_blank
+    call _mul_row_scr_cols      ; HL = rows * scr_cols
     ld b, h
-    ld c, l                     ; BC = byte count
-    ; Source end = char_buffer + scr_cols*23 - 1
+    ld c, l
     push bc
-    ld a, 23
-    call _mul_row_scr_cols      ; HL = scr_cols * 23
+    ; source end = char_buffer + (vp_top+vp_height-1)*scr_cols - 1
+    ld a, (vp_top)
+    ld b, a
+    ld a, (vp_height)
+    dec a
+    add a, b
+    call _mul_row_scr_cols
     ld de, char_buffer - 1
-    add hl, de                  ; HL = char_buffer + scr_cols*23 - 1 (source end)
-    ; Dest end = source end + scr_cols
-    ld de, 0
+    add hl, de
+    push hl
+    ; dest end = source end + scr_cols
     ld a, (scr_cols)
     ld e, a
+    ld d, 0
+    pop hl
     ex de, hl
-    add hl, de                  ; HL = dest end (source end + scr_cols)
-    ex de, hl                   ; DE = dest end, HL = source end
+    add hl, de
+    ex de, hl
     pop bc
     lddr
 
 .il_blank:
-    ; Blank cursor row in buffer + screen
+    ; Blank the cursor row inside the viewport
+    ld a, (vp_top)
+    ld b, a
     ld a, (_il_row)
-    call _clear_row_a
+    add a, b
+    call _clear_vp_row_a
 
-    ; Redraw all (buffer is now correct for all rows)
     call _page_in
     call _redraw_all_screenpaged
     call _page_out
@@ -2115,9 +2492,8 @@ _il_row: db 0
 
 
 ; ==========================================================================
-; _delete_line — Delete cursor row; pull rows below up; blank last row
-;   In:      cursor_row
-;   Out:     nothing
+; _delete_line - Delete the cursor row within the viewport
+;   Rows below move up; the last viewport row is blanked.
 ;   Clobbers: AF, BC, DE, HL, IX, IY
 ; ==========================================================================
 ; @proc _delete_line
@@ -2126,120 +2502,47 @@ _il_row: db 0
 _delete_line:
     ld a, (cursor_row)
     ld (_dl_row), a
-    ld b, a                     ; B = cursor_row
+    ld b, a
+    ld a, (vp_height)
+    dec a
+    sub b                       ; rows below the cursor
+    jr z, .dl_blank
+    call _mul_row_scr_cols      ; HL = rows * scr_cols
+    ld (_dl_count), hl
 
-    ; char_buffer: LDIR from &char_buffer[(cursor_row+1)*scr_cols]
-    ;              to   &char_buffer[cursor_row*scr_cols]
-    ;              count = (SCR_ROWS-1 - cursor_row) * scr_cols
-    ld a, SCR_ROWS - 1
-    sub b                       ; A = SCR_ROWS-1 - cursor_row
-    jr z, .dl_blank             ; cursor at last row: just blank it
-
-    call _mul_row_scr_cols      ; HL = (SCR_ROWS-1 - cursor_row) * scr_cols
-    ld b, h
-    ld c, l                     ; BC = byte count
-
-    ; dest = &char_buffer[cursor_row * scr_cols]
+    ; dest = &char_buffer[(vp_top+cursor_row) * scr_cols]
+    ld a, (vp_top)
+    ld b, a
     ld a, (_dl_row)
-    push bc
-    call _mul_row_scr_cols      ; HL = cursor_row * scr_cols
+    add a, b
+    call _mul_row_scr_cols
     ld de, char_buffer
-    add hl, de                  ; HL = dest (char_buffer + cursor_row*scr_cols)
+    add hl, de                  ; HL = dest
     ld d, h
-    ld e, l                     ; DE = dest
-    ; source = dest + scr_cols
+    ld e, l
     ld a, (scr_cols)
     ld c, a
     ld b, 0
     add hl, bc                  ; HL = source = dest + scr_cols
-    pop bc                      ; BC = count
+    ld bc, (_dl_count)
     ldir
 
 .dl_blank:
-    ; Clear last row in buffer + screen
-    ld a, SCR_ROWS - 1
-    call _clear_row_a
+    ; Blank the last viewport row
+    ld a, (vp_top)
+    ld b, a
+    ld a, (vp_height)
+    dec a
+    add a, b
+    call _clear_vp_row_a
 
-    ; Redraw screen
     call _page_in
     call _redraw_all_screenpaged
     call _page_out
     ret
 
 _dl_row: db 0
-
-
-; ==========================================================================
-; _delete_char — Delete char at cursor; shift rest of row left; fill end space
-;   In:      cursor_col, cursor_row
-;   Out:     nothing
-;   Clobbers: AF, BC, DE, HL, IX
-; ==========================================================================
-; @proc _delete_char
-; @clobbers af,bc,de,hl,ix
-; @end
-_delete_char:
-    ; Shift char_buffer[row][col+1..SCR_COLS-1] → [col..SCR_COLS-2]
-    call _cursor_buf_addr       ; HL = &char_buffer[row*51+col]
-    ld d, h
-    ld e, l
-    inc hl                      ; HL = source (col+1)
-    ld a, (cursor_col)
-    ld b, a
-    ld a, (scr_cols)
-    dec a
-    sub b                       ; A = scr_cols-1 - cursor_col = chars to move
-    or a
-    jr z, .dc_fill              ; cursor at last col: just fill
-    ld c, a
-    ld b, 0
-    ldir                        ; shift left (DE=dest, HL=source)
-
-.dc_fill:
-    ; Last column of the row = space
-    ; Recompute &char_buffer[row*scr_cols + scr_cols-1]
-    ld a, (cursor_row)
-    call _mul_row_scr_cols      ; HL = row * scr_cols
-    ld de, char_buffer
-    add hl, de                  ; HL = &char_buffer[row*scr_cols]
-    ld a, (scr_cols)
-    dec a
-    ld e, a
-    ld d, 0
-    add hl, de                  ; HL = &char_buffer[row*scr_cols + scr_cols-1]
-    ld (hl), 0x20
-
-    ; Re-render cursor_col..scr_cols-1 from char_buffer
-    ld a, (cursor_row)
-    call _mul_row_scr_cols      ; HL = row * scr_cols
-    ld de, char_buffer
-    add hl, de
-    ld a, (cursor_col)
-    ld e, a
-    ld d, 0
-    add hl, de                  ; HL = &char_buffer[row*scr_cols + cursor_col]
-
-    call _page_in
-    ld a, (cursor_col)
-    ld c, a                     ; C = col counter
-    ld a, (cursor_row)
-    ld d, a                     ; D = row (constant)
-.dc_col:
-    ld b, (hl)                  ; B = char from buffer
-    inc hl                      ; advance buffer pointer
-    push bc
-    push de
-    push hl
-    call _render_char           ; B=char, C=col, D=row
-    pop hl
-    pop de
-    pop bc
-    inc c
-    ld a, (scr_cols)
-    cp c                        ; Z when c == scr_cols (done)
-    jr nz, .dc_col
-    call _page_out
-    ret
+_dl_count: dw 0
 
 
 ; ==========================================================================

@@ -437,8 +437,10 @@ class Smoke:
     # overlaps (the fcb_buf/alv_c type of bug).
     # A880-A881 is f111_addr (BDOS F111 text pointer), so the gap is split
     # around it.
+    # A880-A881 is f111_addr and A890-A8BF is the loader-staged row table,
+    # so the old A870-A8FF gap is split around both.
     BANK6_GAPS = ((0xA6FC, 4), (0xA83D, 3), (0xA870, 0x10),
-                  (0xA882, 0x7E), (0xADA4, 0x25C))
+                  (0xA882, 0x0E), (0xA8C0, 0x40), (0xADA4, 0x25C))
 
     def run_bank6_sentinels(self) -> None:
         self.sentinels: list[tuple[int, bytes]] = []
@@ -512,7 +514,7 @@ class Smoke:
                        "11.SETUP..OK", "12.DPB..OK", "13.XDPB..OK",
                        "14.LREAD..OK", "15.LWRITE..OK", "16.KMSPD..OK",
                        "17.KTPUT..OK", "18.KTGET..OK", "19.CAPS..OK",
-                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "27.KMZERO..OK", "28.LREADX..OK", "29.BADSPEC..OK", "30.SETUPX..OK", "31.KREPEAT..OK", "32.FMTBAD..OK", "DONE"):
+                       "20.EXP..OK", "21.CDVER..OK", "22.CDINFO..OK", "23.DRIVESTAT..OK", "24.KTWRAP..OK", "25.SETKEY..OK", "26.EXPMAX..OK", "27.KMZERO..OK", "28.LREADX..OK", "29.BADSPEC..OK", "30.SETUPX..OK", "31.KREPEAT..OK", "32.FMTBAD..OK", "33.VIEWPORT..OK", "DONE"):
             if needle not in seen:
                 raise SmokeError(
                     f"XTETEST missing {needle!r}:\n" + seen)

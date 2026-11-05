@@ -65,6 +65,13 @@ BIOS_ADDR   equ 0xC000        ; Where to load the system file
     ld (LF_CCP_LEN), a
     ld (LF_CCP_LEN + 1), a
 
+    ; --- Screen row-address table → bank 6 at A890 ---
+    ; Pure data, so it lives here instead of in the 16K CPM3.SYS window.
+    ld hl, row_scr_tbl_data
+    ld de, 0xA890
+    ld bc, 48
+    ldir
+
     ; --- Fonts → bank 6 ---
     ld ix, font_table
     ld b, FONT_COUNT
@@ -248,6 +255,12 @@ NAME_FID:   db "RAMDISK FID"
 NAME_51:    db "FONT51  BIN"
 NAME_32:    db "FONT32  BIN"
 NAME_64:    db "FONT64  BIN"
+
+; Staged to bank 6 at A890 (see screen.zpa _row_scr_tbl).
+row_scr_tbl_data:
+    dw 0x4000, 0x4020, 0x4040, 0x4060, 0x4080, 0x40A0, 0x40C0, 0x40E0
+    dw 0x4800, 0x4820, 0x4840, 0x4860, 0x4880, 0x48A0, 0x48C0, 0x48E0
+    dw 0x5000, 0x5020, 0x5040, 0x5060, 0x5080, 0x50A0, 0x50C0, 0x50E0
 
 FONT_COUNT  equ 3
 font_table:

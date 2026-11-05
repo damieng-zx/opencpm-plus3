@@ -14,7 +14,8 @@ then runs
 `F59` overlay load and an `F111` print-block check), and the main CCP flows,
 and asserts the 51x24 character buffer plus an empty FDC retry log:
 
-`XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry, `TE_RESET`,
+`XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry (including a set
+`ESC X` viewport), `TE_RESET`,
 `TE_SET_INK` (including FLASH), `TE_SET_BORDER`, `TE_SET_SPEED` and
 `SCR_RUN_ROUTINE`, plus the disc calls (`DD_INIT`, `DD_SETUP`,
 `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`,
@@ -24,7 +25,7 @@ runner requires `7.RUN..OK`, `8.DISK..OK`, `9.RW..OK`,
 `15.LWRITE..OK`, `16.KMSPD..OK`, `17.KTPUT..OK`, `18.KTGET..OK`,
 `19.KTAB..OK`, `19.CAPS..OK`, `20.EXP..OK`, `21.CDVER..OK`, `22.CDINFO..OK`, `23.DRIVESTAT..OK`, `24.KTWRAP..OK`,
 `25.SETKEY..OK`, `26.EXPMAX..OK`, `27.KMZERO..OK`, `28.LREADX..OK`, `29.BADSPEC..OK`, `30.SETUPX..OK`,
-`31.KREPEAT..OK`, `32.FMTBAD..OK`, the `5Ah` marker somewhere in the screen
+`31.KREPEAT..OK`, `32.FMTBAD..OK`, `33.VIEWPORT..OK`, the `5Ah` marker somewhere in the screen
 attribute plane (bank 5, `5800h`-`5AFFh`)
 and the `D100h` input-pass-through flag.  It also checks
 that `DD_SETUP` produced the edge values above and then the restored
@@ -341,6 +342,13 @@ Test 26 exercises `KM_SET_EXPAND` boundaries: token `80h` with length 0
 slot stays empty), token `9Eh` with the maximum 31 bytes, and invalid
 token `9Fh`.  The runner checks the empty slot and the full 31-byte slot
 at `A9A0h + 30*32`.
+
+Test 33 parks the cursor with `ESC Y`, sets a 4x10 viewport at (2,3) with
+`ESC X`, and calls `TE_ASK`: it must report `B=2 C=3 D=3 E=9` with the
+cursor clamped into the rectangle (`H=L=0`).  It then restores the
+full-screen viewport with `ESC X 0 0 23 50` and prints `33.VIEWPORT..OK`.
+The viewport state lives in bank 6 (`A73A-A73F`), and the loader stages
+the screen row-address table at `A890` so it costs no image space.
 
 ### BDOS file regression suite
 

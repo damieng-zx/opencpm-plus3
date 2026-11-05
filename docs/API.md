@@ -603,23 +603,31 @@ Send these via BDOS F2 (one character at a time).
 
 | Sequence | Name | Effect |
 |----------|------|--------|
-| `ESC E` | CEL | Clear entire screen (cursor stays) |
+| `ESC E` | CEL | Clear the viewport (cursor stays) |
 | `ESC *` | — | ADM-3A/Kaypro clear screen and home |
-| `ESC J` | ED0 | Erase from cursor to end of screen |
-| `ESC K` | EL0 | Erase from cursor to end of line |
+| `ESC J` | ED0 | Erase from cursor to the bottom of the viewport |
+| `ESC K` | EL0 | Erase from cursor to the right edge of the viewport |
 | `ESC T` | — | ADM-3A/Kaypro erase to end of line (same as `ESC K`) |
-| `ESC d` | ED1 | Erase from top of screen to cursor |
-| `ESC l` | EL1 | Erase entire current line |
-| `ESC o` | EL0d | Erase from start of line to cursor |
+| `ESC d` | ED1 | Erase from the top of the viewport to the cursor |
+| `ESC l` | EL1 | Erase the cursor row inside the viewport |
+| `ESC o` | EL0d | Erase from the viewport's left edge to the cursor |
+
+The erase, scroll and line operations all act inside the current viewport
+(see `ESC X` below).
 
 #### Scroll / Line Operations
 
 | Sequence | Name | Effect |
 |----------|------|--------|
 | `ESC I` | RI | Reverse index: cursor up; scroll down if at row 0 |
-| `ESC L` | IL | Insert blank line at cursor row |
-| `ESC M` | DL | Delete cursor row (pull up) |
-| `ESC N` | DCH | Delete character at cursor (shift left) |
+| `ESC L` | IL | Insert blank line at cursor row (rows below move down) |
+| `ESC M` | DL | Delete cursor row (rows below pull up) |
+| `ESC N` | DCH | Delete character at cursor (shift the viewport row left) |
+
+`ESC L`/`ESC M`/`ESC N` stay inside the viewport: the line moves use the
+viewport rows and the character move uses the viewport columns.  When the
+cursor is on the last row of a scrolled viewport, a line feed scrolls only
+the viewport and leaves the rest of the screen alone.
 
 #### Screen, Wrap and Colour (CP/M Plus Appendix III)
 
@@ -647,8 +655,22 @@ These are consumed without error but have no effect:
 `ESC x` `ESC y` (24×80 mode).
 
 Sequences with a consumed parameter: `ESC 2 p` (national charset),
-`ESC 5 p` (auto-flip), `ESC X tr lc h w` (viewport; parameters are
-parsed but the viewport is not applied).
+`ESC 5 p` (auto-flip).
+
+#### Viewport — `ESC X tr lc h w`
+
+`ESC X` sets a rectangular text viewport.  All four parameters are the
+documented CP/M Plus values plus 32: `tr`/`lc` are the absolute top row
+and left column, `h`/`w` are height/width minus one.  Out-of-range values
+are clamped (height to 24, width to the current columns, and the origin so
+the rectangle stays on screen).  The cursor moves into the rectangle if it
+was outside, and stays at the same relative position otherwise.
+
+Cursor addressing (`ESC Y`), cursor motion, wrapping, scrolling, erase,
+insert/delete line and delete character are all relative to the viewport;
+`TE_ASK` reports its origin and size.  `ESC 3 n` and `TE_RESET` restore the
+full-screen viewport.  The viewport state lives in bank 6, so it costs no
+`CPM3.SYS` image space.
 
 ### Keyboard
 

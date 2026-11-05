@@ -59,7 +59,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | `0xAD` | `DD_L_READ` | HL = parameter block in common memory: bank, buffer, byte count, command count, command bytes | Raw uPD765A read-type command driver: sends the command bytes, reads the data phase into the buffer and returns the result bytes in `dd_results`.  Only CP/M bank 1 (TPA) is supported. |
 | `0xB0` | `DD_L_WRITE` | HL = parameter block in common memory: bank, buffer, byte count, command count, command bytes | Raw uPD765A write-type command driver: sends the command bytes, writes the data phase from the buffer and returns the result bytes.  Only CP/M bank 1 (TPA) is supported. |
 | `0xB3` | `DD_L_SEEK` | C = unit (bits 0-1) + head (bit 2), D = physical track, IX = XDPB | Carry set on success, or carry clear + A = 0 (not ready) / 2 (seek fail).  The motor must already be running. |
-| `0xBF` | `TE_ASK` | - | B = viewport top row, C = viewport left column, D = height - 1, E = width - 1, H = cursor row, L = cursor column.  The viewport is always the full screen, so B = C = 0, D = 23 and E = current columns - 1. |
+| `0xBF` | `TE_ASK` | - | B = viewport top row, C = viewport left column, D = height - 1, E = width - 1, H = cursor row, L = cursor column.  The viewport is set by `ESC X` and defaults to the full screen (B = C = 0, D = 23, E = current columns - 1); `H`/`L` are viewport-relative. |
 | `0xC2` | `TE_RESET` | - | Re-initialise the terminal emulator: restore the default white-on-blue palette, wrapping and page mode, clear the screen and home the cursor.  The current screen width is kept. |
 | `0xC5` | `TE_STL_ASK` | - | A = 0, Z set.  Status line is always off. |
 | `0xC8` | `TE_STL_ON_OFF` | A = enable/disable | Accepted and ignored; returns with Z set. |
