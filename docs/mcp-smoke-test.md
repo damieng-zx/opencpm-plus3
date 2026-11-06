@@ -63,18 +63,25 @@ is identified by its IDs, Ultra prints a note and is seen as 180K).  The
 emulator keeps disc writes in memory rather than writing the `.dsk` back,
 so sectors are read back through the FDC with `sector_read`.
 
-`DISKCOPY` is then checked twice.  `DISKCOPY A: B:` copies the source onto
-a scratch copy of the distribution image and a sample of sectors across the
+`DISKCOPY` is then checked three times.  `DISKCOPY A: B:` copies the source
+onto a scratch copy of the *720K* image - a different layout - so the copy
+has to format every target track as it goes; a sample of sectors across the
 disc (boot sector, directory, file data, last track) must match the source
-byte for byte; the usage errors for a missing argument and for `C:` are
-checked first.  `DISKCOPY A: A:` exercises the single-drive swapping: the
-48K buffer takes ten tracks a pass, so the harness answers the "put the
-TARGET disc in A:" prompt by swapping the target image in and the "put the
-SOURCE disc back in A:" prompt by swapping the source back, four passes in
-all.  The first pass is compared against the source while the target is
-still mounted; the remaining passes only have to reach "Copied 40 tracks."
-(the emulator discards a disk image's in-memory writes when it is ejected,
-so tracks from earlier passes cannot survive here).
+byte for byte, and the target track must end up with the source's 9-sector
+layout.  The usage errors for a missing argument and for `C:` are checked
+first.  `DISKCOPY A: A:` exercises the single-drive swapping: the 48K
+buffer takes ten tracks a pass, so the harness answers the "put the TARGET
+disc in A:" prompt by swapping the target image in and the "put the SOURCE
+disc back in A:" prompt by swapping the source back, four passes in all.
+The first pass is compared against the source while the target is still
+mounted; the remaining passes only have to reach "Copied 40 tracks." (the
+emulator discards a disk image's in-memory writes when it is ejected, so
+tracks from earlier passes cannot survive here).  Finally a HiForm disc
+(42 tracks, 10 sectors, interleave 3) is formatted on B: and copied to A:;
+the target's track 0 must have 10 sectors, gap 16h and the same sector
+cycle as the source (any rotation is accepted, since READ ID cannot see the
+index phase), which proves the layout was captured and re-applied instead
+of being re-chosen.
 
 ```text
 python3 tools/zx84_smoke.py

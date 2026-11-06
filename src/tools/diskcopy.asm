@@ -14,6 +14,13 @@
 ; drive the user is asked to swap the discs between the two halves of the
 ; pass; with two drives each track is read and written straight away.
 ;
+; The target does not have to be formatted: before a track's data is
+; written, the target track is formatted with the source track's own ID
+; layout.  The layout is captured while reading (repeated DD_READ_ID walks
+; the IDs in physical order), so the interleave and skew are preserved
+; instead of being re-chosen, and format+write happen in one visit to the
+; cylinder instead of two sweeps.
+;
 ; The progress line is rewritten in place, one line per track, with the
 ; completed percentage, the logical track, the head and whether that track
 ; is being read or written:
@@ -38,7 +45,9 @@ USERF_OFFSET   equ 90           ; USERF = bios_visible + 3*30
 DD_INIT         equ 0x0080
 DD_READ_SECTOR  equ 0x0086
 DD_WRITE        equ 0x0089
+DD_FORMAT       equ 0x008F
 DD_LOGIN        equ 0x0092
+DD_READ_ID      equ 0x009B
 
 SECTOR_SIZE    equ 512
 
@@ -49,6 +58,9 @@ BUF            equ 0x1000
 BUF_END        equ 0xD000
 BUFSIZE        equ BUF_END - BUF
 XDPB           equ 0xD200
+; One 4-byte (C, H, R, N) entry per sector, for every track in a pass:
+; at most BUFSIZE/128 = 384 bytes.
+LAYOUT         equ 0xD240
 
 ; XDPB field offsets
 XDPB_PSH       equ 15
@@ -110,6 +122,8 @@ start:
     ld a, (dst_unit)
     call print_unit
     call crlf
+    ld de, msg_target_wiped
+    call pstr
 
     ; ---- Ask for the source (and target) and detect the layout ----
     call prompt_for_source
@@ -306,29 +320,167 @@ start:
 ; ==========================================================================
 ; do_chunk - transfer `chunk` logical tracks between the drives
 ;   In:       cur_track, chunk, xfer_op (0 = read source, 1 = write target)
-;   Out:      buffer filled/emptied; ops_done advanced per track
-;   Clobbers: everything
+;   Out:      buffer filled/emptied, layout tables built/used
+;   Clobbers: everything ; lint: ignore
 do_chunk:
     ld hl, BUF
     ld (buf_ptr), hl
+    ld hl, LAYOUT
+    ld (layout_ptr), hl
+    ld (layout_fill), hl
     ld a, (cur_track)
     ld (t_track), a
     ld a, (chunk)
     ld (t_left), a
 .track_loop:
     call set_track_geom
-    ld de, st_read
+
     ld a, (xfer_op)
     or a
-    jr z, .status_ready
-    ld de, st_write
-.status_ready:
+    jr nz, .write_track
+
+    ; --- Read: capture the source track's ID layout, then its data ---
+    ld de, st_read
     ld (status_ptr), de
     call progress
+    ld de, msg_read_fail
+    ld (fail_msg), de
+    call collect_ids
+    jr nc, .failed
+    call transfer_sectors
+    jr nc, .failed
+    jr .next_track
 
+    ; --- Write: format the target track as the source has it, then data ---
+.write_track:
+    ld de, st_format
+    ld (status_ptr), de
+    call progress
+    ld de, msg_format_fail
+    ld (fail_msg), de
+    call format_track
+    jr nc, .failed
+    ld de, st_write
+    ld (status_ptr), de
+    call progress
+    ld de, msg_write_fail
+    ld (fail_msg), de
+    call transfer_sectors
+    jr nc, .failed
+
+.next_track:
+    ld hl, (ops_done)
+    inc hl
+    ld (ops_done), hl
+    ld a, (t_track)
+    inc a
+    ld (t_track), a
+    ld a, (t_left)
+    dec a
+    ld (t_left), a
+    jp nz, .track_loop
+    ret
+
+.failed:
+    ld (last_error), a
+    call crlf
+    ld de, (fail_msg)
+    call pstr
+    jp report_track
+
+; collect_ids - copy the source track's sector IDs in physical order
+;   In:       t_track, sectors, src_unit, cur_cyl, cur_side
+;   Out:      *layout_fill = sectors * 4 bytes (C, H, R, N);
+;             carry set OK, or carry clear + A = error
+;   Clobbers: everything ; lint: ignore
+;
+; Repeated READ ID returns the IDs in the order they come round the track
+; (which is how the ROM discovers a layout).  C and H are replaced with the
+; target's cylinder and head; R and N are kept, so the target is laid out
+; exactly as the source was, interleave and skew included.
+collect_ids:
+    ld a, (sectors)
+    ld (t_ids), a
+.loop:
+    ld hl, DD_READ_ID
+    ld (userf_dw), hl
+    ld a, (src_unit)
+    ld c, a
+    ld a, (t_track)
+    ld d, a
+    ld ix, XDPB
+    call userf_call
+    jr nc, .fail
+    ; HL = dd_results: count, ST0, ST1, ST2, C, H, R, N
+    ld de, (layout_fill)
+    ld a, (cur_cyl)
+    ld (de), a
+    inc de
+    ld a, (cur_side)
+    ld (de), a
+    inc de
+    ld a, 6
+    add a, l
+    ld l, a
+    jr nc, .no_carry
+    inc h
+.no_carry:
+    ld a, (hl)                    ; R
+    ld (de), a
+    inc de
+    inc hl
+    ld a, (hl)                    ; N
+    ld (de), a
+    inc de
+    ld (layout_fill), de
+    ld a, (t_ids)
+    dec a
+    ld (t_ids), a
+    jr nz, .loop
+    scf
+    ret
+.fail:
+    or a
+    ret
+
+; format_track - lay down the target track with the captured layout
+;   In:       t_track, dst_unit, layout_ptr, XDPB (gaps, sector size)
+;   Out:      carry set OK, or carry clear + A = error;
+;             layout_ptr advanced past this track's table
+;   Clobbers: everything ; lint: ignore
+format_track:
+    ld hl, DD_FORMAT
+    ld (userf_dw), hl
+    ld a, (t_track)
+    ld d, a
+    ld e, 0xE5                    ; filler
+    ld b, 1                       ; CP/M bank 1 (TPA)
+    ld a, (dst_unit)
+    ld c, a
+    ld hl, (layout_ptr)
+    ld ix, XDPB
+    call userf_call
+    ret nc
+    ; Advance to the next track's table: sectors * 4 bytes.
+    ld a, (sectors)
+    add a, a
+    add a, a
+    ld e, a
+    ld d, 0
+    ld hl, (layout_ptr)
+    add hl, de
+    ld (layout_ptr), hl
+    scf
+    ret
+
+; transfer_sectors - move this track's data sectors
+;   In:       t_track, xfer_op (0 read / 1 write), buf_ptr
+;   Out:      carry set OK, or carry clear + A = error
+;   Clobbers: everything ; lint: ignore
+transfer_sectors:
     xor a
     ld (s_idx), a
-.sector_loop:
+.loop:
     ; E = sector index << PSH
     ld a, (s_idx)
     ld b, a
@@ -357,11 +509,11 @@ do_chunk:
     ld c, a
     ld a, (t_track)
     ld d, a
-    ld b, 1                      ; CP/M bank 1 (TPA)
+    ld b, 1                       ; CP/M bank 1 (TPA)
     ld hl, (buf_ptr)
     ld ix, XDPB
     call userf_call
-    jr nc, .failed               ; A = error, carry clear
+    jr nc, .failed                ; A = error, carry clear
     ld hl, (buf_ptr)
     ld de, SECTOR_SIZE
     add hl, de
@@ -373,35 +525,16 @@ do_chunk:
     ld b, a
     ld a, (sectors)
     cp b
-    jr nz, .sector_loop
-
-    ; One track done: count it and move on.
-    ld hl, (ops_done)
-    inc hl
-    ld (ops_done), hl
-    ld a, (t_track)
-    inc a
-    ld (t_track), a
-    ld a, (t_left)
-    dec a
-    ld (t_left), a
-    jp nz, .track_loop
+    jr nz, .loop
+    scf
+    ret
+.failed:
+    or a
     ret
 
-.failed:
-    ld (last_error), a
-    ld a, (xfer_op)
-    or a
-    jr nz, write_failed
-    call crlf
-    ld de, msg_read_fail
-    call pstr
-    jr report_track
-
-write_failed:
-    call crlf
-    ld de, msg_write_fail
-    call pstr
+; report_track - error line, after the "Read/Format/Write error: track "
+;   In:       t_track, cur_side, last_error
+;   Clobbers: everything ; lint: ignore
 report_track:
     ld a, (t_track)
     call print3z
@@ -917,6 +1050,10 @@ cur_side:      db 0
 s_idx:         db 0
 ops_done:      dw 0
 xfer_op:       db 0
+t_ids:         db 0
+layout_ptr:    dw 0
+layout_fill:   dw 0
+fail_msg:      dw 0
 buf_ptr:       dw 0
 status_ptr:    dw 0
 last_error:    db 0
@@ -926,11 +1063,14 @@ pd_u:          db 0
 
 msg_crlf:      db 0x0D, 0x0A, '$'
 
-st_read:       db "READ ", '$'
-st_write:      db "WRITE", '$'
+st_read:       db "READ  ", '$'
+st_format:     db "FORMAT", '$'
+st_write:      db "WRITE ", '$'
 
 msg_title:     db "DISKCOPY ", '$'
 msg_arrow:     db " -> ", '$'
+msg_target_wiped:
+    db "The TARGET disc is reformatted and overwritten.", 0x0D, 0x0A, '$'
 msg_geometry:  db 0x0D, 0x0A, "Source: ", '$'
 msg_ss:        db "SS, ", '$'
 msg_ds:        db "DS, ", '$'
@@ -955,11 +1095,11 @@ msg_done:         db 0x0A, "Copied ", '$'
 msg_done_tracks:  db " tracks.", 0x0D, 0x0A, '$'
 
 msg_read_fail:    db "Read error: track ", '$'
+msg_format_fail:  db "Format error: track ", '$'
 msg_write_fail:   db "Write error: track ", '$'
 msg_side_line:    db " side ", '$'
 msg_write_protect: db " - the TARGET disc is write-protected.", 0x0D, 0x0A, '$'
-msg_check_target: db " - is the TARGET disc formatted with the same", 0x0D, 0x0A
-                  db "  layout? (FORMAT it first)", 0x0D, 0x0A, '$'
+msg_check_target: db " - the TARGET disc may be damaged.", 0x0D, 0x0A, '$'
 
 msg_bad_geometry:
     db 0x0D, 0x0A, "Cannot read the SOURCE disc, or its layout is", 0x0D, 0x0A
@@ -971,4 +1111,4 @@ msg_usage:
     db "DISKCOPY source: target:", 0x0D, 0x0A
     db "  e.g. DISKCOPY A: B:", 0x0D, 0x0A
     db "  A: A: and B: B: work too - you swap the discs.", 0x0D, 0x0A
-    db "  The target must be formatted with the same layout.", 0x0D, 0x0A, '$'
+    db "  The target is formatted as the copy goes.", 0x0D, 0x0A, '$'

@@ -877,9 +877,9 @@ class Smoke:
         self.check_sector(track, side, sector,
                           "E5 E5 E5 E5 E5 E5 E5 E5", drive)
 
-    def check_track_ids(self, track: int, expected: list[int],
-                        side: int = 0, drive: int = 0) -> None:
-        """Check the IDs in physical order (interleave/skew layout)."""
+    def track_ids(self, track: int, side: int = 0,
+                  drive: int = 0) -> list[int]:
+        """The sector IDs of a track, in physical order."""
         text = self.mcp.call("track_geometry", {
             "track": track, "side": side, "drive": drive})
         ids = []
@@ -887,26 +887,44 @@ class Smoke:
             parts = line.split()
             if len(parts) >= 4 and parts[0].isdigit():
                 ids.append(int(parts[3], 16))
+        return ids
+
+    def track_info(self, track: int, side: int = 0,
+                   drive: int = 0) -> str:
+        """The header line of track_geometry: sector count, gap, filler."""
+        text = self.mcp.call("track_geometry", {
+            "track": track, "side": side, "drive": drive})
+        return text.splitlines()[0]
+
+    def check_track_ids(self, track: int, expected: list[int],
+                        side: int = 0, drive: int = 0) -> None:
+        """Check the IDs in physical order (interleave/skew layout)."""
+        ids = self.track_ids(track, side, drive)
         if ids != expected:
             raise SmokeError(
-                f"track {track} side {side} IDs {ids}, expected {expected}"
-                f":\n{text}")
+                f"track {track} side {side} IDs {ids}, expected {expected}")
 
     def run_diskcopy(self) -> None:
-        """DISKCOPY: A: to B:, then a same-drive A: to A: (disc swaps).
+        """DISKCOPY: A:->B:, a same-drive A:->A:, and a 10-sector layout copy.
 
-        The target for A:->B: is a scratch copy of the distribution image;
-        after the copy a sample of sectors must match the source byte for
-        byte.  The same-drive run uses the 48K track buffer, so it takes
-        four passes: the first pass is checked against the source, and the
-        remaining passes only have to complete (the emulator drops a disc
-        image's in-memory writes when it is ejected, so the target cannot
-        keep tracks across passes here).
+        The A:->B: target is a 720K image (a different layout), so the copy
+        has to format each target track as it goes; a sample of sectors must
+        match the source byte for byte.  The same-drive run uses the 48K
+        track buffer, so it takes four passes: the first pass is checked
+        against the source, and the remaining passes only have to complete
+        (the emulator drops a disc image's in-memory writes when it is
+        ejected, so the target cannot keep tracks across passes here).
+        Finally a HiForm disc (42 tracks, 10 sectors, interleave 3) is
+        copied B:->A: and the target's track 0 must have the same sector
+        cycle and gap, proving the layout was captured and re-applied
+        rather than re-chosen.
         """
         src = ROOT / "build" / "diskcopy-src.dsk"
         dst = ROOT / "build" / "diskcopy-dst.dsk"
+        foreign = ROOT / "build" / "diskcopy-720.dsk"
         shutil.copyfile(self.dsk, src)
         shutil.copyfile(ROOT / "build" / "cpm3.dsk", dst)
+        shutil.copyfile(ROOT / "build" / "cpm3_720.dsk", foreign)
         old_dsk = self.dsk
         self.dsk = src
         try:
@@ -919,9 +937,9 @@ class Smoke:
             self.command("DISKCOPY A:", 300)
             self.expect("DISKCOPY one arg", "DISKCOPY source: target:")
 
-            self.log("DISKCOPY A: B:")
+            self.log("DISKCOPY A: B: (720K target)")
             self.mcp.call("eject", {"target": "disk", "drive": "B"})
-            self.mcp.call("load", {"file": str(dst), "drive": "B"})
+            self.mcp.call("load", {"file": str(foreign), "drive": "B"})
             self.command("DISKCOPY A: B:", 400)
             self.wait_for(["Put the SOURCE disc in A:,", "the TARGET disc in B:,"],
                           frames=50, attempts=4)
@@ -941,6 +959,10 @@ class Smoke:
                     raise SmokeError(
                         f"DISKCOPY left track {track} sector {sector} "
                         "different")
+            # The target track must have been reformatted to the source's
+            # 180K layout (9 sectors, gap 52h).
+            if "Sectors: 9" not in self.track_info(0, drive=1):
+                raise SmokeError("DISKCOPY did not reformat the target track")
 
             # Same drive: read a chunk, swap, write, swap back, ...
             self.log("DISKCOPY A: A:")
@@ -984,9 +1006,52 @@ class Smoke:
                 self.mcp.call("load", {"file": str(src), "drive": "A"})
                 self.key("enter", 300)
             self.wait_for(["Copied 40 tracks."], frames=600, attempts=40)
+
+            # --- Layout capture: copy a 10-sector HiForm disc ---
+            self.log("FORMAT B: HiForm 203 (copy source)")
+            self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            self.mcp.call("load", {"file": str(foreign), "drive": "B"})
+            self.format_disc("B", None, "5", "Done - HiForm 203 42 track",
+                             "Side 0")
+            self.expect("HiForm source", "42 tracks, 10 sectors.")
+            source_ids = self.track_ids(0, drive=1)
+            if len(source_ids) != 10:
+                raise SmokeError(f"HiForm source IDs {source_ids}")
+
+            self.log("DISKCOPY B: A: (auto-formats A: as HiForm)")
+            self.command("DISKCOPY B: A:", 400)
+            self.wait_for(["Put the SOURCE disc in B:,", "the TARGET disc in A:,"],
+                          frames=50, attempts=4)
+            self.key("enter", 300)
+            self.wait_for(["Copied 42 tracks."], frames=600, attempts=60)
+            info = self.track_info(0, drive=0)
+            if "Sectors: 10" not in info or "Gap3: 16" not in info:
+                raise SmokeError(
+                    "DISKCOPY did not reformat A: with the HiForm layout: "
+                    + info)
+            target_ids = self.track_ids(0, drive=0)
+            # The absolute rotational phase is not observable through READ
+            # ID, so accept any rotation of the source's cycle.
+            if (len(target_ids) != len(source_ids)
+                    or sorted(target_ids) != sorted(source_ids)
+                    or not any(source_ids[i:] + source_ids[:i] == target_ids
+                               for i in range(len(source_ids)))):
+                raise SmokeError(
+                    f"HiForm layout not preserved: source {source_ids}, "
+                    f"target {target_ids}")
+            for track, sector in ((0, 10), (20, 10), (41, 10)):
+                a = self.mcp.call("sector_read", {
+                    "track": track, "sector": sector, "side": 0,
+                    "drive": 0, "length": 64}).split("\n", 1)[1]
+                b = self.mcp.call("sector_read", {
+                    "track": track, "sector": sector, "side": 0,
+                    "drive": 1, "length": 64}).split("\n", 1)[1]
+                if a != b:
+                    raise SmokeError(
+                        f"HiForm copy differs at track {track} sector {sector}")
         finally:
             self.dsk = old_dsk
-            for path in (src, dst):
+            for path in (src, dst, foreign):
                 try:
                     path.unlink()
                 except OSError:

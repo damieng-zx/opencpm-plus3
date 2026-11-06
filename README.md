@@ -197,8 +197,12 @@ Also supported:
   read and written straight away; on one drive it reads as many tracks as
   fit in a 48K buffer (up to 10), asks for the target, writes them, and
   asks for the source back.  A live line shows the percentage, the logical
-  track, the side and READ/WRITE.  It copies sectors, so the target must be
-  formatted with the same layout (`FORMAT` first); it does not verify yet.
+  track, the side and READ/FORMAT/WRITE.  The target does not have to be
+  pre-formatted: as each track is written, the target track is formatted
+  first, using the source track's own ID layout (captured with repeated
+  READ ID, so the interleave and skew are copied rather than re-chosen).
+  The absolute rotational phase is not observable, so the target's ID order
+  can be a rotation of the source's cycle.  It does not verify yet.
 
 ## Test programs
 
@@ -217,8 +221,7 @@ Also supported:
 
 ## Wishlist / TODO
 
-- **DISKCOPY verify pass** (read both discs back and compare) and an option
-  to format the target as part of the copy.
+- **DISKCOPY verify pass** (read both discs back and compare).
 - **FORMAT options** — no-verify, a bootable system layout, mapping bad
   sectors into a hidden file, and a format profile (`SETUP`) so a data
   layout with no boot sector (Ultra 208) keeps its geometry.
