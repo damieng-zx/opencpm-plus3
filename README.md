@@ -75,8 +75,8 @@ wishlist); put your own on the disk and it runs once at cold boot.
 
 ## Features
 
-- **Three text modes**: 32x24 (8px font), 51x24 (5px, the +3's native width)
-  and 64x24 (4px "Compression" font, two characters per attribute cell).
+- **Three text modes**: 32x24 (8px font), 51x24 (5px font) and 64x24
+  (4px "Compression" font, two characters per attribute cell).
   `SCREEN 32|51|64` (the `SCREEN` utility), or BIOS function 32.
 - **24x80 virtual screen**: an 80x24 buffer in bank 5, shown through a
   window of the current width.  `SET24X80` / `ESC x` enters it, `ESC y`
@@ -137,7 +137,7 @@ wishlist); put your own on the disk and it runs once at cold boot.
 | Mode | Size | Font | Notes |
 |---|---|---|---|
 | 32x24 | 32x24 | 8px | `SCREEN 32` |
-| 51x24 | 51x24 | 5px | native +3 width, `SCREEN 51` |
+| 51x24 | 51x24 | 5px | default, `SCREEN 51` |
 | 64x24 | 64x24 | 4px | Compression font, `SCREEN 64` |
 | 24x80 | 80x24 | current | virtual, paged, `SET24X80` |
 
@@ -205,9 +205,9 @@ the partial entries note what is still blocked. The suite is run on demand
 rather than in CI because it downloads third-party software. The 24x80 variants (`wordstar30_80`, `turbo3_80`, `supercalc2_80`,
 `multiplan_80`) are additional runs of four of those packages.
 
-The default screen is 51 columns, the +3's native width.  For 80-column
-software, enter the virtual 80-column screen with `SET24X80` (or `ESC x`);
-it pans automatically or on EXTEND+Enter.  The real-world suite has 24x80
+The default screen is 51 columns.  For 80-column software, enter the virtual
+80-column screen with `SET24X80` (or `ESC x`); it pans automatically or on
+EXTEND+Enter.  The real-world suite has 24x80
 variants (`wordstar30_80`, `turbo3_80`, `supercalc2_80`) that run the same
 packages under `SET24X80` and flip with EXTEND+Enter.
 
