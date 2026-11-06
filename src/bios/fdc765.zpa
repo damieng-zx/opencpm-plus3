@@ -431,10 +431,31 @@ fdc_login_body:
 
     ld a, (deblock_buf)             ; Boot sector byte 0 = disc type (0-3)
     cp 4
-    jr nc, .type0_fallback          ; Out of range — stick with type 0.
-    ld b, a                         ; B = disc type from boot sector
-    jr .apply_and_patch
+    jr nc, .type0_fallback          ; Out of range - stick with type 0
 
+    ; The sector also carries the 10-byte AMSDOS disc spec, so build the
+    ; XDPB from it: that picks up 10-sector/42-track layouts (HiForm,
+    ; SuperMat, ...) as well as the standard 9-sector formats, and derives
+    ; the directory size and allocation vector from the spec.  A spec that
+    ; does not build falls back to the standard template.
+    ld a, (deblock_buf)
+    ld b, a                         ; B = disc type from boot sector
+    push bc
+    push ix
+    ld hl, deblock_buf
+    call build_xdpb_from_spec
+    pop ix
+    pop bc
+    jr nc, .spec_fallback
+    ld (fdc_login_type), a
+    ld hl, dd_xdpb_buf
+    push ix
+    pop de
+    ld bc, 27
+    ldir
+    ret
+.spec_fallback:
+    jr .apply_and_patch
 .type0_fallback:
     ld b, 0                         ; Default to type 0 (+3/PCW SS)
 .apply_static:

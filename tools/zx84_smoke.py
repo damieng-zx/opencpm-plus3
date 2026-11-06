@@ -736,6 +736,60 @@ class Smoke:
             self.expect("CPC Data XDPB", "First=C1h", "OFF=0",
                         "DSM=179")
 
+            # --- 10-sector 3" layouts ---
+            # HiForm 203: 42 tracks, interleave 3, so track 0's IDs are
+            # physically 1,8,5,2,9,6,3,10,7,4.
+            self.log("FORMAT B: HiForm 203 42 track")
+            self.format_disc("B", None, "5", "Done - HiForm 203 42 track",
+                             "Side 0")
+            self.expect("HiForm format", "Done - HiForm 203 42 track.",
+                        "42 tracks, 10 sectors.")
+            self.check_sector(0, 0, 1, "00 00 2A 0A 02 01 03 02", drive=1)
+            self.check_e5(41, 0, 10, drive=1)
+            self.check_track_ids(0, [1, 8, 5, 2, 9, 6, 3, 10, 7, 4], drive=1)
+            self.command("SHOWXDPB", 1500)
+            self.expect("HiForm XDPB", "10x512", "DSM=204", "OFF=1",
+                        "Gap2=16h")
+
+            # SuperMat 192: 40 tracks, 10 sectors, 3 directory blocks.
+            self.log("FORMAT B: SuperMat 192 40 track")
+            self.format_disc("B", None, "7", "Done - SuperMat 192 40 track",
+                             "Side 0")
+            self.expect("SuperMat format", "Done - SuperMat 192 40 track.",
+                        "40 tracks, 10 sectors.")
+            self.check_sector(0, 0, 1, "00 00 28 0A 02 01 03 03", drive=1)
+            self.check_e5(39, 0, 10, drive=1)
+            self.check_track_ids(0, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], drive=1)
+            self.command("SHOWXDPB", 1500)
+            self.expect("SuperMat XDPB", "10x512", "DSM=194", "DRM=95",
+                        "Gap2=17h")
+
+            # Ultra 208: same geometry with no reserved track, so no spec
+            # block and a per-track skew of 2.  Track 1 therefore starts at
+            # ID 5.  Without a boot sector the BIOS sees a 180K disc; the
+            # tool says so.
+            self.log("FORMAT B: Ultra 208 42 track")
+            self.format_disc("B", None, "6", "Done - Ultra 208 42 track",
+                             "Side 0")
+            self.expect("Ultra format", "Done - Ultra 208 42 track.",
+                        "42 tracks, 10 sectors.",
+                        "Note: no boot track, so CP/M sees 180K.")
+            self.check_e5(0, 0, 1, drive=1)
+            self.check_e5(41, 0, 10, drive=1)
+            self.check_track_ids(1, [5, 2, 9, 6, 3, 10, 7, 4, 1, 8], drive=1)
+
+            # CPC IBM: 8 sectors of 512, interleave 2.
+            self.log("FORMAT B: CPC IBM 40 track")
+            self.format_disc("B", None, "8", "Done - CPC IBM 40 track",
+                             "Side 0")
+            self.expect("CPC IBM format", "Done - CPC IBM 40 track.",
+                        "40 tracks, 8 sectors.")
+            self.check_sector(0, 0, 1, "00 00 28 08 02 01 03 02", drive=1)
+            self.check_e5(39, 0, 8, drive=1)
+            self.check_track_ids(0, [1, 5, 2, 6, 3, 7, 4, 8], drive=1)
+            self.command("SHOWXDPB", 1500)
+            self.expect("CPC IBM XDPB", "8x512", "DSM=155", "Gap2=50h")
+
             # A drive with no disc must fail cleanly, not hang.
             self.mcp.call("eject", {"target": "disk", "drive": "B"})
             self.command("FORMAT B:", 400)
@@ -822,6 +876,21 @@ class Smoke:
                  drive: int = 0) -> None:
         self.check_sector(track, side, sector,
                           "E5 E5 E5 E5 E5 E5 E5 E5", drive)
+
+    def check_track_ids(self, track: int, expected: list[int],
+                        side: int = 0, drive: int = 0) -> None:
+        """Check the IDs in physical order (interleave/skew layout)."""
+        text = self.mcp.call("track_geometry", {
+            "track": track, "side": side, "drive": drive})
+        ids = []
+        for line in text.splitlines():
+            parts = line.split()
+            if len(parts) >= 4 and parts[0].isdigit():
+                ids.append(int(parts[3], 16))
+        if ids != expected:
+            raise SmokeError(
+                f"track {track} side {side} IDs {ids}, expected {expected}"
+                f":\n{text}")
 
     def run_bbcbasic(self) -> None:
         """BBC BASIC must start from the distribution image when it is on it.

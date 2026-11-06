@@ -14,6 +14,14 @@
 ;   2   720K  DS 80 track (PCW)     disc type 3, first sector 1
 ;   3   CPC System  40 track        disc type 1, first sector 41h
 ;   4   CPC Data    40 track        disc type 2, first sector C1h
+;   5   HiForm 203  42 track        10 sectors, 12/22 gaps, interleave 3
+;   6   Ultra 208   42 track        10 sectors, no reserved track
+;   7   SuperMat 192 40 track       10 sectors, 3 directory blocks
+;   8   CPC IBM     40 track        8 sectors
+;
+; The 10-sector layouts lay their sector IDs down with an interleave (and,
+; for Ultra, a per-track skew), so consecutive IDs are not physically
+; adjacent; CP/M addresses sectors by ID, so this only changes timing.
 ;
 ; Every track is formatted and then verified sector by sector before the
 ; next track is touched.  A single progress line is rewritten in place:
@@ -149,6 +157,8 @@ start:
     call userf_call
 
     ; ---- Geometry ----
+    ld hl, 0
+    ld (note_ptr), hl
     ld de, msg_menu
     call pstr
 menu_key:
@@ -163,35 +173,86 @@ menu_key:
     jr z, choose_cpc_sys
     cp '4'
     jr z, choose_cpc_data
+    cp '5'
+    jr z, choose_hiform
+    cp '6'
+    jr z, choose_ultra
+    cp '7'
+    jr z, choose_supermat
+    cp '8'
+    jp z, choose_cpc_ibm
     ld de, msg_bad_choice
     call pstr
     jr menu_key
 
+; Each choice sets HL = spec, DE = name, B = interleave, C = track skew.
 choose_180:
     ld a, '1'
     call echo_choice
     ld hl, spec_180
     ld de, name_180
+    ld bc, 0x0100                   ; interleave 1, skew 0
     jr have_type
 choose_720:
     ld a, '2'
     call echo_choice
     ld hl, spec_720
     ld de, name_720
+    ld bc, 0x0100
     jr have_type
 choose_cpc_sys:
     ld a, '3'
     call echo_choice
     ld hl, spec_cpc_sys
     ld de, name_cpc_sys
+    ld bc, 0x0200                   ; CPC interleave 2
     jr have_type
 choose_cpc_data:
     ld a, '4'
     call echo_choice
     ld hl, spec_cpc_data
     ld de, name_cpc_data
+    ld bc, 0x0200
+    jr have_type
+choose_hiform:
+    ld a, '5'
+    call echo_choice
+    ld hl, spec_hiform
+    ld de, name_hiform
+    ld bc, 0x0300                   ; interleave 3, no skew
+    jr have_type
+choose_ultra:
+    ld a, '6'
+    call echo_choice
+    ld hl, spec_ultra
+    ld de, name_ultra
+    ld bc, 0x0302                   ; interleave 3, skew 2
+    push hl
+    push de
+    ld hl, msg_ultra_note
+    ld (note_ptr), hl
+    pop de
+    pop hl
+    jr have_type
+choose_supermat:
+    ld a, '7'
+    call echo_choice
+    ld hl, spec_supermat
+    ld de, name_supermat
+    ld bc, 0x0100
+    jr have_type
+choose_cpc_ibm:
+    ld a, '8'
+    call echo_choice
+    ld hl, spec_cpc_ibm
+    ld de, name_cpc_ibm
+    ld bc, 0x0200
 have_type:
     ld (layout_ptr), de
+    ld a, b
+    ld (interleave), a
+    ld a, c
+    ld (skew), a
     ld de, SPEC
     ld bc, 10
     ldir
@@ -302,6 +363,12 @@ track_loop:
     call pstr
     ld de, msg_verified
     call pstr
+    ld de, (note_ptr)
+    ld a, d
+    or e
+    jr z, .no_note
+    call pstr
+.no_note:
     rst 0
 
 ; ==========================================================================
@@ -422,31 +489,208 @@ set_track_geom:
     ld (cur_cyl), a
     ret
 
-; build_hdr - fill the DD_FORMAT ID table for the current track
-;   In:       cur_cyl, cur_side, first, psh, sectors
-;   Out:      HDR
-;   Clobbers: AF, B, HL
-build_hdr:
-    ld hl, HDR
-    ld b, 0
+; shift_for_track - sector skew for the current track
+;   In:       skew, cur_track, sectors
+;   Out:      A = (skew * cur_track) mod sectors
+;   Clobbers: AF, BC, DE
+shift_for_track:
+    ld a, (skew)
+    or a
+    jr z, .none
+    ld c, a
+    ld a, (cur_track)
+    ld b, a
+    xor a
 .loop:
-    ld a, (cur_cyl)
-    ld (hl), a                  ; C
-    inc hl
-    ld a, (cur_side)
-    ld (hl), a                  ; H
-    inc hl
+    add a, c
+    call mod_sectors
+    dec b
+    jr nz, .loop
+    ret
+.none:
+    xor a
+    ret
+
+; mod_sectors - reduce A modulo sectors (A < 2 * sectors)
+;   In:       A, sectors
+;   Out:      A = A mod sectors
+;   Clobbers: AF, DE
+mod_sectors:
+    ld d, a
+    ld a, (sectors)
+    ld e, a
+    ld a, d
+    cp e
+    ret c
+    sub e
+    ret
+
+; bit_taken - is position C already used in this track's layout?
+;   In:       C = position (0-31)
+;   Out:      carry set when taken
+;   Clobbers: AF, DE, HL
+bit_taken:
+    ld hl, taken
+    ld a, c
+    and 0xF8
+    rrca
+    rrca
+    rrca
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, (hl)
+    ld e, a
+    ld a, c
+    and 7
+    inc a
+    ld d, a
+    ld a, e
+.shift:
+    rrca
+    dec d
+    jr nz, .shift
+    ret
+
+; set_taken - mark position C as used
+;   In:       C = position (0-31)
+;   Clobbers: AF, DE, HL
+set_taken:
+    ld hl, taken
+    ld a, c
+    and 0xF8
+    rrca
+    rrca
+    rrca
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, c
+    and 7
+    ld e, a
+    ld a, 1
+    inc e
+.mask:
+    dec e
+    jr z, .store
+    add a, a
+    jr .mask
+.store:
+    or (hl)
+    ld (hl), a
+    ret
+
+; build_hdr - fill the DD_FORMAT ID table for the current track
+;   In:       cur_cyl, cur_side, first, psh, sectors, interleave, skew
+;   Out:      HDR = sectors * 4 bytes, in physical order
+;   Clobbers: AF, BC, DE, HL
+;
+; The IDs are walked in steps of `interleave`, skipping positions already
+; taken (that also copes with an interleave that does not divide the sector
+; count, e.g. 2 of 8), which gives idtab[position].  The per-track skew then
+; rotates the table: physical position q holds idtab[q + shift].  CP/M still
+; addresses ID first + i, so the permutation only changes how long the
+; drive takes to find a sector.
+build_hdr:
+    xor a
+    ld (taken + 0), a
+    ld (taken + 1), a
+    ld (taken + 2), a
+    ld (taken + 3), a
+
+    ld a, (interleave)
+    or a
+    jr nz, .il_ok
+    ld a, 1
+.il_ok:
+    ld (il), a
+
+    ld b, 0                         ; B = sector index k
+    ld c, 0                         ; C = walk position
+.k_loop:
+.take_loop:
+    call bit_taken
+    jr nc, .free
+    inc c
+    ld a, (sectors)
+    cp c
+    jr nz, .take_loop
+    ld c, 0
+    jr .take_loop
+.free:
     ld a, (first)
     add a, b
-    ld (hl), a                  ; R
-    inc hl
-    ld a, (psh)
-    ld (hl), a                  ; N
-    inc hl
+    ld hl, idtab
+    ld e, c
+    ld d, 0
+    add hl, de
+    ld (hl), a
+    call set_taken
+
+    ld a, c
+    ld d, a
+    ld a, (il)
+    ld e, a
+    ld a, d
+    add a, e
+    call mod_sectors
+    ld c, a
+
     inc b
     ld a, (sectors)
     cp b
-    jr nz, .loop
+    jr nz, .k_loop
+
+    ; Emit in physical order, rotated by the track skew.
+    call shift_for_track
+    ld (shift), a
+    xor a
+    ld (pcur), a
+.emit:
+    ld a, (pcur)
+    ld hl, idtab
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, (hl)
+    ld (cur_id), a
+
+    ld a, (pcur)
+    ld d, a
+    ld a, (shift)
+    ld e, a
+    ld a, d
+    sub e
+    jr nc, .q_ok
+    ld e, a
+    ld a, (sectors)
+    add a, e
+.q_ok:
+    ld l, a
+    ld h, 0
+    add hl, hl
+    add hl, hl
+    ld de, HDR
+    add hl, de
+    ld a, (cur_cyl)
+    ld (hl), a                      ; C
+    inc hl
+    ld a, (cur_side)
+    ld (hl), a                      ; H
+    inc hl
+    ld a, (cur_id)
+    ld (hl), a                      ; R
+    inc hl
+    ld a, (psh)
+    ld (hl), a                      ; N
+
+    ld a, (pcur)
+    inc a
+    ld (pcur), a
+    ld b, a
+    ld a, (sectors)
+    cp b
+    jr nz, .emit
     ret
 
 ; verify_track - read every sector of the current track and compare it with
@@ -509,8 +753,10 @@ verify_track:
 ;   Out:      carry set OK, or carry clear + A = error
 ;   Clobbers: AF, BC, DE, HL, IX
 write_disc_spec:
-    ; OFF = 0 is a data layout: track 0 is the directory, not a boot
-    ; sector, so leave it as filler and let the sector IDs identify it.
+    ; A data layout (OFF = 0) has no boot sector: its first sector is the
+    ; directory, so leave it as filler.  (The original Ultra 208 wrote the
+    ; spec there, which leaves junk directory entries; the login probe
+    ; cannot see that geometry without it, hence the note after the run.)
     ld a, (XDPB + XDPB_OFF)
     or a
     jr nz, .write
@@ -877,6 +1123,18 @@ spec_cpc_sys:
     db 1, 0, 40, 9, 2, 2, 3, 2, 42, 82
 spec_cpc_data:
     db 2, 0, 40, 9, 2, 0, 3, 2, 42, 82
+; 10-sector single-sided layouts packed onto a 3" disc.  The spec block is
+; the same AMSDOS 10 bytes, so login can rebuild the geometry from it:
+; type, arrangement, tracks, sectors, size code, reserved tracks, block
+; size code, directory blocks, gap R/W, gap format.
+spec_hiform:
+    db 0, 0, 42, 10, 2, 1, 3, 2, 12, 22
+spec_ultra:
+    db 0, 0, 42, 10, 2, 0, 3, 2, 12, 22
+spec_supermat:
+    db 0, 0, 40, 10, 2, 1, 3, 3, 12, 23
+spec_cpc_ibm:
+    db 0, 0, 40, 8, 2, 1, 3, 2, 42, 80
 
 drive_letter:  db 0
 drive_unit:    db 0
@@ -890,6 +1148,15 @@ cur_track:     db 0
 cur_cyl:       db 0
 cur_side:      db 0
 cur_sec:       db 0
+interleave:    db 0
+skew:          db 0
+shift:         db 0
+il:            db 0
+pcur:          db 0
+cur_id:        db 0
+taken:         db 0, 0, 0, 0
+idtab:         ds 32
+note_ptr:      dw 0
 last_error:    db 0
 num_hund:      db 0
 num_tens:      db 0
@@ -925,9 +1192,13 @@ msg_menu:
     db "  2   720K  DS 80 track (PCW)", 0x0D, 0x0A
     db "  3   CPC System  40 track", 0x0D, 0x0A
     db "  4   CPC Data    40 track", 0x0D, 0x0A
-    db 0x0A, "Choice (1-4, ESC cancels): ", '$'
+    db "  5   HiForm 203  42 track", 0x0D, 0x0A
+    db "  6   Ultra 208   42 track", 0x0D, 0x0A
+    db "  7   SuperMat 192 40 track", 0x0D, 0x0A
+    db "  8   CPC IBM     40 track", 0x0D, 0x0A
+    db 0x0A, "Choice (1-8, ESC cancels): ", '$'
 msg_bad_choice:
-    db 0x0D, 0x0A, "1-4: ", '$'
+    db 0x0D, 0x0A, "1-8: ", '$'
 
 msg_done:
     db 0x0A, "Done - ", '$'
@@ -939,6 +1210,8 @@ msg_sectors:
     db " sectors.", 0x0D, 0x0A, '$'
 msg_verified:
     db "Every track formatted and verified.", 0x0D, 0x0A, '$'
+msg_ultra_note:
+    db "Note: no boot track, so CP/M sees 180K.", 0x0D, 0x0A, '$'
 
 name_180:
     db "180K SS/40 track", '$'
@@ -948,6 +1221,14 @@ name_cpc_sys:
     db "CPC System 40 track", '$'
 name_cpc_data:
     db "CPC Data 40 track", '$'
+name_hiform:
+    db "HiForm 203 42 track", '$'
+name_ultra:
+    db "Ultra 208 42 track", '$'
+name_supermat:
+    db "SuperMat 192 40 track", '$'
+name_cpc_ibm:
+    db "CPC IBM 40 track", '$'
 
 msg_cancelled:
     db "Cancelled.", 0x0D, 0x0A, '$'

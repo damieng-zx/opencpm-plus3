@@ -217,7 +217,10 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/bios/common.asm` — Common memory stub: BDOS dispatch, bank switching, inter-bank copy
 - `src/bios/screen.asm` — 32/51/64-column text display (8px, 5px and 4px fonts)
 - `src/bios/keyboard.asm` — 8×5 matrix scan, ASCII mapping, debounce/repeat
-- `src/bios/fdc765.asm` — uPD765A driver with sector deblocking (512→128 byte)
+- `src/bios/fdc765.asm` — uPD765A driver with sector deblocking (512→128 byte);
+  login detects the format from the sector-ID group and, for the 1-9 group,
+  rebuilds the XDPB from the boot sector's 10-byte AMSDOS spec (so 10-sector
+  42-track layouts work)
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
 - `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/compression.ch8` by `tools/mkfont64.py`
 - `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O).  The directory/FCB
@@ -228,10 +231,13 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
 - `src/tools/format.asm` — `FORMAT.COM`, the disc formatter (XBIOS `DD_L_XDPB`,
-  `DD_FORMAT`, `DD_CHECK_SECTOR`, `DD_WRITE`): `FORMAT A:`/`FORMAT B:`,
-  180K SS/40, 720K DS/80, CPC System and CPC Data, one track formatted then
-  verified, live progress line, and an AMSDOS disc spec written into the
-  boot sector of the layouts that reserve one
+  `DD_FORMAT`, `DD_CHECK_SECTOR`, `DD_WRITE`): `FORMAT A:`/`FORMAT B:`;
+  180K SS/40, 720K DS/80, CPC System, CPC Data, HiForm 203 (42T/10),
+  Ultra 208 (42T/10, skewed), SuperMat 192 (40T/10) and CPC IBM (8 sector).
+  One track is formatted then verified, a live progress line shows
+  percentage/track/side/phase, the CHRN table is built with interleave and
+  skew, and the AMSDOS disc spec is written into the boot sector of the
+  layouts that reserve one
 - `tools/mkdsk.py` — DSK image builder (`--format 180k` or `720k`); the
   720K layout uses 2K blocks, 128 directory entries and 16-bit block
   numbers, and the build writes it as `build/cpm3_720.dsk`

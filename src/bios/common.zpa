@@ -1163,8 +1163,12 @@ xbios_ret_iy: dw 0                 ; XBIOS IY result (caller IY by default)
 xbios_tmp_hl: dw 0                 ; scratch for SCR_RUN_ROUTINE's call
 dd_results: db 0                   ; DD_READ_ID result count
     ds 7                           ; ST0 ST1 ST2 C H R N
-dd_format_hdr: ds 36               ; DD_FORMAT header table (9 x 4 bytes)
-    assert dd_format_hdr + 36 <= 0x10000, "USERF/disc save area must fit in common memory"
+; Reserved: DD_FORMAT used to stage its CHRN table here (36 bytes = 9
+; sectors).  It now stages it in the FDC deblock buffer, which holds up to
+; 32 entries, but the space stays reserved so ccp_run_prog and the staged
+; CCP's fixed addresses (FD0F etc.) do not move.
+dd_reserved: ds 36
+    assert dd_reserved + 36 <= 0x10000, "USERF/disc save area must fit in common memory"
 
 ; CD_INFO buffer-descriptor table: empty (single 0xFF terminator).  The
 ; manual requires HL to point into common memory so a TPA caller can read it.

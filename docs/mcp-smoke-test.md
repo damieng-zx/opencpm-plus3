@@ -39,23 +39,29 @@ defaults `motor_off_ticks=250`, `fdc_spec1=4Fh`, `fdc_spec2=05h`.  It then boots
 byte, runs `XTETEST` again, requires `10.FMT..OK` and checks the formatted
 track with `sector_read`.
 
-It then runs the `FORMAT` utility four times.  A 180K SS/40-track disc on
-A: is formatted from a scratch copy of the test image with the target
+It then formats a disc for every `FORMAT` layout.  A 180K SS/40-track disc
+on A: is formatted from a scratch copy of the test image with the target
 hot-swapped in at the "put the disc in" prompt, which exercises both
 disc-change prompts; `FORMAT`, `FORMAT C:` and ESC-cancel are checked first.
-A 720K DS/80-track image and the two CPC layouts are then formatted on B:,
-using a scratch copy of `build/cpm3_720.dsk` mounted there.  The checks
-require the `percentage / Track / Side / FORMAT|VERIFY` progress line, the
-layout-named summary (`Done - 180K SS/40 track.` / `... 720K DS/80 track.` /
-`... CPC System 40 track.` / `... CPC Data 40 track.`), the `E5` filler on
-the last track and the AMSDOS disc spec in the boot sector (`00 00 28 09 ...`
-for 180K, `03 01 50 09 ...` for 720K, `01 00 28 09 02 02 ...` for CPC
-System; CPC Data reserves no track, so its first sector stays filler and the
-`C1h`-`C9h` sector IDs identify it).  `SHOWXDPB` must report `First=41h`
-(CPC System) and `First=C1h` (CPC Data) for B:, which proves the login
-re-probed the freshly formatted disc.  The emulator keeps disc writes in
-memory rather than writing the `.dsk` back, so the sectors are read back
-through the FDC with `sector_read`.
+The rest run on B: with a scratch copy of `build/cpm3_720.dsk` mounted
+there: 720K DS/80, CPC System, CPC Data, HiForm 203 (42 tracks, 10
+sectors), SuperMat 192, Ultra 208 and CPC IBM.
+
+The checks require the `percentage / Track / Side / FORMAT|VERIFY` progress
+line, the layout-named summary, `E5` on the last track, the boot-sector
+spec (`00 00 28 09 ...` for 180K, `03 01 50 09 ...` for 720K, `01 00 28 09
+02 02 ...` for CPC System, `00 00 2A 0A 02 01 03 02 0C 16` for HiForm,
+`00 00 28 0A 02 01 03 03 ...` for SuperMat, `00 00 28 08 02 01 03 02 ...`
+for CPC IBM), and the physical ID order from `track_geometry` (HiForm
+`1 8 5 2 9 6 3 10 7 4`, SuperMat `1..10`, CPC IBM `1 5 2 6 3 7 4 8`, and
+Ultra track 1 `5 2 9 6 3 10 7 4 1 8` for the skew).  `SHOWXDPB` must show
+the detected geometry for the layouts with a boot sector (42 tracks x 10
+sectors, `DSM=204` / `DSM=194`, the CPC `First=41h`/`C1h`), which proves the
+login re-probed the disc and rebuilt the XDPB from the spec block.  CPC
+Data and Ultra reserve no track: their first sector stays filler (CPC Data
+is identified by its IDs, Ultra prints a note and is seen as 180K).  The
+emulator keeps disc writes in memory rather than writing the `.dsk` back,
+so sectors are read back through the FDC with `sector_read`.
 
 ```text
 python3 tools/zx84_smoke.py

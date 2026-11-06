@@ -1140,8 +1140,13 @@ xbios_handler:
     ret
 
 ; Build a 27-byte XDPB in dd_xdpb_buf from the 10-byte spec at HL.
+;   In:  HL = 10-byte AMSDOS disc spec, system-mode memory
 ;   Out: A = disc type + carry set, or A = 6 + carry clear
 ;   Clobbers: AF, BC, DE, HL
+;
+; DD_L_DPB/DD_L_XDPB share it with the login probe, which uses it to pick
+; up non-standard PCW layouts (10 sectors, 42 tracks) from the boot
+; sector's spec block instead of assuming a 9-sector template.
 .dd_build_xdpb:
     ld de, dd_spec
     ld bc, 10
@@ -2016,9 +2021,9 @@ xbios_handler:
     ld a, (ix + XDPB_SECTS)
     or a
     jp z, .dd2_bad_bank
-    cp 10
+    cp 33                          ; 32 sectors fit the 128-byte header area
     jr c, .ddf_sc_ok
-    ld a, 9
+    ld a, 32
 .ddf_sc_ok:
     ld (dd_format_sc), a
     ld a, d
@@ -2027,22 +2032,25 @@ xbios_handler:
     ld (dd_filler), a
     ld (dd_user_ptr), hl
 
-    ; Copy 4 * SC header bytes to the common buffer.
-    ld a, (dd_format_sc)
-    add a, a
-    add a, a
-    ld c, a
-    ld b, 0
-    ld hl, (dd_user_ptr)
-    ld de, dd_format_hdr
-    call copy_from_user
-
+    ; The header table is streamed out in system mode, so it has to live
+    ; outside the TPA.  The deblock buffer is free once the pending sector
+    ; has been flushed, and its 128 bytes hold up to 32 CHRN entries.
     call flush_deblock_body
     jp nz, .dd2_write_error        ; lint: ignore - flush returns Z/NZ
     ld a, 0xFF
     ld (deblock_drv), a
     xor a
     ld (deblock_dirty), a
+
+    ; Copy 4 * SC header bytes into the deblock buffer.
+    ld a, (dd_format_sc)
+    add a, a
+    add a, a
+    ld c, a
+    ld b, 0
+    ld hl, (dd_user_ptr)
+    ld de, deblock_buf
+    call copy_from_user
 
     ld ix, (xbios_ret_ix)
     ld a, (dd_track)
@@ -2061,7 +2069,7 @@ xbios_handler:
     ld a, (dd_filler)
     ld d, a
     ld a, (ix + XDPB_PSH)         ; N
-    ld hl, dd_format_hdr
+    ld hl, deblock_buf
     call fdc_format_track
     jp nz, .ddf_fail
     scf
@@ -2209,6 +2217,17 @@ xbios_handler:
 ; ==========================================================================
 ; Utility
 ; ==========================================================================
+
+; build_xdpb_from_spec - build an XDPB from a 10-byte AMSDOS disc spec
+;   In:       HL = spec (system-mode memory)
+;   Out:      carry set + A = disc type, XDPB in dd_xdpb_buf;
+;             carry clear + A = 6 (spec rejected)
+;   Clobbers: AF, BC, DE, HL ; lint: ignore - tail call to the handler
+;
+; The disc login probe uses this so a boot sector that declares a
+; non-standard layout (10 sectors, 42 tracks) is believed.
+build_xdpb_from_spec:
+    jp xbios_handler.dd_build_xdpb
 
 ; @proc print_str
 ; @param %str:u16  hl              ; pointer to null-terminated string

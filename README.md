@@ -169,13 +169,27 @@ Also supported:
   nested submits are rejected).
 - `FORMAT` — format a disc in A: or B: (`FORMAT A:` / `FORMAT B:`). Asks
   for the disc to be swapped, then for a layout:
-  `1` 180K SS/40 track (PCW), `2` 720K DS/80 track (PCW), `3` CPC System
-  40 track, `4` CPC Data 40 track. Formats one track and verifies it
-  sector by sector before moving on, with a live `percentage / track /
-  side / FORMAT|VERIFY` line. Writes the AMSDOS disc spec into the boot
-  sector of the layouts that reserve one, so the BIOS detects the new
-  format (a data layout is identified by its sector IDs instead). No
-  interleave, skew, no-verify or bad-sector mapping yet.
+
+  | # | Layout | Geometry |
+  |---|---|---|
+  | 1 | 180K SS/40 (PCW) | 9 sectors, 1 reserved track |
+  | 2 | 720K DS/80 (PCW) | 9 sectors, 1 reserved track |
+  | 3 | CPC System 40 | 9 sectors, 2 reserved, IDs 41h-49h |
+  | 4 | CPC Data 40 | 9 sectors, no reserved, IDs C1h-C9h |
+  | 5 | HiForm 203 42 | 10 sectors, 12/22 gaps, interleave 3 |
+  | 6 | Ultra 208 42 | 10 sectors, no reserved, interleave 3, skew 2 |
+  | 7 | SuperMat 192 40 | 10 sectors, 3 dir blocks, interleave 1 |
+  | 8 | CPC IBM 40 | 8 sectors, interleave 2 |
+
+  Formats one track and verifies it sector by sector before moving on,
+  with a live `percentage / track / side / FORMAT|VERIFY` line. It writes
+  the AMSDOS disc spec into the boot sector of the layouts that reserve
+  one, and the login probe rebuilds the geometry from that spec, so
+  10-sector and 42-track discs are detected as themselves. CPC Data is
+  identified by its sector IDs instead. Ultra 208 has no reserved track,
+  so the BIOS sees it as a 180K filesystem (the command says so); a format
+  profile/`SETUP` command would fix that. No no-verify option or
+  bad-sector mapping yet.
 
 ## Test programs
 
@@ -196,8 +210,9 @@ Also supported:
 
 - **Disk copy/verify** tool (the sector layer is in place; FORMAT covers the
   format side).
-- **FORMAT options** — no-verify, interleave/skew, a bootable system
-  layout, and mapping bad sectors into a hidden file.
+- **FORMAT options** — no-verify, a bootable system layout, mapping bad
+  sectors into a hidden file, and a format profile (`SETUP`) so a data
+  layout with no boot sector (Ultra 208) keeps its geometry.
 - **VT-100/CSI parser** — in addition to the VT-52/ADM-3A sequences.
 - **3px 80-column font** — a true 80x24 display with no paging (optional;
   24x80 already provides the width).

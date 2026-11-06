@@ -46,7 +46,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | `0x86` | `DD_READ_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = destination, IX = XDPB | Reads one 512-byte sector.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted, and C must be 0 or 1 (A: or B:). |
 | `0x89` | `DD_WRITE` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = source, IX = XDPB | Writes one 512-byte sector.  Carry set OK; carry clear + A = error (1 = write protected).  Only bank 1 (TPA) is accepted, and C must be 0 or 1 (A: or B:). |
 | `0x8C` | `DD_CHECK_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = compare buffer, IX = XDPB | Reads the sector and compares it with the buffer.  Carry set + Z set if equal, carry set + Z clear if different, carry clear + A = error.  Bank 1 only; C = 0 or 1. |
-| `0x8F` | `DD_FORMAT` | B = CP/M bank, C = unit, D = logical track, E = filler, HL = header table (track, head, sector, size), IX = XDPB | Formats one track with the uPD765A FORMAT TRACK command.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted, and C must be 0 or 1 (A: or B:). |
+| `0x8F` | `DD_FORMAT` | B = CP/M bank, C = unit, D = logical track, E = filler, HL = header table (track, head, sector, size), IX = XDPB | Formats one track with the uPD765A FORMAT TRACK command.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted, and C must be 0 or 1 (A: or B:).  The CHRN table is staged in the FDC deblock buffer, so up to 32 sectors per track are supported (the XDPB's sector count is clamped to 32). |
 | `0x92` | `DD_LOGIN` | C = unit, IX = destination XDPB in common memory | Re-detects the format of unit C (0 or 1), copies that drive's XDPB, and returns carry set + A = disc type, DE = ALV size, HL = hash-table size; carry clear + A = error. |
 | `0x95` | `DD_SEL_FORMAT` | A = format 0-3, IX = destination XDPB in common memory | Carry set + A = format, or carry clear + A = 6 (bad format).  Loads one of the four standard XDPB templates. |
 | `0x98` | `DD_DRIVE_STATUS` | C = unit (bits 1-0), head (bit 2) | A = ST3.  Unit 0 returns `0x30` (Ready + Track 0 + unit 0), with ST3 bit 2 mirroring the requested head (`0x34` for head 1); other units return `0x01` (not fitted). |
@@ -99,10 +99,18 @@ the FDC's not-ready status.
 The login probe reads the sector ID without assuming which sector the
 head lands on: `01h`-`09h` means a +3/PCW disc (the boot sector's type
 byte then picks SS or DS/DD), `41h`-`49h` is CPC System and `C1h`-`C9h`
-is CPC Data.  A disc reset (BDOS fn 13 or 37) clears the XDPB freeze
-byte so the next login probes the media again.
+is CPC Data.  For the 1-9 group the probe then rebuilds the XDPB from the
+10-byte AMSDOS spec block at the start of the boot sector, so 10-sector
+and 42-track layouts (HiForm, SuperMat, ...) log in as themselves instead
+of falling back to the 9-sector template.  A disc reset (BDOS fn 13 or 37)
+clears the XDPB freeze byte so the next login probes the media again.
 `DD_FORMAT` uses the XDPB's physical sector count, `PSH` size code and
-format gap, and is destructive by definition.  `DD_LOGIN`'s probe falls
+format gap, and is destructive by definition.  The login probe's spec
+build rejects a spec that does not produce a usable disk (bad type,
+arrangement, track/sector count, size code, block shift or directory
+size) and falls back to the standard template.  A data layout that
+reserves no track (Ultra 208) has no spec block for it to read.
+`DD_LOGIN`'s probe falls
 back to the standard type-0 template if the READ ID/boot-sector read
 fails, so it does not yet propagate the 0/2/3/4/5 login error codes.
 

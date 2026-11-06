@@ -351,7 +351,9 @@ class DiscPhase2(unittest.TestCase):
         body = handler_body(".dd_format:", ".dd_prepare:")
         self.assertIn("(ix + XDPB_SECTS)", body)
         self.assertIn("(ix + XDPB_GAP2)", body)
-        self.assertIn("dd_format_hdr", body)
+        # The CHRN table is staged in the deblock buffer (128 bytes), not
+        # the old 36-byte common-memory area, so 10-sector tracks fit.
+        self.assertIn("ld de, deblock_buf", body)
         self.assertIn("call fdc_format_track", body)
 
     def test_compare_buffer_is_clear_of_deblock(self):
