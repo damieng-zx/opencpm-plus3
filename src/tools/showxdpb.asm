@@ -410,8 +410,10 @@ _hex_nib:
 
 ; print_hex16 — HL as 4 uppercase hex digits
 print_hex16:
+    push hl                     ; BDOS clobbers HL in print_hex8
     ld a, h
     call print_hex8
+    pop hl
     ld a, l
     jp print_hex8
 

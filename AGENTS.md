@@ -228,9 +228,10 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
 - `src/tools/format.asm` — `FORMAT.COM`, the disc formatter (XBIOS `DD_L_XDPB`,
-  `DD_FORMAT`, `DD_CHECK_SECTOR`, `DD_WRITE`): 180K SS/40 and 720K DS/80,
-  one track formatted then verified, live progress line, and an AMSDOS disc
-  spec written so login detects the new geometry
+  `DD_FORMAT`, `DD_CHECK_SECTOR`, `DD_WRITE`): `FORMAT A:`/`FORMAT B:`,
+  180K SS/40, 720K DS/80, CPC System and CPC Data, one track formatted then
+  verified, live progress line, and an AMSDOS disc spec written into the
+  boot sector of the layouts that reserve one
 - `tools/mkdsk.py` — DSK image builder (`--format 180k` or `720k`); the
   720K layout uses 2K blocks, 128 directory entries and 16-bit block
   numbers, and the build writes it as `build/cpm3_720.dsk`

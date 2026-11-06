@@ -645,13 +645,14 @@ class Smoke:
                 pass
 
     def run_format(self) -> None:
-        """FORMAT.COM: format and verify 180K SS and 720K DS discs.
+        """FORMAT.COM: 180K on A: via a disc swap, then B: layouts.
 
-        FORMAT is started from the system disc, so the target image is hot
-        swapped in at the "put the disc in" prompt, exactly as the command
-        expects.  The emulator keeps disc writes in memory (it does not
-        persist them back to the .dsk file), so the checks read sectors
-        back through the FDC with sector_read.
+        A: is formatted on a scratch copy of the test image with the target
+        hot-swapped in at the "put the disc in" prompt (the system disc must
+        come out first, exactly as the command says).  B: then gets a 720K
+        DS image and the two CPC layouts, all on a mounted B: image.  The
+        emulator keeps disc writes in memory (it does not persist them back
+        to the .dsk file), so sectors are read back through the FDC.
         """
         if not (ROOT / "build" / "cpm3_720.dsk").exists():
             raise SmokeError(
@@ -665,68 +666,124 @@ class Smoke:
         old_dsk = self.dsk
         self.dsk = scratch
         try:
-            self.log("FORMAT A: 180K SS/40 track")
             self.boot()
             # Argument handling and the ESC escape hatch, before anything
             # destructive happens.
             self.command("FORMAT", 300)
-            self.expect("FORMAT usage", "Format the disc in drive A:.")
-            self.command("FORMAT B:", 300)
-            self.expect("FORMAT B: refused", "cannot be formatted",
-                        "Only drive A: is supported")
+            self.expect("FORMAT usage", "Format the disc in the given drive.")
+            self.command("FORMAT C:", 300)
+            self.expect("FORMAT C: refused", "cannot be formatted",
+                        "Only drives A: and B: are supported")
             self.command("FORMAT A:", 300)
             self.wait_for(["Take the disc out"], frames=50, attempts=4)
             self.key("escape", 300)
             self.expect("FORMAT cancelled", "Cancelled.")
 
-            self.format_disc(blank180, "1", "Done - 40 tracks", "Side 0")
-            self.expect("180K format",
-                        "Every track formatted and verified",
-                        "Done - 40 tracks, 9 sectors")
-            self.check_sector(0, 0, 1, "00 00 28 09 02 01 03 02")
-            self.check_e5(39, 0, 1)
-            self.check_e5(1, 0, 1)
+            self.log("FORMAT A: 180K SS/40 track")
+            self.format_disc("A", blank180, "1", "Done - 180K SS/40 track",
+                             "Side 0")
+            self.expect("180K format", "Done - 180K SS/40 track.",
+                        "40 tracks, 9 sectors.",
+                        "Every track formatted and verified.")
+            self.check_sector(0, 0, 1, "00 00 28 09 02 01 03 02", drive=0)
+            self.check_e5(39, 0, 1, drive=0)
+            self.check_e5(1, 0, 1, drive=0)
 
             # The system disc was formatted in place; put the system image
-            # back so FORMAT.COM can be loaded again for the second run.
+            # back so FORMAT.COM can be loaded again, and mount a scratch
+            # copy of the 720K image on B: for the remaining runs.
             self.mcp.call("eject", {"target": "disk", "drive": "A"})
             self.mcp.call("load", {"file": str(scratch), "drive": "A"})
             self.wait_for(["A>"], frames=200, attempts=4)
+            self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            self.mcp.call("load", {"file": str(blank720), "drive": "B"})
 
-            self.log("FORMAT A: 720K DS/80 track")
-            self.format_disc(blank720, "2", "Done - 160 tracks", "Side 1")
-            self.expect("720K format",
-                        "Every track formatted and verified",
-                        "Done - 160 tracks, 9 sectors")
-            self.check_sector(0, 0, 1, "03 01 50 09 02 01 04 02")
-            self.check_e5(79, 1, 9)
-            self.check_e5(40, 1, 4)
+            self.log("FORMAT B: 720K DS/80 track")
+            self.format_disc("B", None, "2", "Done - 720K DS/80 track",
+                             "Side 1")
+            self.expect("720K format", "Done - 720K DS/80 track.",
+                        "160 tracks, 9 sectors.",
+                        "Every track formatted and verified.")
+            self.check_sector(0, 0, 1, "03 01 50 09 02 01 04 02", drive=1)
+            self.check_e5(79, 1, 9, drive=1)
+            self.check_e5(40, 1, 4, drive=1)
+
+            self.log("FORMAT B: CPC System 40 track")
+            self.format_disc("B", None, "3", "Done - CPC System 40 track",
+                             "Side 0")
+            self.expect("CPC System format", "Done - CPC System 40 track.",
+                        "40 tracks, 9 sectors.")
+            self.check_sector(0, 0, 0x41, "01 00 28 09 02 02 03 02",
+                              drive=1)
+            self.check_e5(39, 0, 0x49, drive=1)
+            self.command("DIR B:", 1500)
+            self.expect("CPC System DIR", "No files")
+            self.command("SHOWXDPB", 1500)
+            self.expect("CPC System XDPB", "First=41h", "OFF=2",
+                        "DSM=170")
+
+            self.log("FORMAT B: CPC Data 40 track")
+            self.format_disc("B", None, "4", "Done - CPC Data 40 track",
+                             "Side 0")
+            self.expect("CPC Data format", "Done - CPC Data 40 track.",
+                        "40 tracks, 9 sectors.")
+            # A data layout has no boot sector: track 0 is the directory.
+            self.check_e5(0, 0, 0xC1, drive=1)
+            self.check_e5(39, 0, 0xC9, drive=1)
+            self.command("DIR B:", 1500)
+            self.expect("CPC Data DIR", "No files")
+            self.command("SHOWXDPB", 1500)
+            self.expect("CPC Data XDPB", "First=C1h", "OFF=0",
+                        "DSM=179")
+
+            # A drive with no disc must fail cleanly, not hang.
+            self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            self.command("FORMAT B:", 400)
+            self.wait_for(["Take the disc out of drive B:"], frames=50,
+                          attempts=4)
+            self.key("enter", 200)
+            self.wait_for(["Put the disc to be formatted in drive B:"],
+                          frames=50, attempts=4)
+            self.key("enter", 200)
+            self.wait_for(["Format type"], frames=300, attempts=4)
+            self.mcp.call("type", {"text": "1"})
+            self.mcp.call("run", {"frames": 200})
+            self.wait_for(["FAILED"], frames=400, attempts=15)
+            self.expect("FORMAT without a disc", "error (", "A>")
         finally:
             self.dsk = old_dsk
+            try:
+                self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            except SmokeError:
+                pass
             for path in (scratch, blank180, blank720):
                 try:
                     path.unlink()
                 except OSError:
                     pass
 
-    def format_disc(self, target: Path, choice: str, done_needle: str,
-                    side_needle: str) -> None:
-        """Drive FORMAT.COM's prompts and hand it `target` at the swap.
+    def format_disc(self, letter: str, target: Path | None, choice: str,
+                    done_needle: str, side_needle: str) -> None:
+        """Drive FORMAT.COM's prompts; swap `target` in for drive A:.
 
         Waits for this run's own summary line: the screen still holds the
         previous run's progress, so a generic "verified" match would return
-        before the second disc is done.
+        before the disc is done.
         """
-        self.command("FORMAT A:", 400)
-        self.wait_for(["FORMAT A: - ALL DATA"], frames=400, attempts=4)
-        self.wait_for(["Take the disc out"], frames=50, attempts=4)
-        self.key("enter", 200)
-        self.mcp.call("eject", {"target": "disk", "drive": "A"})
-        self.mcp.call("load", {"file": str(target), "drive": "A"})
-        self.wait_for(["Put the disc"], frames=50, attempts=4)
-        self.key("enter", 200)
-        self.wait_for(["Format type", "180K", "720K"], frames=300,
+        self.command(f"FORMAT {letter}:", 400)
+        self.wait_for([f"FORMAT {letter}: - ALL DATA"], frames=400,
                       attempts=4)
+        self.wait_for([f"Take the disc out of drive {letter}:"], frames=50,
+                      attempts=4)
+        self.key("enter", 200)
+        if target is not None:
+            self.mcp.call("eject", {"target": "disk", "drive": letter})
+            self.mcp.call("load", {"file": str(target), "drive": letter})
+        self.wait_for([f"Put the disc to be formatted in drive {letter}:"],
+                      frames=50, attempts=4)
+        self.key("enter", 200)
+        self.wait_for(["Format type", "180K", "720K", "CPC System"],
+                      frames=300, attempts=4)
         self.mcp.call("type", {"text": choice})
         self.mcp.call("run", {"frames": 200})
 
@@ -752,17 +809,19 @@ class Smoke:
         raise SmokeError("FORMAT did not finish:\n" + self.text())
 
     def check_sector(self, track: int, side: int, sector: int,
-                     needle: str) -> None:
+                     needle: str, drive: int = 0) -> None:
         dump = self.mcp.call("sector_read", {
-            "track": track, "sector": sector, "side": side, "drive": 0,
+            "track": track, "sector": sector, "side": side, "drive": drive,
             "length": 16})
         if needle.replace(" ", "") not in dump.replace(" ", ""):
             raise SmokeError(
                 f"track {track} side {side} sector {sector} does not "
-                f"start {needle}:\\n{dump}")
+                f"start {needle}:\n{dump}")
 
-    def check_e5(self, track: int, side: int, sector: int) -> None:
-        self.check_sector(track, side, sector, "E5 E5 E5 E5 E5 E5 E5 E5")
+    def check_e5(self, track: int, side: int, sector: int,
+                 drive: int = 0) -> None:
+        self.check_sector(track, side, sector,
+                          "E5 E5 E5 E5 E5 E5 E5 E5", drive)
 
     def run_bbcbasic(self) -> None:
         """BBC BASIC must start from the distribution image when it is on it.

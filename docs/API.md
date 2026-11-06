@@ -192,6 +192,9 @@ Programs should close any open files before exiting (BDOS F16).
 
 #### F13 — Reset Disk System
 - **Effect**: Resets to drive A, clears login/RO vectors, sets DMA=0080h.
+- **Note**: Also forgets the detected format of A: and B:, so the next
+  login probes the disc again (the media may have been swapped, and a
+  formatted disc may have a different geometry).
 
 #### F14 — Select Disk
 - **In**: E=drive (0=A, 1=B, ...)
@@ -221,7 +224,8 @@ Programs should close any open files before exiting (BDOS F16).
 
 #### F37 — Reset Drive
 - **In**: DE=16-bit drive bitmap
-- **Effect**: Clears login for specified drives.
+- **Effect**: Clears login for the specified drives and makes the next
+  login probe their format again.
 
 #### F48 — Flush Buffers
 - **Out**: A=0
@@ -888,8 +892,9 @@ Implemented TE entries: `TE_ASK` (`0x00BF`), `TE_RESET` (`0x00C2`),
 (`0x009E`), `DD_L_XDPB` (`0x00A1`), `DD_L_READ` (`0x00AD`), `DD_L_WRITE`
 (`0x00B0`), `DD_L_ON_MOTOR`
 (`0x00A4`), `DD_L_T_OFF_MOTOR` (`0x00A7`), `DD_OFF_MOTOR` (`0x00AA`) and
-`DD_L_SEEK` (`0x00B3`).  The sector/format calls currently accept only
-CP/M bank 1 (the TPA).  See [XBIOS/TE Interface](cpm-plus-xbios.md) for
+`DD_L_SEEK` (`0x00B3`).  The sector/format calls accept only CP/M bank 1
+(the TPA) and FDC units 0 and 1 (A: and B:; whether a second drive is
+fitted is up to the hardware).  See [XBIOS/TE Interface](cpm-plus-xbios.md) for
 the register contracts, colour encoding and the `SCR_RUN_ROUTINE`
 common-memory limitation.  `KM_SET_SPEED` (`0x00E0`) sets the keyboard
 repeat delays, `KM_SET_KEY` (`0x00D7`) rewrites key translations,

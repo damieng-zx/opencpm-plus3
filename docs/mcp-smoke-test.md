@@ -39,17 +39,23 @@ defaults `motor_off_ticks=250`, `fdc_spec1=4Fh`, `fdc_spec2=05h`.  It then boots
 byte, runs `XTETEST` again, requires `10.FMT..OK` and checks the formatted
 track with `sector_read`.
 
-It then runs the `FORMAT` utility twice: a 180K SS/40-track disc on a
-scratch copy of the test image, and a 720K DS/80-track disc on a copy of
-`build/cpm3_720.dsk`.  `FORMAT` is started from the system disc and the
-target image is hot-swapped in at the "put the disc in" prompt, so the two
-disc-change prompts and the geometry menu are exercised as well.  The checks
+It then runs the `FORMAT` utility four times.  A 180K SS/40-track disc on
+A: is formatted from a scratch copy of the test image with the target
+hot-swapped in at the "put the disc in" prompt, which exercises both
+disc-change prompts; `FORMAT`, `FORMAT C:` and ESC-cancel are checked first.
+A 720K DS/80-track image and the two CPC layouts are then formatted on B:,
+using a scratch copy of `build/cpm3_720.dsk` mounted there.  The checks
 require the `percentage / Track / Side / FORMAT|VERIFY` progress line, the
-`Done - 40 tracks, 9 sectors` / `Done - 160 tracks, 9 sectors` summary, the
-`E5` filler on the last track and the AMSDOS disc spec (`00 00 28 09 ...`
-for 180K, `03 00 ... 02` for 720K) in the boot sector.  The emulator keeps
-disc writes in memory rather than writing the `.dsk` back, so the sectors
-are read back through the FDC with `sector_read`.
+layout-named summary (`Done - 180K SS/40 track.` / `... 720K DS/80 track.` /
+`... CPC System 40 track.` / `... CPC Data 40 track.`), the `E5` filler on
+the last track and the AMSDOS disc spec in the boot sector (`00 00 28 09 ...`
+for 180K, `03 01 50 09 ...` for 720K, `01 00 28 09 02 02 ...` for CPC
+System; CPC Data reserves no track, so its first sector stays filler and the
+`C1h`-`C9h` sector IDs identify it).  `SHOWXDPB` must report `First=41h`
+(CPC System) and `First=C1h` (CPC Data) for B:, which proves the login
+re-probed the freshly formatted disc.  The emulator keeps disc writes in
+memory rather than writing the `.dsk` back, so the sectors are read back
+through the FDC with `sector_read`.
 
 ```text
 python3 tools/zx84_smoke.py
@@ -322,9 +328,10 @@ that ignored the stored timings would fail the second half.  It leaves 0/0
 in place so the test-27 read-back still sees 256.
 
 Test 32 checks the two remaining `DD_FORMAT` guards: an XDPB below `C000h`
-(bank 1 still) and an unfitted unit 1.  Both return before any FDC access,
-so the boot disk is untouched: A=9 with carry clear for the low XDPB, A=0
-for the unit.  Bank 0 is already covered by test 9.
+(bank 1 still) and an unfitted unit.  Both return before any FDC access, so
+the boot disk is untouched: A=9 with carry clear for the low XDPB, A=0 for
+unit 2 (units 0 and 1 are the two FDC drives the disc calls address).  Bank
+0 is already covered by test 9.
 
 Test 17 calls `KM_KT_PUT` twice (shift 08h/key 2Bh, then 00h/1Fh) and
 verifies BC survives.  Test 18 then drains both with `KM_KT_GET`, checks

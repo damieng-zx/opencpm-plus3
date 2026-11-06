@@ -900,6 +900,24 @@ bf_f12:
 ; Disk management (F13-F14, F24-F27, F31-F32, F37)
 ; ==========================================================================
 
+; logout_floppies — forget the detected format of the selected drives
+;   In:       DE = drive vector (bit 0 = A:, bit 1 = B:)
+;   Out:      the matching XDPB freeze bytes cleared
+;   Clobbers: AF
+logout_floppies:
+    ld a, e
+    and 1
+    jr z, .no_a
+    xor a
+    ld (xdpb_a + XDPB_FREEZE), a
+.no_a:
+    ld a, e
+    and 2
+    ret z
+    xor a
+    ld (xdpb_b + XDPB_FREEZE), a
+    ret
+
 ; F13: Reset disk system
 ; F13: Reset Disk System
 ;   Resets cur_disk, login_vec, ro_vec, bdos_dma per CP/M spec.
@@ -914,6 +932,11 @@ bf_f12:
 bf_f13:
     pop de
     pop bc
+    ; The media may have changed while the drives were logged out, so let
+    ; the next login probe the disc again instead of trusting the cached
+    ; XDPB.
+    ld de, 0xFFFF
+    call logout_floppies
     xor a
     ld (cur_disk), a
     ld hl, 0
@@ -1281,6 +1304,9 @@ bf_f32:
 bf_f37:
     pop de
     pop bc
+    ; These drives are about to be logged out; force a fresh format probe
+    ; when they are logged in again.
+    call logout_floppies
     ; Clear login bits for specified drives
     ld hl, (login_vec)
     ld a, e

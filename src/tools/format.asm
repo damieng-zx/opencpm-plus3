@@ -1,16 +1,19 @@
 ; FORMAT.COM - format a 3-inch disc
 ;
-; Usage:  FORMAT A:
+; Usage:  FORMAT A:      or      FORMAT B:
 ;
-; The drive letter is mandatory.  Only A: can be formatted: the XBIOS disc
-; calls (DD_INIT, DD_FORMAT, DD_WRITE, DD_CHECK_SECTOR) handle unit 0 only
-; in this BIOS, so the command refuses anything else rather than pretend.
+; The drive letter is mandatory.  A: and B: are the units the XBIOS disc
+; calls (DD_INIT, DD_FORMAT, DD_WRITE, DD_CHECK_SECTOR) address; whether a
+; second drive is actually fitted is for the FDC to say, so a FORMAT B: on
+; a single-drive machine fails with "not ready".
 ;
 ; The user is asked to take the disc out of the drive, put the one to be
-; formatted in, and choose a geometry:
+; formatted in, and choose a layout:
 ;
-;   1   180K  SS 40 track (PCW)     disc type 0
-;   2   720K  DS 80 track (PCW)     disc type 3
+;   1   180K  SS 40 track (PCW)     disc type 0, first sector 1
+;   2   720K  DS 80 track (PCW)     disc type 3, first sector 1
+;   3   CPC System  40 track        disc type 1, first sector 41h
+;   4   CPC Data    40 track        disc type 2, first sector C1h
 ;
 ; Every track is formatted and then verified sector by sector before the
 ; next track is touched.  A single progress line is rewritten in place:
@@ -19,7 +22,10 @@
 ;    45%  Track 18  Side 0  VERIFY
 ;
 ; A successful format finishes by writing the 10-byte AMSDOS disc spec into
-; the boot sector, so the BIOS login detects the geometry just selected.
+; the boot sector of the layouts that reserve a track for it (PCW SS, PCW DS
+; and CPC System), so the BIOS login detects the geometry just selected.  A
+; CPC Data disc has no reserved track - its first sector is directory - so
+; there the sector IDs alone identify the layout.
 ;
 ; Build: sjasmplus --raw=build/format.com src/tools/format.asm
 
@@ -46,6 +52,7 @@ SECTOR_SIZE    equ 512
 FILL_BYTE      equ 0xE5         ; uPD765 FORMAT TRACK filler
 
 ; XDPB field offsets
+XDPB_OFF       equ 13
 XDPB_PSH       equ 15
 XDPB_SIDES     equ 17
 XDPB_TRACKS    equ 18
@@ -101,22 +108,36 @@ start:
     call tail_end_ok
     jp nz, usage
 
-    ; Only the first drive is formattable at the moment.
+    ; Only the two FDC units are formattable.
     ld a, (drive_letter)
-    cp 'A'
-    jp nz, not_supported
+    sub 'A'
+    cp 2
+    jp nc, not_supported
+    ld (drive_unit), a
 
     ; ---- Warning and the disc change ----
-    ld de, msg_warning
+    ld de, msg_fmt_prefix
+    call pstr
+    ld a, (drive_letter)
+    call cout
+    ld de, msg_warning_tail
     call pstr
 
     ld de, msg_remove
+    call pstr
+    ld a, (drive_letter)
+    call cout
+    ld de, msg_remove_tail
     call pstr
     call wait_key
     cp 0x1B
     jp z, cancelled
 
     ld de, msg_insert
+    call pstr
+    ld a, (drive_letter)
+    call cout
+    ld de, msg_insert_tail
     call pstr
     call wait_key
     cp 0x1B
@@ -138,6 +159,10 @@ menu_key:
     jr z, choose_180
     cp '2'
     jr z, choose_720
+    cp '3'
+    jr z, choose_cpc_sys
+    cp '4'
+    jr z, choose_cpc_data
     ld de, msg_bad_choice
     call pstr
     jr menu_key
@@ -146,12 +171,27 @@ choose_180:
     ld a, '1'
     call echo_choice
     ld hl, spec_180
+    ld de, name_180
     jr have_type
 choose_720:
     ld a, '2'
     call echo_choice
     ld hl, spec_720
+    ld de, name_720
+    jr have_type
+choose_cpc_sys:
+    ld a, '3'
+    call echo_choice
+    ld hl, spec_cpc_sys
+    ld de, name_cpc_sys
+    jr have_type
+choose_cpc_data:
+    ld a, '4'
+    call echo_choice
+    ld hl, spec_cpc_data
+    ld de, name_cpc_data
 have_type:
+    ld (layout_ptr), de
     ld de, SPEC
     ld bc, 10
     ldir
@@ -210,7 +250,9 @@ track_loop:
     ld a, (cur_track)
     ld d, a
     ld e, FILL_BYTE
-    ld bc, 0x0100
+    ld b, 1                      ; CP/M bank 1 (TPA)
+    ld a, (drive_unit)
+    ld c, a
     ld hl, HDR
     ld ix, XDPB
     call userf_call
@@ -245,6 +287,10 @@ track_loop:
 
     call crlf
     ld de, msg_done
+    call pstr
+    ld de, (layout_ptr)
+    call pstr
+    ld de, msg_done_end
     call pstr
     ld a, (total_tracks)
     call print_dec
@@ -291,11 +337,13 @@ fail_label:
     jr fail_common
 
 fail_common:
-    ; "error NN" -- hex is easier to read in a bug report than a name.
+    ; "(NN)" -- hex is easier to read in a bug report than a name.
     ld de, msg_error_code
     call pstr
     ld a, (last_error)
     call print_hex
+    ld a, ')'
+    call cout
 
     ld a, (last_error)
     cp 1
@@ -431,7 +479,9 @@ verify_track:
     ld (userf_dw), hl
     ld a, (cur_track)
     ld d, a
-    ld bc, 0x0100
+    ld b, 1                      ; CP/M bank 1 (TPA)
+    ld a, (drive_unit)
+    ld c, a
     ld hl, BUF
     ld ix, XDPB
     call userf_call
@@ -455,10 +505,18 @@ verify_track:
     ret
 
 ; write_disc_spec - store the AMSDOS disc spec in the boot sector
-;   In:       SPEC (chosen above)
+;   In:       SPEC (chosen above), XDPB (OFF field)
 ;   Out:      carry set OK, or carry clear + A = error
 ;   Clobbers: AF, BC, DE, HL, IX
 write_disc_spec:
+    ; OFF = 0 is a data layout: track 0 is the directory, not a boot
+    ; sector, so leave it as filler and let the sector IDs identify it.
+    ld a, (XDPB + XDPB_OFF)
+    or a
+    jr nz, .write
+    scf
+    ret
+.write:
     call fill_zero
     ; The same 10-byte spec the XDPB was built from: disc type, sidedness,
     ; tracks, sectors, size code, reserved tracks, block size, dir blocks,
@@ -471,7 +529,9 @@ write_disc_spec:
     ld hl, DD_WRITE
     ld (userf_dw), hl
     ld de, 0
-    ld bc, 0x0100
+    ld b, 1                      ; CP/M bank 1 (TPA)
+    ld a, (drive_unit)
+    ld c, a
     ld hl, BUF
     ld ix, XDPB
     call userf_call
@@ -480,7 +540,9 @@ write_disc_spec:
     ld hl, DD_CHECK_SECTOR
     ld (userf_dw), hl
     ld de, 0
-    ld bc, 0x0100
+    ld b, 1                      ; CP/M bank 1 (TPA)
+    ld a, (drive_unit)
+    ld c, a
     ld hl, BUF
     ld ix, XDPB
     call userf_call
@@ -811,8 +873,13 @@ spec_180:
     db 0, 0, 40, 9, 2, 1, 3, 2, 42, 82
 spec_720:
     db 3, 1, 80, 9, 2, 1, 4, 2, 42, 82
+spec_cpc_sys:
+    db 1, 0, 40, 9, 2, 2, 3, 2, 42, 82
+spec_cpc_data:
+    db 2, 0, 40, 9, 2, 0, 3, 2, 42, 82
 
 drive_letter:  db 0
+drive_unit:    db 0
 sides:         db 0
 tracks:        db 0
 total_tracks:  db 0
@@ -828,6 +895,7 @@ num_hund:      db 0
 num_tens:      db 0
 num_units:     db 0
 status_ptr:    dw 0
+layout_ptr:    dw 0
 
 st_format:     db "FORMAT", '$'
 st_verify:     db "VERIFY", '$'
@@ -838,32 +906,48 @@ msg_track:     db "  Track ", '$'
 msg_side:      db "  Side ", '$'
 msg_gap:       db "  ", '$'
 
-msg_warning:
-    db 0x0D, 0x0A
-    db "FORMAT A: - ALL DATA ON THE DISC WILL BE LOST.", 0x0D, 0x0A, 0x0A, '$'
+msg_fmt_prefix:
+    db 0x0D, 0x0A, "FORMAT ", '$'
+msg_warning_tail:
+    db ": - ALL DATA ON THE DISC WILL BE LOST.", 0x0D, 0x0A, 0x0A, '$'
 msg_remove:
-    db "Take the disc out of drive A:, then press any key.", 0x0D, 0x0A
-    db "(ESC cancels)", 0x0D, 0x0A, '$'
+    db "Take the disc out of drive ", '$'
+msg_remove_tail:
+    db ": and press any key.", 0x0D, 0x0A, "(ESC cancels)", 0x0D, 0x0A, '$'
 msg_insert:
-    db 0x0A, "Put the disc to be formatted in drive A:,", 0x0D, 0x0A
-    db "then press any key.", '$'
+    db 0x0A, "Put the disc to be formatted in drive ", '$'
+msg_insert_tail:
+    db ":", 0x0D, 0x0A, "then press any key.", '$'
 msg_menu:
     db 0x0D, 0x0A, 0x0A
     db "Format type:", 0x0D, 0x0A
     db "  1   180K  SS 40 track (PCW)", 0x0D, 0x0A
     db "  2   720K  DS 80 track (PCW)", 0x0D, 0x0A
-    db 0x0A, "Choice (1-2, ESC cancels): ", '$'
+    db "  3   CPC System  40 track", 0x0D, 0x0A
+    db "  4   CPC Data    40 track", 0x0D, 0x0A
+    db 0x0A, "Choice (1-4, ESC cancels): ", '$'
 msg_bad_choice:
-    db 0x0D, 0x0A, "1 or 2: ", '$'
+    db 0x0D, 0x0A, "1-4: ", '$'
 
 msg_done:
     db 0x0A, "Done - ", '$'
+msg_done_end:
+    db ".", 0x0D, 0x0A, '$'
 msg_tracks:
     db " tracks, ", '$'
 msg_sectors:
     db " sectors.", 0x0D, 0x0A, '$'
 msg_verified:
     db "Every track formatted and verified.", 0x0D, 0x0A, '$'
+
+name_180:
+    db "180K SS/40 track", '$'
+name_720:
+    db "720K DS/80 track", '$'
+name_cpc_sys:
+    db "CPC System 40 track", '$'
+name_cpc_data:
+    db "CPC Data 40 track", '$'
 
 msg_cancelled:
     db "Cancelled.", 0x0D, 0x0A, '$'
@@ -878,15 +962,16 @@ msg_ver_error:   db "verify error ", '$'
 msg_label_error: db "Error writing the disc spec: ", '$'
 msg_error_code:  db "(", '$'
 msg_write_protect:
-    db ") - the disc is write-protected.", 0x0D, 0x0A, '$'
+    db " - the disc is write-protected.", 0x0D, 0x0A, '$'
 msg_mismatch:
-    db ") - the data does not match the format pattern.", 0x0D, 0x0A, '$'
+    db " - the data does not match the format pattern.", 0x0D, 0x0A, '$'
 
 msg_usage:
     db "FORMAT A:", 0x0D, 0x0A
-    db "  Format the disc in drive A:.", 0x0D, 0x0A, '$'
+    db "FORMAT B:", 0x0D, 0x0A
+    db "  Format the disc in the given drive.", 0x0D, 0x0A, '$'
 msg_notsup1:
     db "FORMAT: drive ", '$'
 msg_notsup2:
     db ": cannot be formatted.", 0x0D, 0x0A
-    db "Only drive A: is supported.", 0x0D, 0x0A, '$'
+    db "Only drives A: and B: are supported.", 0x0D, 0x0A, '$'

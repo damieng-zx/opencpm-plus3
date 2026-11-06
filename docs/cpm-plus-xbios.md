@@ -43,14 +43,14 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 |----|------|-------|--------|
 | `0x80` | `DD_INIT` | - | Reset the disc driver to defaults and turn the motor off. |
 | `0x83` | `DD_SETUP` | HL = 7-byte parameter block in common memory | Applies the motor-off timeout (100 ms units, 0 = never) and sends the uPD765A SPECIFY command with the step/head timings.  The motor-on timeout and write-current-off time are stored in the block but not otherwise used. |
-| `0x86` | `DD_READ_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = destination, IX = XDPB | Reads one 512-byte sector.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted. |
-| `0x89` | `DD_WRITE` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = source, IX = XDPB | Writes one 512-byte sector.  Carry set OK; carry clear + A = error (1 = write protected).  Only bank 1 (TPA) is accepted. |
-| `0x8C` | `DD_CHECK_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = compare buffer, IX = XDPB | Reads the sector and compares it with the buffer.  Carry set + Z set if equal, carry set + Z clear if different, carry clear + A = error. |
-| `0x8F` | `DD_FORMAT` | B = CP/M bank, C = unit, D = logical track, E = filler, HL = header table (track, head, sector, size), IX = XDPB | Formats one track with the uPD765A FORMAT TRACK command.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted. |
-| `0x92` | `DD_LOGIN` | C = unit, IX = destination XDPB in common memory | Re-detects the format, copies the XDPB, and returns carry set + A = disc type, DE = ALV size, HL = hash-table size; carry clear + A = error. |
+| `0x86` | `DD_READ_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = destination, IX = XDPB | Reads one 512-byte sector.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted, and C must be 0 or 1 (A: or B:). |
+| `0x89` | `DD_WRITE` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = source, IX = XDPB | Writes one 512-byte sector.  Carry set OK; carry clear + A = error (1 = write protected).  Only bank 1 (TPA) is accepted, and C must be 0 or 1 (A: or B:). |
+| `0x8C` | `DD_CHECK_SECTOR` | B = CP/M bank, C = unit, D = logical track, E = logical sector, HL = compare buffer, IX = XDPB | Reads the sector and compares it with the buffer.  Carry set + Z set if equal, carry set + Z clear if different, carry clear + A = error.  Bank 1 only; C = 0 or 1. |
+| `0x8F` | `DD_FORMAT` | B = CP/M bank, C = unit, D = logical track, E = filler, HL = header table (track, head, sector, size), IX = XDPB | Formats one track with the uPD765A FORMAT TRACK command.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted, and C must be 0 or 1 (A: or B:). |
+| `0x92` | `DD_LOGIN` | C = unit, IX = destination XDPB in common memory | Re-detects the format of unit C (0 or 1), copies that drive's XDPB, and returns carry set + A = disc type, DE = ALV size, HL = hash-table size; carry clear + A = error. |
 | `0x95` | `DD_SEL_FORMAT` | A = format 0-3, IX = destination XDPB in common memory | Carry set + A = format, or carry clear + A = 6 (bad format).  Loads one of the four standard XDPB templates. |
 | `0x98` | `DD_DRIVE_STATUS` | C = unit (bits 1-0), head (bit 2) | A = ST3.  Unit 0 returns `0x30` (Ready + Track 0 + unit 0), with ST3 bit 2 mirroring the requested head (`0x34` for head 1); other units return `0x01` (not fitted). |
-| `0x9B` | `DD_READ_ID` | C = unit, D = logical track, IX = XDPB | Carry set + A = sector number, or carry clear + A = error (0 not ready, 2 seek, 3 data, 5 missing address mark); HL = `dd_results` (count + ST0 ST1 ST2 C H R N). |
+| `0x9B` | `DD_READ_ID` | C = unit, D = logical track, IX = XDPB | C = unit (0 or 1).  Carry set + A = sector number, or carry clear + A = error (0 not ready, 2 seek, 3 data, 5 missing address mark); HL = `dd_results` (count + ST0 ST1 ST2 C H R N). |
 | `0x9E` | `DD_L_DPB` | HL = 10-byte disc spec in common memory, IX = destination 17-byte DPB | Builds a standard DPB from the spec.  Carry set + A = disc type, or carry clear + A = 6 (bad format). |
 | `0xA1` | `DD_L_XDPB` | HL = 10-byte disc spec in common memory, IX = destination 27-byte XDPB | Builds a standard XDPB (DPB plus Amstrad geometry extension) from the spec.  Carry set + A = disc type, or carry clear + A = 6 (bad format). |
 | `0xA4` | `DD_L_ON_MOTOR` | - | Turn the motor on and wait for spin-up.  All registers and flags preserved. |
@@ -89,8 +89,18 @@ the disc calls above are implemented: phase 1 (`DD_INIT`, `DD_SETUP`,
 Still unimplemented: the serial calls (`CD_SA_*`) and `FIND_FID`.  Unknown
 IDs return `A = 0xFF`.
 
-`DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` currently
-accept only CP/M bank 1 (the TPA); other bank numbers return `A = 9`.
+`DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR` and `DD_FORMAT` accept
+only CP/M bank 1 (the TPA); other bank numbers return `A = 9`.  The
+disc calls address FDC units 0 and 1 (A: and B:); units 2 and 3 return
+`A = 0` (not ready).  Whether a B: drive is really there is up to the
+hardware, so an attempt to use it on a single-drive machine fails with
+the FDC's not-ready status.
+
+The login probe reads the sector ID without assuming which sector the
+head lands on: `01h`-`09h` means a +3/PCW disc (the boot sector's type
+byte then picks SS or DS/DD), `41h`-`49h` is CPC System and `C1h`-`C9h`
+is CPC Data.  A disc reset (BDOS fn 13 or 37) clears the XDPB freeze
+byte so the next login probes the media again.
 `DD_FORMAT` uses the XDPB's physical sector count, `PSH` size code and
 format gap, and is destructive by definition.  `DD_LOGIN`'s probe falls
 back to the standard type-0 template if the READ ID/boot-sector read

@@ -326,13 +326,13 @@ fdc_leave_critical:
 ; Algorithm:
 ;   1. If drive's XDPB Freeze byte == 0xFF, skip detection and keep the
 ;      currently-cached XDPB (covers re-login after a successful detect).
-;   2. Seek to track 0; issue READ ID to find the first sector on the disc.
-;      The sector ID distinguishes format groups:
-;        0x01        → type 0 (+3/PCW SS) or type 3 (PCW DS/DD)
-;        0x41 (65)   → type 1 (CPC System)
-;        0xC1 (193)  → type 2 (CPC Data)
-;   3. For sector-ID 0x01, read the boot sector (track 0, sector 1) and
-;      look at byte 0 — the AMSDOS disc-type byte (0-3).  That disambiguates
+;   2. Seek to track 0 and issue READ ID.  Which sector the head lands on is
+;      arbitrary, so the ID's group picks the format:
+;        01h-09h     -> type 0 (+3/PCW SS) or type 3 (PCW DS/DD)
+;        41h-49h     -> type 1 (CPC System)
+;        C1h-C9h     -> type 2 (CPC Data)
+;   3. For the 1-9 group, read the boot sector (track 0, sector 1) and look
+;      at byte 0 - the AMSDOS disc-type byte (0-3).  That disambiguates
 ;      +3/PCW SS (0) from PCW DS/DD (3).  Values outside 0-3 fall back to 0.
 ;   4. Copy the matching 27-byte entry from xdpb_std_table into the drive
 ;      XDPB (xdpb_a or xdpb_b).  Freeze ends up 0xFF, so the next call
@@ -398,13 +398,19 @@ fdc_login_body:
     call fdc_read_byte              ; N
 
     ; ---- Step 2: map sector ID → format type ----
+    ; READ ID returns whichever sector the head happens to be over, so
+    ; accept any ID in the group's range, not just the first sector.
     ld b, 0                         ; Tentative type 0
     ld a, d
     cp 0x41
-    jr z, .type1
+    jr c, .read_bootsect            ; 00-40: 1-9 means +3/PCW SS or DS
+    cp 0x4A
+    jr c, .type1                    ; 41-49: CPC System
     cp 0xC1
-    jr z, .type2
-    jr .read_bootsect               ; 0x01 (or unknown) — try the boot sector
+    jr c, .read_bootsect            ; 4A-C0: not a known group
+    cp 0xCA
+    jr c, .type2                    ; C1-C9: CPC Data
+    jr .read_bootsect
 
 .type1:
     ld b, 1

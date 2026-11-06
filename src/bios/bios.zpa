@@ -1031,14 +1031,14 @@ xbios_handler:
     ld (dd_results), a
     ld a, c
     and 0x03
-    jp nz, .dri_not_ready
+    cp 2
+    jp nc, .dri_not_ready         ; units 0 and 1 only
+    ld (disk_drive), a
     ld ix, (xbios_ret_ix)
     ld a, ixh
     cp 0xC0
     jp c, .dri_not_ready          ; XDPB must be in common memory
     call motor_on
-    xor a
-    ld (disk_drive), a
     ld a, (ix + XDPB_SIDES)
     cp 1
     jr z, .dri_alt_ds
@@ -1452,8 +1452,8 @@ xbios_handler:
     ;        B corrupt; all other registers preserved
     ld a, c
     and 0x03
-    jr nz, .dls_not_ready
-    xor a
+    cp 2
+    jr nc, .dls_not_ready         ; units 0 and 1 only
     ld (disk_drive), a
     ld a, c
     and 0x04
@@ -1879,20 +1879,25 @@ xbios_handler:
     ;        carry clear + A = error
     ld a, c
     and 0x03
-    jp nz, .dd2_not_ready
+    cp 2
+    jp nc, .dd2_not_ready         ; units 0 and 1 only
+    ld (disk_drive), a
     ld ix, (xbios_ret_ix)
     ld a, ixh
     cp 0xC0
     jp c, .dd2_bad_bank
-    xor a
-    ld (disk_drive), a
     ld a, 1
     ld (fdc_login_force), a
     call fdc_login
 
-    ; Copy the detected XDPB to the caller's buffer.
+    ; Copy the detected XDPB of the unit we just logged in.
     ld ix, (xbios_ret_ix)
+    ld a, (disk_drive)
+    or a
     ld hl, xdpb_a
+    jr z, .ddl_copy
+    ld hl, xdpb_b
+.ddl_copy:
     push ix
     pop de
     ld bc, 27
@@ -2001,7 +2006,9 @@ xbios_handler:
     jp nz, .dd2_bad_bank
     ld a, c
     and 0x03
-    jp nz, .dd2_not_ready
+    cp 2
+    jp nc, .dd2_not_ready         ; units 0 and 1 only
+    ld (disk_drive), a
     ld ix, (xbios_ret_ix)
     ld a, ixh
     cp 0xC0
@@ -2042,8 +2049,6 @@ xbios_handler:
     ld d, a
     call .dd_map_track
     ld (dd_cylinder), a
-    xor a
-    ld (disk_drive), a
     call motor_on
     ld a, (dd_cylinder)
     call fdc_seek
@@ -2074,7 +2079,9 @@ xbios_handler:
     jr nz, .ddp_bad_bank
     ld a, c
     and 0x03
-    jr nz, .ddp_not_ready
+    cp 2
+    jr nc, .ddp_not_ready         ; units 0 and 1 only
+    ld (disk_drive), a
     ld a, d
     ld (dd_track), a
     ld a, e
@@ -2101,8 +2108,6 @@ xbios_handler:
     call .dd_map_track
     ld (dd_cylinder), a
 
-    xor a
-    ld (disk_drive), a
     call motor_on
     ld a, (dd_cylinder)
     call fdc_seek

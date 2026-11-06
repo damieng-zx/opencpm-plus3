@@ -2121,8 +2121,9 @@ start:
     cp 9
     jp nz, .t32_fail
 
-    ; Unit 1 is not fitted -> A = 0.
-    ld bc, 0x0101
+    ; Unit 2 is not fitted -> A = 0.  (Units 0 and 1 are addressed; the
+    ; FDC reports whether a drive is actually there.)
+    ld bc, 0x0102
     ld ix, 0xD220
     call userf_trampoline
     jp c, .t32_fail
