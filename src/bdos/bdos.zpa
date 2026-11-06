@@ -188,7 +188,8 @@ bdos_entry:
     cp 99
     jr c, .mid
     cp 124
-    jp nc, bdos_eok             ; 124+: unsupported
+    jp z, bf_f124              ; private CCP helper: submit-file input
+    jp nc, bdos_eok            ; 125+: unsupported
     sub 99
     add a, a
     ld e, a
@@ -529,6 +530,9 @@ bdos_con_out:
     ld a, c
     cp 0x0A
     jp nz, con_out             ; only LFs drive the page counter
+    ld a, (subin_active)
+    or a
+    jp nz, con_out             ; a program is being fed: never page-pause
     ld a, (con_mode)
     and CON_MODE_PAGE
     jp z, .tick                ; paging disabled → just count and emit
@@ -3882,6 +3886,73 @@ bf_f59:
 ; @end
 bf_f98:
     jp bdos_eok
+
+
+; F124: submit-file program input (private CCP helper, not a CP/M 3 call)
+;
+;   CP/M Plus feeds a program with the '<' lines that follow its command in a
+;   submit file.  The CCP reads those records, strips the marker and calls
+;   this to queue them; con_in/con_status in the BIOS serve the characters
+;   while the program runs, then fall back to the keyboard.
+;
+;   In:  DE = text in the TPA, B = length
+;        DE = 0 clears the queue
+;   Out: A = 0, or 0xFF if the buffer is full
+; @proc bf_f124
+; @param %text:u16  de
+; @param %len:u8    b
+; @param %func:u8   c
+; @out   a
+; @clobbers af,bc,de,hl
+; @end
+bf_f124:
+    pop de
+    pop bc
+    ld a, d
+    or e
+    jr nz, .append
+    call subin_reset
+    jp bdos_eok
+.append:
+    ; A bare '<' line is an empty input line: append just the CR, since that
+    ; is how a program (PIP, for one) sees the end of its input.
+    ld a, b
+    inc a                       ; room for the text plus its CR
+    ld c, a
+    ld b, 0
+    push de                     ; [1] TPA source
+    ld hl, (subin_end)
+    push hl                     ; [2] destination (old end)
+    add hl, bc                  ; new end
+    push hl                     ; [3] new end
+    ld de, SUBIN_BUF + SUBIN_SIZE
+    ld a, h
+    cp d
+    jr c, .fits
+    jr nz, .full
+    ld a, l
+    cp e
+    jr c, .fits
+    jr nz, .full
+.fits:                          ; new end <= limit (equal is exactly full)
+    pop hl
+    ld (subin_end), hl
+    dec hl
+    ld (hl), 0x0D               ; the CR that ends the line
+    pop de                      ; destination
+    pop hl                      ; source
+    dec bc                      ; text only
+    call copy_from_user
+    ld a, 1
+    ld (subin_active), a
+    xor a
+    jp bdos_ret
+.full:
+    pop hl
+    pop hl
+    pop de
+    ld a, 0xFF
+    jp bdos_ret
 
 
 ; F49: Get/Set System Control Block

@@ -37,6 +37,7 @@ F_BIOS  equ 50                 ; Direct BIOS call (DE→8-byte BIOSPB)
 F_CONMODE equ 109              ; Get/Set console mode word (F109)
 F_GET_ORD  equ 120             ; Get SETDEF order byte (F120)
 F_GET_PATH equ 122             ; Get SETDEF search path (DE = 4-byte buf)
+F_SUBIN equ 124                ; private: queue submit-file program input
 
 CON_MODE_DISPLAY equ 0x02      ; con_mode bit 1: echo SUBmit lines
 
@@ -117,6 +118,10 @@ ccp_start:
     ld (CCP_RC_ADDR + 1), a
 
 .prompt:
+    ; Program input left over from the last program is dropped.
+    ld de, 0
+    ld c, F_SUBIN
+    call BDOS
     call try_sub
     jr c, .read_console
 
@@ -1724,11 +1729,78 @@ try_sub:
     ld (de), a                 ; NUL-terminate for parse_cmd
 .copied:
     ; Mark this record consumed (byte 0 = 0xFF), write back to same record.
+    ; HL is the record index and the collection below needs it, so keep it
+    ; across the BDOS call.
     ld a, 0xFF
     ld (sub_dma), a
+    push hl
     ld de, sub_fcb
     ld c, 34                   ; F34: Write Random
     call BDOS
+    pop hl
+
+    ; CP/M Plus feeds a program with the '<' lines that follow its command.
+    ; Collect them now (the program cannot read the file itself) and queue
+    ; them as console input.  Records are consumed from the highest index
+    ; down, so continue downwards from the command line.
+.collect:
+    ld a, h
+    or l
+    jr z, .collect_done        ; the command was record 0: nothing follows
+    dec hl
+.collect_scan:
+    ; FCB random record = HL
+    ld a, l
+    ld (sub_fcb + 33), a
+    ld a, h
+    ld (sub_fcb + 34), a
+    xor a
+    ld (sub_fcb + 35), a
+    push hl
+    ld de, sub_dma
+    ld c, 26                   ; F26: Set DMA
+    call BDOS
+    ld de, sub_fcb
+    ld c, 33                   ; F33: Read Random
+    call BDOS
+    pop hl
+    or a
+    jr nz, .collect_done       ; read error: leave the rest to the CCP
+
+    ld a, (sub_dma)
+    cp 0xFF
+    jr z, .collect_next        ; already consumed: keep looking downwards
+    or a
+    jr z, .collect_done        ; empty line: not program input
+    cp 127
+    jr nc, .collect_done       ; garbage length
+    ld b, a                    ; B = line length
+    ld a, (sub_dma + 1)
+    cp '<'
+    jr nz, .collect_done       ; the next command: leave it for try_sub
+
+    ; Queue the text after the '<'.  HL is saved because the BDOS and F34
+    ; both clobber it.
+    dec b
+    ld de, sub_dma + 2
+    push hl
+    ld c, F_SUBIN
+    call BDOS
+    pop hl
+    ld a, 0xFF
+    ld (sub_dma), a
+    push hl
+    ld de, sub_fcb
+    ld c, 34                   ; F34: Write Random
+    call BDOS
+    pop hl
+.collect_next:
+    ld a, h
+    or l
+    jr z, .collect_done
+    dec hl
+    jr .collect_scan
+.collect_done:
 
     ld de, sub_fcb
     ld c, 16                   ; F16: Close File

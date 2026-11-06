@@ -333,11 +333,46 @@ warm_boot:
 ; Console I/O
 ; ==========================================================================
 
+; Submit-file program input.
+;
+; CP/M Plus can feed a program from the lines of a submit file: the CCP
+; collects the '<'-prefixed lines that follow a command and appends them
+; here (BDOS F124, a private CCP helper).  While the buffer has data,
+; console input comes from it instead of the keyboard; when it runs out the
+; keyboard takes over again.  This is the XSUB feature of CP/M 2.2 built in.
+;
+; The buffer lives in bank 6 (system mode), the pointers in bank 4: console
+; input always runs in system mode, so both are addressable.
+SUBIN_BUF       equ 0xADA4               ; bank 6, after the FCB shadow
+SUBIN_SIZE      equ 0x200
+
+subin_active:   db 0                     ; 0 = keyboard, 1 = serve the buffer
+subin_pos:      dw 0                     ; next character to hand out
+subin_end:      dw 0                     ; one past the last character
+
+; Empty the buffer and go back to the keyboard.
+; @proc subin_reset
+; @clobbers af,hl
+; @end
+subin_reset:
+    xor a
+    ld (subin_active), a
+    ld hl, SUBIN_BUF
+    ld (subin_pos), hl
+    ld (subin_end), hl
+    ret
+
 ; @proc con_status
 ; @out a                           ; 0xFF = ready, 0x00 = not ready
 ; @clobbers af,bc,de,hl
 ; @end
 con_status:
+    ld a, (subin_active)
+    or a
+    jr z, .keyboard
+    ld a, 0xFF                     ; submit input is always ready
+    ret
+.keyboard:
     jp kbd_status
 
 ; @proc con_in
@@ -345,6 +380,25 @@ con_status:
 ; @clobbers af,bc,de,hl
 ; @end
 con_in:
+    ld a, (subin_active)
+    or a
+    jr z, .keyboard
+    ld hl, (subin_pos)
+    ld de, (subin_end)
+    ld a, h
+    cp d
+    jr nz, .take
+    ld a, l
+    cp e
+    jr nz, .take
+    call subin_reset               ; drained: back to the keyboard
+    jr .keyboard
+.take:
+    ld a, (hl)
+    inc hl
+    ld (subin_pos), hl
+    ret
+.keyboard:
     jp kbd_getchar
 
 ; @proc con_out

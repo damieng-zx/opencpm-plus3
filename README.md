@@ -70,8 +70,9 @@ SETKEYS, TYPE and so on. Those files are copyrighted: they are not part of the
 repository, are never shipped with a release, and a fresh clone builds a
 source-only image with our own tools. Mallard BASIC is not included.
 
-No `PROFILE.SUB` is shipped (Amstrad's needs `<` program input, see the
-wishlist); put your own on the disk and it runs once at cold boot.
+No `PROFILE.SUB` is shipped, so a cold boot leaves `C:` empty and goes
+straight to the prompt.  Put your own on the disk — or the stock Amstrad
+one, which works as it is — and it runs once at cold boot.
 
 ## Features
 
@@ -123,9 +124,11 @@ wishlist); put your own on the disk and it runs once at cold boot.
 - **Cold-start profile**: a `PROFILE.SUB` on the boot drive is submitted
   once, at cold boot, before the first prompt — so `SETDEF`, screen settings
   and start-up commands run automatically, exactly as CP/M 3 does.  A warm
-  boot (a program exiting) does not run it again.  Amstrad's original
-  `PROFILE.SUB` feeds `PIP` through `<`-prefixed lines; that program-input
-  redirection is not implemented, so it is not shipped (see the wishlist).
+  boot (a program exiting) does not run it again.
+- **Submit files that drive programs**: a line beginning with `<` in a
+  submit file is passed to the running program as console input, so a script
+  can feed `PIP` and friends the way Amstrad's own `PROFILE.SUB` does (CP/M
+  2.2 needed `XSUB.COM` for that; CP/M Plus builds it in).
 - **C: RAM disk**: optional 16K `RAMDISK.FID` in bank 7.
 - **Clock**: tick-driven date/time (F104/F105), maintained by an ISR in common
   memory so it keeps running while a TPA program executes.
@@ -251,7 +254,8 @@ Also supported:
 - `SETDEF` — show/set the search order and search path (F120-F123).
 - `SHOWXDPB` — show the extended disk parameter blocks and detected geometry.
 - `SUBMIT` — build the `$$$.SUB` file the CCP drains (supports `$1`..`$9`;
-  nested submits are rejected).
+  nested submits are rejected; a line beginning with `<` is passed to the
+  running program as console input, so a script can drive `PIP`).
 - `FORMAT` — format a disc in A: or B: (`FORMAT A:` / `FORMAT B:`). Asks
   for the disc to be swapped, then for a layout:
 
@@ -320,10 +324,6 @@ Also supported:
 
 ## Wishlist / TODO
 
-- **`<` program input in submit files** — CP/M Plus passes a submit line
-  that starts with `<` to the running program, which is how Amstrad's
-  `PROFILE.SUB` feeds `PIP`. We currently hand every line to the CCP, so a
-  profile has to use one `PIP C:=FILE` per copy instead.
 - **DISKCOPY: optional check of the source as well** (a full source-read
   pass before the copy).
 - **FORMAT options** — no-verify, a bootable system layout and mapping bad
@@ -399,9 +399,10 @@ the distribution disk carries BBC BASIC and your other tools; a fresh clone
 that need them.  `RENAME.COM` is deliberately excluded (the CCP's built-in
 `REN` covers it), the smoke adds it to a scratch copy to keep a real
 third-party F23 caller covered, `NULU11.COM` (an LBR library manager) is left
-off the image, and so is `PROFILE.SUB`: it is Amstrad's start-up script and
-its `PIP` section needs `<` program input, which this system does not
-implement.  Write your own `PROFILE.SUB` and it runs at cold boot.
+off the image, and so is `PROFILE.SUB`: it is Amstrad's start-up script, and
+running it at every cold boot would copy ~10K into the 16K `C:` RAM disk
+before the first prompt.  The file itself works: add it to a disk and it runs
+as it did on the original system.
 
 ### Testing
 

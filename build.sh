@@ -54,6 +54,7 @@ echo "  Assembling test programs..."
 "$SJASMPLUS" --raw=build/m80test.com src/test/m80test.asm
 "$SJASMPLUS" --raw=build/m80bit.com src/test/m80bit.asm
 "$SJASMPLUS" --raw=build/regtest.com src/test/regtest.asm
+"$SJASMPLUS" --raw=build/inptest.com src/test/inptest.asm
 
 echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/date.com build/zpa/date.asm
@@ -83,9 +84,8 @@ fi
 # fresh clone (including CI) builds without them.  SUBMIT and RENAME are
 # excluded because we build SUBMIT and the CCP has a built-in REN; NULU11
 # (an LBR library manager) is not needed on the distribution disk.
-# PROFILE.SUB is Amstrad's start-up script for the original CP/M: its PIP
-# section uses '<' program-input redirection, which this system does not
-# implement, so auto-running it would leave PIP waiting at its prompt.
+# PROFILE.SUB is Amstrad's start-up script; it runs here, but auto-running
+# it would copy ~10K into the 16K C: RAM disk at every cold boot.
 REF_FILES=()
 for ref in references/binaries/*.COM references/binaries/*.SUB; do
     case "$ref" in
@@ -131,6 +131,7 @@ python3 tools/mkdsk.py create build/cpm3-test.dsk \
     build/bdostest.com build/xtetest.com build/stltest.com \
     build/m80test.com build/m80bit.com \
     build/disktest.com build/termtest.com build/systest.com build/regtest.com \
+    build/inptest.com \
     src/test/smoke.txt src/test/page.txt src/test/smoke.sub \
     src/test/param.sub \
     "${REF_FILES[@]}" \

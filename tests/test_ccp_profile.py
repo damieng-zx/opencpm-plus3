@@ -50,8 +50,8 @@ class ProfileSubmit(unittest.TestCase):
         self.assertIn("db 'PROFILE '", text)
         self.assertIn("db 'SUB'", text)
 
-    def test_profiles_are_not_shipped(self):
-        """Amstrad's PROFILE.SUB needs '<' program input, which we lack."""
+    def test_stock_profile_is_not_shipped(self):
+        """It works, but would copy ~10K into C: at every cold boot."""
         self.assertIn('"PROFILE.SUB"', source("build.cmd"))
         self.assertIn("*/PROFILE.SUB", source("build.sh"))
 

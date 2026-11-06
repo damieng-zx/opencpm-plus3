@@ -54,6 +54,7 @@ TEST_PROGRAMS = {
     "build/bdostest.com", "build/xtetest.com", "build/stltest.com",
     "build/m80test.com", "build/m80bit.com", "build/disktest.com",
     "build/termtest.com", "build/systest.com", "build/regtest.com",
+    "build/inptest.com",
 }
 TEST_FIXTURES = {
     "src/test/smoke.txt", "src/test/page.txt",

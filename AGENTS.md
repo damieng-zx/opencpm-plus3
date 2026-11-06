@@ -38,8 +38,8 @@ lists every region. Before adding a large feature, read `docs/boot.md`
 `references/binaries/` is optional third-party software added to both images
 (that is how BBC BASIC gets onto the distribution disk); `SUBMIT.COM`,
 `RENAME.COM`, `NULU11.COM` (an LBR library manager) and `PROFILE.SUB`
-(Amstrad's start-up script, whose PIP section needs `<` program input we do
-not implement) are excluded.  The
+(Amstrad's start-up script: it works, but auto-running it copies ~10K into
+the 16K C: RAM disk at every cold boot) are excluded.  The
 smoke runner adds `RENAME.COM` to a scratch copy so a real third-party F23
 caller is still covered, and drops the big optional utilities it never runs
 (`BBCBASIC.COM`, `NULU11.COM`) if they are present, to leave room for
@@ -171,7 +171,7 @@ window; a missing `CPM3C.SYS` stops the boot at the loader.
 **System mode (mode 3: banks 4,7,6,3)**:
 - **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers
 - **4000-7FFF**: Bank 7 — C: RAM disk (16K, owned by `RAMDISK.FID`)
-- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, `DD_CHECK_SECTOR` compare buffer at 9E00h, runtime screen/scroll buffers at A000h-A5FFh, row-address table at A700h and CSV/ALV at A740h-A82Ch, BIOS/BDOS scratch at A600h-A6FFh and A82Dh-A83Ch, screen cursor/ESC scratch at A730h-A739h, viewport scratch at A73Ah-A73Fh, loader-staged screen row table at A890h-A8BFh, status-line flag at A8C0h, 24x80 state at A8C1h-A8D8h, `KM_SET_KEY` translation table at A900h-A99Fh, `KM_SET_EXPAND` slots at A9A0h-AD7Fh, FCB shadow at AD80h-ADA3h, staged `CCP.COM` at B000h-BFFFh
+- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, `DD_CHECK_SECTOR` compare buffer at 9E00h, runtime screen/scroll buffers at A000h-A5FFh, row-address table at A700h and CSV/ALV at A740h-A82Ch, BIOS/BDOS scratch at A600h-A6FFh and A82Dh-A83Ch, screen cursor/ESC scratch at A730h-A739h, viewport scratch at A73Ah-A73Fh, loader-staged screen row table at A890h-A8BFh, status-line flag at A8C0h, 24x80 state at A8C1h-A8D8h, `KM_SET_KEY` translation table at A900h-A99Fh, `KM_SET_EXPAND` slots at A9A0h-AD7Fh, FCB shadow at AD80h-ADA3h, submit-file input buffer at ADA4h-AFA3h, staged `CCP.COM` at B000h-BFFFh
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
 
 **Screen access (mode 2: banks 4,5,6,3)**:
@@ -230,7 +230,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   `dir_sector_to_bios`, `search_next_entry`, `match_fcb`, `bf_f15`-`bf_f18`,
   `close_dir_update`) live at the end of `common.asm` instead, in common
   memory, to leave room in the 16K bank-4 image; see `docs/boot.md`
-- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`.  On a cold start it submits `PROFILE.SUB` from the default drive — the SCB byte at `0x0A` (`scb_coldboot`) marks a cold boot and the CCP clears it, so a warm boot does not run the profile again
+- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`.  On a cold start it submits `PROFILE.SUB` from the default drive — the SCB byte at `0x0A` (`scb_coldboot`) marks a cold boot and the CCP clears it, so a warm boot does not run the profile again.  Lines of a submit file that begin with `<` are queued for the running program (BDOS F124, a private CCP helper) and served by `con_in`/`con_status` as console input
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
 - `src/tools/sysgen.asm` — `SYSGEN.COM`: reads the system from A: (track 0
   via `DD_READ_SECTOR` and the three system files via the BDOS) into memory,

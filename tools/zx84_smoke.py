@@ -959,6 +959,47 @@ class Smoke:
             except OSError:
                 pass
 
+    def run_submit_input(self) -> None:
+        """PROFILE.SUB can feed a program through '<' lines.
+
+        CP/M Plus passes the '<' lines that follow a command in a submit file
+        to the running program as console input (the XSUB feature of CP/M 2.2
+        built in).  The profile here runs INPTEST - which reads one line with
+        F10 and prints it back - and then a command, so both the redirection
+        and the return to the CCP are checked.
+        """
+        tools = str(ROOT / "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import mkdsk  # noqa: E402
+
+        scratch = ROOT / "build" / "submit-input.dsk"
+        shutil.copyfile(self.dsk, scratch)
+        image = mkdsk.DSKImage().load(scratch)
+        image.delete_cpm_file("PROFILE.SUB")
+        image.add_cpm_file(
+            "PROFILE.SUB",
+            b"INPTEST\r\n<HELLO FROM PROFILE\r\nSTAT\r\n")
+        image.save(scratch)
+
+        old_dsk = self.dsk
+        self.dsk = scratch
+        try:
+            self.log("PROFILE.SUB feeds a program with '<' lines")
+            self.boot()
+            self.expect("program input redirected",
+                        "INPUT? HELLO FROM PROFILE",
+                        "GOT: HELLO FROM PROFILE")
+            # The command after the '<' line must still run.
+            self.mcp.call("run", {"frames": 2000})
+            self.expect("submit input resumes", "K free of", "A>")
+        finally:
+            self.dsk = old_dsk
+            try:
+                scratch.unlink()
+            except OSError:
+                pass
+
     def run_diskcopy(self) -> None:
         """DISKCOPY: A:->B:, a same-drive A:->A:, and a 10-sector layout copy.
 
@@ -1786,6 +1827,7 @@ class Smoke:
         # Check before the scratch-image format test reboots the machine.
         self.check_bank6_sentinels()
         self.run_profile()
+        self.run_submit_input()
         if quick:
             self.log("quick mode: skipping the destructive format test")
         else:

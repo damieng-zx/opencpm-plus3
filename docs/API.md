@@ -98,9 +98,25 @@ by a cold boot and the CCP clears it when it fires the profile. Because the
 CCP itself is reloaded from the bank-6 staging copy on every warm boot, that
 SCB byte is the only place the distinction can live.
 
-Only the CCP sees submit lines. A line beginning with `<` — which CP/M Plus
-passes to the program that is running, and which Amstrad's `PROFILE.SUB` uses
-to feed `PIP` — is treated as a command and will not work.
+### Submit-file program input
+
+A submit line that begins with `<` is console input for the program the
+previous line started, the facility CP/M 2.2 needed `XSUB.COM` for and
+Amstrad's `PROFILE.SUB` uses to feed `PIP`. The CCP collects those lines
+while it still owns the file, strips the marker and queues the text (with
+its CR) through BDOS function 124 — a private helper, not part of CP/M 3 —
+into a 512-byte buffer in bank 6. While that buffer holds data, `con_in` and
+`con_status` serve it instead of the keyboard, so an ordinary `F1`/`F6`/`F10`
+read sees the line; when it empties, the keyboard takes over again. A bare
+`<` line queues an empty line, which is how `PIP` is told its input is done.
+
+The queue is emptied at every prompt, so input a program leaves unread is
+discarded rather than being executed as commands.
+
+BDOS function 124 (private, used by the CCP only):
+
+- **In**: DE = text in the TPA, B = length; DE = 0 clears the queue
+- **Out**: A = 0, or 0xFF when the buffer is full (512 bytes)
 
 ---
 
