@@ -1,8 +1,74 @@
 # OpenCP/M +3
 
-Clean-room CP/M 3.1 (CP/M Plus) for the ZX Spectrum +3. Every part of the
-system — BIOS, BDOS, CCP, drivers and tools — is original Z80 assembly written
-for this project.
+A complete, from-scratch CP/M 3.1 (CP/M Plus) for the ZX Spectrum +3. The
+BIOS, BDOS, CCP, screen, keyboard and uPD765A drivers, the utilities and the
+build and test tooling are all original Z80 assembly written for this project.
+
+**It is not Locomotive Software's CP/M Plus, and contains no part of it.** No
+Locomotive ROM, binary or disassembly was used: everything here was written
+against the published CP/M 3 documentation and the +3's documented hardware
+behaviour. It boots a normal 40-track +3 DSK, loads `CPM3.SYS`, `CPM3C.SYS` and
+`CCP.COM` from it, and runs ordinary CP/M 3 software.
+
+[BDOS/BIOS API reference](docs/API.md) ·
+[XBIOS/TE interface](docs/cpm-plus-xbios.md) ·
+[compatibility tables](docs/compatibility.md) ·
+[tested software](docs/realworld-suite.md)
+
+## Compared with the +3's original CP/M
+
+Both systems speak CP/M 3.1 and the +3's XBIOS, so the same applications run.
+Beyond that, this system offers:
+
+| | Locomotive CP/M Plus (+3) | OpenCP/M +3 |
+|---|---|---|
+| Origin | Locomotive Software, 1987 | clean-room, this project |
+| Text widths | 32 and 51 columns | 32, 51 and **64** columns |
+| Virtual 80-column screen | — | **24x80**, paged (`SET24X80`) |
+| Formatting a disc | `DISCKIT` | our **`FORMAT`** (7 layouts) |
+| Copying a disc | `DISCKIT` | our **`DISKCOPY`** (track level, verified) |
+| Serial (AUX) device | supported | **not implemented** |
+| Mallard BASIC | included | **not included** |
+| BBC BASIC | — | **on the distribution image** |
+
+The 64-column mode is genuinely new: the +3's ULA gives 32 columns with an
+8-pixel font and 51 with a 5-pixel one, and this system adds a 4-pixel
+"Compression" font for 64. The new disc tools replace Locomotive's `DISCKIT`,
+which is copyrighted and is not shipped.
+
+## What's on the distribution disk
+
+`build/cpm3.dsk` is a ready-to-boot 180K image:
+
+| File | Contents |
+|---|---|
+| `CPM3.SYS` | BIOS and BDOS |
+| `CPM3C.SYS` | common-memory stub (page zero, BDOS and XBIOS bridge) |
+| `CCP.COM` | the command processor, read from the disk at cold boot |
+| `FONT32.BIN`, `FONT51.BIN`, `FONT64.BIN` | the three screen fonts |
+| `RAMDISK.FID` | the 16K C: RAM disk |
+| `SUBMIT.COM` | batch files (`$1`..`$9` parameters) |
+| `SCREEN.COM` | screen width: 32, 51 or 64 columns |
+| `SET24X80.COM` | enter or leave the virtual 80-column screen |
+| `DATE.COM` | set or show the clock |
+| `DUMP.COM` | hex dump, width-aware |
+| `SETDEF.COM` | drive and search order |
+| `SHOWXDPB.COM` | the detected disc geometry |
+| `FORMAT.COM` | format a disc (7 layouts), verifying as it goes |
+| `DISKCOPY.COM` | copy a disc, reading every track back |
+| `STAT.COM` | free space, file sizes and attributes |
+| `SYSGEN.COM` | make a formatted disc bootable |
+
+The CCP has `DIR`, `TYPE`, `ERA`, `REN`, `USER` and `HELP` built in, so even a
+bare image can list, show, delete and rename files without any `.COM` on the
+disk. [Tools](#tools) describes each program;
+[Test programs](#test-programs) lists what only the test image carries.
+
+BBC BASIC is on the distribution image (`BBCBASIC.COM`), along with the other
+third-party utilities you put in `references/binaries/` — ED, PIP, SET,
+SETKEYS, TYPE and so on. Those files are copyrighted: they are not part of the
+repository, are never shipped with a release, and a fresh clone builds a
+source-only image with our own tools. Mallard BASIC is not included.
 
 ## Features
 
@@ -14,10 +80,10 @@ for this project.
   leaves, `ESC 3 2` enters at the current width and `ESC 5 n` selects
   automatic or manual paging.  Automatic paging follows the cursor;
   otherwise EXTEND+Enter (or CAPS SHIFT+SYMBOL SHIFT+Enter) flips.  The
-  window steps by 24, 29 or 16 columns at 32/51/64 columns, so our
-  64-column mode needs only a 16-column shift — less paging than the
-  original +3.  A flip shifts the bitmap and re-renders only the exposed
-  columns; `<`/`>` on the status line mark hidden text.
+  window steps by 24, 29 or 16 columns at 32/51/64 columns, so 64-column
+  mode needs the smallest shift of the three.  A flip shifts the bitmap and
+  re-renders only the exposed columns; `<`/`>` on the status line mark
+  hidden text.
 - **Status line**: `ESC 0`/`ESC 1` toggle the bottom row for BIOS messages
   (23 text rows while it is on).  In 24x80 it carries the `<`/`>`
   hidden-column markers; `TE_STL_ASK` reports it as disabled in 24x80,
@@ -87,10 +153,19 @@ SETDEF search path.
 
 ## Compatibility
 
-The system boots from a standard 40-track +3 DSK and runs real CP/M software.
+The system boots from a standard 40-track +3 DSK and runs real CP/M 3 software.
 Every package below is downloaded, booted and exercised by
 [the real-world suite](docs/realworld-suite.md); results are from the zx84 MCP
-emulator.
+emulator. For the interfaces behind them:
+
+- **[BDOS/BIOS API reference](docs/API.md)** — every implemented function,
+  with its calling convention and return values.
+- **[XBIOS/TE interface](docs/cpm-plus-xbios.md)** — the +3's extended terminal,
+  disc and keyboard calls.
+- **[Software compatibility tables](docs/compatibility.md)** — per-title
+  results, including the current failures and why they fail.
+- **[Real-world suite](docs/realworld-suite.md)** — how the tested packages are
+  fetched, prepared and run.
 
 | Package | Result | Notes |
 |---|---|---|
@@ -149,12 +224,13 @@ Also supported:
   (DSM > 255: eight 16-bit block numbers per extent, high byte first).
   `SHOWXDPB` displays the detected geometry; PCW DS/DD 720K disks (2K
   blocks, DSM=351) support full file I/O.
-- Optional third-party CP/M utilities (BBC BASIC, PIP, ED, SET, ...) are
-  picked up from `references/binaries/` when present; a source-only checkout
-  ships the project's own tools and the CCP's DIR/TYPE/ERA/REN built-ins, so
-  it can list, display, delete and rename files. `RENAME.COM` is deliberately
-  not bundled (REN covers it); the smoke runner adds it to a scratch copy so
-  a real third-party F23 caller is still exercised.
+- Optional third-party CP/M utilities are picked up from
+  `references/binaries/` when present (see [What's on the distribution
+  disk](#whats-on-the-distribution-disk)); a source-only checkout ships our own
+  tools and the CCP built-ins, which is enough to list, display, delete and
+  rename files. `RENAME.COM` is deliberately not bundled (REN covers it); the
+  smoke runner adds it to a scratch copy so a real third-party F23 caller is
+  still exercised.
 
 ## Tools
 
@@ -249,9 +325,11 @@ Also supported:
 
 ## Out of scope
 
-- Serial I/O
-- Printer/parallel I/O
-- Disckit.com
+- Serial I/O (`AUXIN`/`AUXOUT`, `SERIAL.FID`) — the Locomotive system has it,
+  this one does not.
+- Printer / parallel I/O.
+- Mallard BASIC (the Locomotive system bundles it; ours does not).
+- `DISCKIT.COM` — Locomotive's disc utility; use `FORMAT` and `DISKCOPY`.
 
 ## Technical
 
@@ -291,15 +369,15 @@ Output: two +3 images and one data image.
 
 | Image | Contents |
 |---|---|
-| `build/cpm3.dsk` | **Distribution.** The system files plus the utilities we build (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`) and, when `references/binaries/` is present, the local third-party utilities, including **BBC BASIC**. No test programs. |
+| `build/cpm3.dsk` | **Distribution.** The system files plus the utilities we build (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`, `FORMAT`, `DISKCOPY`, `STAT`, `SYSGEN`) and, when `references/binaries/` is present, the local third-party utilities, including **BBC BASIC**. No test programs. |
 | `build/cpm3-test.dsk` | **Tests.** The distribution image plus `BDOSTEST`, `XTETEST`, `STLTEST`, `M80TEST`, `M80BIT`, `DISKTEST`, `TERMTEST`, `SYSTEST`, `REGTEST` and their fixtures (`SMOKE.TXT`, `PAGE.TXT`, `SMOKE.SUB`, `PARAM.SUB`). The smoke runner boots this image. |
 | `build/cpm3_720.dsk` | PCW DS/DD 720K data image used by the 16-bit block tests. |
 
-The system files on the disk are `CPM3.SYS` (BIOS + BDOS head),
-`CPM3C.SYS` (common stub), `CCP.COM` (the command processor),
-`FONT32.BIN`/`FONT51.BIN`/`FONT64.BIN` (screen fonts) and, optionally,
-`RAMDISK.FID` (C: RAM disk). A disk without `CCP.COM` boots to a
-diagnostic instead of a prompt; a disk without `CPM3C.SYS` does not boot.
+The system files are `CPM3.SYS` (BIOS + BDOS head), `CPM3C.SYS` (common
+stub) and `CCP.COM`, plus the fonts and the optional `RAMDISK.FID` — see
+[What's on the distribution disk](#whats-on-the-distribution-disk). A disk
+without `CCP.COM` boots to a diagnostic instead of a prompt; a disk without
+`CPM3C.SYS` does not boot.
 
 The third-party binaries under `references/binaries/` are untracked and
 optional. When present they are added to **both** images automatically, so
