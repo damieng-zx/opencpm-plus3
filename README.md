@@ -187,6 +187,12 @@ Also supported:
   10-sector and 42-track discs are detected as themselves. CPC Data is
   identified by its sector IDs instead. No no-verify option or bad-sector
   mapping yet.
+- `STAT` — `STAT` shows each drive's free space (`A: 59K free of 175K`);
+  `STAT filespec` lists matching files with size and attributes (`R/O`,
+  `SYS`); `STAT filespec $R/O` / `$R/W` / `$SYS` sets or clears an
+  attribute. Free space comes from BDOS F46, capacity from the DPB, sizes
+  by summing the directory extents, attributes from the entry and F30.
+  Wildcards work for listing only (F30 matches exact names).
 - `DISKCOPY` — copy one disc to another: `DISKCOPY A: B:`, `DISKCOPY B: A:`,
   or the same drive twice (`A: A:` / `B: B:`).  It asks for the source
   (and target) discs, detects the source layout with the same login probe

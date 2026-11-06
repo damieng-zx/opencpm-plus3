@@ -63,6 +63,11 @@ identify it.  The
 emulator keeps disc writes in memory rather than writing the `.dsk` back,
 so sectors are read back through the FDC with `sector_read`.
 
+`STAT` is checked next: the drive summary (`A:`, `K free of`, `C:`), a file
+listing with sizes (`STAT *.TXT` reports `2 file(s)`), setting and clearing
+the R/O attribute (`$R/O` shows `R/O` in the listing, `$R/W` clears it), the
+wildcard refusal for attribute changes, and the usage text for a bad option.
+
 `DISKCOPY` is then checked three times.  `DISKCOPY A: B:` copies the source
 onto a scratch copy of the *720K* image - a different layout - so the copy
 has to format every target track as it goes; a sample of sectors across the

@@ -890,6 +890,33 @@ class Smoke:
             raise SmokeError(
                 f"track {track} side {side} IDs {ids}, expected {expected}")
 
+    def run_stat(self) -> None:
+        """STAT: drive free space, file sizes/attributes, attribute changes."""
+        self.log("STAT")
+        self.command("STAT", 600)
+        self.expect("STAT drives", "A: ", "K free of", "C: ")
+        self.command("STAT *.TXT", 900)
+        self.expect("STAT *.TXT", "SMOKE.TXT", "PAGE.TXT", "2 file(s)")
+        self.command("STAT FORMAT.COM", 600)
+        self.expect("STAT file", "FORMAT.COM", "1 file(s)")
+
+        self.command("STAT FORMAT.COM $R/O", 600)
+        self.expect("STAT set R/O", "FORMAT.COM set to R/O")
+        self.command("STAT FORMAT.COM", 600)
+        self.expect("STAT shows R/O", "FORMAT.COM", "R/O")
+        self.command("STAT FORMAT.COM $R/W", 600)
+        self.expect("STAT clear R/O", "FORMAT.COM set to R/W")
+        self.command("STAT FORMAT.COM", 600)
+        self.expect("STAT after R/W", "1 file(s)")
+        line = [l for l in self.text().splitlines() if "FORMAT.COM" in l][-1]
+        if "R/O" in line:
+            raise SmokeError("STAT still shows R/O after $R/W: " + line)
+
+        self.command("STAT *.COM $R/O", 600)
+        self.expect("STAT wildcard", "specific file name")
+        self.command("STAT FORMAT.COM $BOGUS", 600)
+        self.expect("STAT usage", "free space per drive")
+
     def run_diskcopy(self) -> None:
         """DISKCOPY: A:->B:, a same-drive A:->A:, and a 10-sector layout copy.
 
@@ -1611,6 +1638,7 @@ class Smoke:
         self.run_pagination()
         self.run_block16()
         self.run_ccp_external()
+        self.run_stat()
         # Check before the scratch-image format test reboots the machine.
         self.check_bank6_sentinels()
         if quick:

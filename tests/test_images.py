@@ -24,7 +24,8 @@ class DistributionImage(unittest.TestCase):
                        b"FONT51  BIN", b"RAMDISK FID",
                        b"SUBMIT  COM", b"SCREEN  COM", b"SET24X80COM",
                        b"SETDEF  COM", b"DATE    COM", b"DUMP    COM",
-                       b"FORMAT  COM", b"DISKCOPYCOM", b"SHOWXDPBCOM"):
+                       b"FORMAT  COM", b"DISKCOPYCOM", b"STAT    COM",
+                       b"SHOWXDPBCOM"):
             self.assertIn(wanted, names11)
 
     def test_has_no_test_programs_or_fixtures(self):
