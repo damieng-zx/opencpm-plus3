@@ -190,6 +190,15 @@ Also supported:
   so the BIOS sees it as a 180K filesystem (the command says so); a format
   profile/`SETUP` command would fix that. No no-verify option or
   bad-sector mapping yet.
+- `DISKCOPY` — copy one disc to another: `DISKCOPY A: B:`, `DISKCOPY B: A:`,
+  or the same drive twice (`A: A:` / `B: B:`).  It asks for the source
+  (and target) discs, detects the source layout with the same login probe
+  the BIOS uses, then copies track by track.  With two drives each track is
+  read and written straight away; on one drive it reads as many tracks as
+  fit in a 48K buffer (up to 10), asks for the target, writes them, and
+  asks for the source back.  A live line shows the percentage, the logical
+  track, the side and READ/WRITE.  It copies sectors, so the target must be
+  formatted with the same layout (`FORMAT` first); it does not verify yet.
 
 ## Test programs
 
@@ -208,8 +217,8 @@ Also supported:
 
 ## Wishlist / TODO
 
-- **Disk copy/verify** tool (the sector layer is in place; FORMAT covers the
-  format side).
+- **DISKCOPY verify pass** (read both discs back and compare) and an option
+  to format the target as part of the copy.
 - **FORMAT options** — no-verify, a bootable system layout, mapping bad
   sectors into a hidden file, and a format profile (`SETUP`) so a data
   layout with no boot sector (Ultra 208) keeps its geometry.

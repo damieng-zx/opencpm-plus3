@@ -892,6 +892,106 @@ class Smoke:
                 f"track {track} side {side} IDs {ids}, expected {expected}"
                 f":\n{text}")
 
+    def run_diskcopy(self) -> None:
+        """DISKCOPY: A: to B:, then a same-drive A: to A: (disc swaps).
+
+        The target for A:->B: is a scratch copy of the distribution image;
+        after the copy a sample of sectors must match the source byte for
+        byte.  The same-drive run uses the 48K track buffer, so it takes
+        four passes: the first pass is checked against the source, and the
+        remaining passes only have to complete (the emulator drops a disc
+        image's in-memory writes when it is ejected, so the target cannot
+        keep tracks across passes here).
+        """
+        src = ROOT / "build" / "diskcopy-src.dsk"
+        dst = ROOT / "build" / "diskcopy-dst.dsk"
+        shutil.copyfile(self.dsk, src)
+        shutil.copyfile(ROOT / "build" / "cpm3.dsk", dst)
+        old_dsk = self.dsk
+        self.dsk = src
+        try:
+            self.boot()
+            # Argument handling.
+            self.command("DISKCOPY", 300)
+            self.expect("DISKCOPY usage", "DISKCOPY source: target:")
+            self.command("DISKCOPY C: B:", 300)
+            self.expect("DISKCOPY C: rejected", "DISKCOPY source: target:")
+            self.command("DISKCOPY A:", 300)
+            self.expect("DISKCOPY one arg", "DISKCOPY source: target:")
+
+            self.log("DISKCOPY A: B:")
+            self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            self.mcp.call("load", {"file": str(dst), "drive": "B"})
+            self.command("DISKCOPY A: B:", 400)
+            self.wait_for(["Put the SOURCE disc in A:,", "the TARGET disc in B:,"],
+                          frames=50, attempts=4)
+            self.key("enter", 300)
+            self.wait_for(["Copied 40 tracks."], frames=600, attempts=40)
+            self.expect("DISKCOPY A->B",
+                        "Source: SS, 40 tracks, 9 sectors of 512 bytes.")
+            for track, sector in ((0, 1), (0, 5), (1, 1), (3, 4), (9, 9),
+                                  (17, 2), (25, 7), (39, 9)):
+                a = self.mcp.call("sector_read", {
+                    "track": track, "sector": sector, "side": 0, "drive": 0,
+                    "length": 128}).split("\n", 1)[1]
+                b = self.mcp.call("sector_read", {
+                    "track": track, "sector": sector, "side": 0, "drive": 1,
+                    "length": 128}).split("\n", 1)[1]
+                if a != b:
+                    raise SmokeError(
+                        f"DISKCOPY left track {track} sector {sector} "
+                        "different")
+
+            # Same drive: read a chunk, swap, write, swap back, ...
+            self.log("DISKCOPY A: A:")
+            source_sectors = {}
+            for track, sector in ((0, 1), (1, 1), (5, 5), (9, 9)):
+                source_sectors[(track, sector)] = self.mcp.call(
+                    "sector_read", {"track": track, "sector": sector,
+                                    "side": 0, "drive": 0,
+                                    "length": 128}).split("\n", 1)[1]
+
+            self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            self.mcp.call("load", {"file": str(src), "drive": "A"})
+            self.command("DISKCOPY A: A:", 400)
+            self.wait_for(["Put the SOURCE disc in A:"], frames=50,
+                          attempts=4)
+            self.key("enter", 300)
+
+            passes = 4               # 40 tracks, 10 per 48K pass
+            for i in range(passes):
+                self.wait_for(["put the TARGET disc in A:"], frames=500,
+                              attempts=40)
+                self.mcp.call("eject", {"target": "disk", "drive": "A"})
+                self.mcp.call("load", {"file": str(dst), "drive": "A"})
+                self.key("enter", 300)
+                if i == passes - 1:
+                    break
+                self.wait_for(["Put the SOURCE disc back in A:"],
+                              frames=500, attempts=40)
+                if i == 0:
+                    # The target is mounted: its first pass must match.
+                    for (track, sector), data in source_sectors.items():
+                        now = self.mcp.call(
+                            "sector_read", {"track": track, "sector": sector,
+                                            "side": 0, "drive": 0,
+                                            "length": 128}).split("\n", 1)[1]
+                        if now != data:
+                            raise SmokeError(
+                                "DISKCOPY same-drive pass 1 mismatch at "
+                                f"track {track} sector {sector}")
+                self.mcp.call("eject", {"target": "disk", "drive": "A"})
+                self.mcp.call("load", {"file": str(src), "drive": "A"})
+                self.key("enter", 300)
+            self.wait_for(["Copied 40 tracks."], frames=600, attempts=40)
+        finally:
+            self.dsk = old_dsk
+            for path in (src, dst):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+
     def run_bbcbasic(self) -> None:
         """BBC BASIC must start from the distribution image when it is on it.
 
@@ -1464,6 +1564,7 @@ class Smoke:
         else:
             self.run_xtetest_format()
             self.run_format()
+            self.run_diskcopy()
         # The distribution image is a different file; this reboots into it.
         self.run_bbcbasic()
         self.check_fdc()

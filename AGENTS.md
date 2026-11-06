@@ -17,7 +17,7 @@ Two 180K images are produced from the same system files:
 
 - `build/cpm3.dsk` — **distribution**: system, the utilities we build
   (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`,
-  `FORMAT`) and
+  `FORMAT`, `DISKCOPY`) and
   the local `references/binaries/` utilities (BBC BASIC, ED, PIP, ...).  No
   test programs.
 - `build/cpm3-test.dsk` — the distribution files **plus** the `*TEST.COM`
@@ -230,6 +230,10 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   memory, to leave room in the 16K bank-4 image; see `docs/boot.md`
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
+- `src/tools/diskcopy.asm` — `DISKCOPY.COM`, raw sector copy between A:/B:
+  (including the same drive twice): `DD_LOGIN` detects the source layout,
+  then `DD_READ_SECTOR`/`DD_WRITE` copy track by track; a 48K TPA buffer
+  bridges the disc swaps for a single drive
 - `src/tools/format.asm` — `FORMAT.COM`, the disc formatter (XBIOS `DD_L_XDPB`,
   `DD_FORMAT`, `DD_CHECK_SECTOR`, `DD_WRITE`): `FORMAT A:`/`FORMAT B:`;
   180K SS/40, 720K DS/80, CPC System, CPC Data, HiForm 203 (42T/10),
