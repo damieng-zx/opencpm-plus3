@@ -78,6 +78,16 @@ def main() -> int:
                   file=sys.stderr)
             return 1
         print("[disckit] banner ok")
+
+        # DISCKIT then asks for the disc to be removed and polls
+        # SENSE DRIVE STATUS until Ready clears, reading the key through
+        # KM_KT_GET.  Both used to leave it on this prompt forever.
+        smoke.wait_for(["Please remove the disc from the drive"],
+                       frames=600, attempts=6)
+        smoke.mcp.call("eject", {"target": "disk", "drive": "A"})
+        smoke.key("enter", 300)
+        smoke.wait_for(["Format", "Verify"], frames=900, attempts=20)
+        print("[disckit] menu reached (disc removal + key input)")
     except SmokeError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1

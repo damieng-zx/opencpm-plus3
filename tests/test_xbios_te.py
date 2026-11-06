@@ -946,12 +946,17 @@ class DdDriveStatus(unittest.TestCase):
         self.assertIn("cp 0x98", dispatch)
         self.assertIn("jp z, .dd_drive_status", dispatch)
 
-    def test_handler_reports_ready_and_head(self):
+    def test_handler_asks_the_controller(self):
+        # A constant ST3 leaves programs waiting for a disc swap: DISCKIT
+        # polls Ready until the disc is removed, so this must be the real
+        # SENSE DRIVE STATUS result.
         body = handler_body(".dd_drive_status:", "; ==========================================================================\n; Utility")
         self.assertIn("and 0x03", body)          # unit number
-        self.assertIn("and 0x04", body)          # head bit
-        self.assertIn("or 0x30", body)           # Ready + Track 0
-        self.assertIn(".drive_absent", body)
+        self.assertIn("SENSE DRIVE STATUS", body)
+        self.assertIn("call fdc_send_byte", body)
+        self.assertIn("call fdc_read_byte", body)  # ST3 comes from the FDC
+        self.assertIn("and 0x07", body)          # unit + head parameter
+        self.assertNotIn("or 0x30", body)        # no invented status
 
     def test_tester_and_smoke_cover_status(self):
         tester = source("src/test/xtetest.asm")

@@ -49,7 +49,7 @@ TE entries are `0x00BF` (`TE_ASK`), `0x00C2` (`TE_RESET`), `0x00C5`
 | `0x8F` | `DD_FORMAT` | B = CP/M bank, C = unit, D = logical track, E = filler, HL = header table (track, head, sector, size), IX = XDPB | Formats one track with the uPD765A FORMAT TRACK command.  Carry set OK; carry clear + A = error.  Only bank 1 (TPA) is accepted, and C must be 0 or 1 (A: or B:).  The CHRN table is staged in the FDC deblock buffer, so up to 32 sectors per track are supported (the XDPB's sector count is clamped to 32). |
 | `0x92` | `DD_LOGIN` | C = unit, IX = destination XDPB in common memory | Re-detects the format of unit C (0 or 1), copies that drive's XDPB, and returns carry set + A = disc type, DE = ALV size, HL = hash-table size; carry clear + A = error. |
 | `0x95` | `DD_SEL_FORMAT` | A = format 0-3, IX = destination XDPB in common memory | Carry set + A = format, or carry clear + A = 6 (bad format).  Loads one of the four standard XDPB templates. |
-| `0x98` | `DD_DRIVE_STATUS` | C = unit (bits 1-0), head (bit 2) | A = ST3.  Unit 0 returns `0x30` (Ready + Track 0 + unit 0), with ST3 bit 2 mirroring the requested head (`0x34` for head 1); other units return `0x01` (not fitted). |
+| `0x98` | `DD_DRIVE_STATUS` | C = unit (bits 1-0), head (bit 2) | A = ST3.  Issues the controller's SENSE DRIVE STATUS and returns it, so bit 5 (Ready) follows the drive's READY line: set while a disc is in the drive, clear once it is removed.  Programs use that to notice a disc swap (DISCKIT polls it); the unit/head bits echo the request. |
 | `0x9B` | `DD_READ_ID` | C = unit, D = logical track, IX = XDPB | C = unit (0 or 1).  Carry set + A = sector number, or carry clear + A = error (0 not ready, 2 seek, 3 data, 5 missing address mark); HL = `dd_results` (count + ST0 ST1 ST2 C H R N). |
 | `0x9E` | `DD_L_DPB` | HL = 10-byte disc spec in common memory, IX = destination 17-byte DPB | Builds a standard DPB from the spec.  Carry set + A = disc type, or carry clear + A = 6 (bad format). |
 | `0xA1` | `DD_L_XDPB` | HL = 10-byte disc spec in common memory, IX = destination 27-byte XDPB | Builds a standard XDPB (DPB plus Amstrad geometry extension) from the spec.  Carry set + A = disc type, or carry clear + A = 6 (bad format). |
@@ -115,11 +115,14 @@ by its sector IDs instead).
 back to the standard type-0 template if the READ ID/boot-sector read
 fails, so it does not yet propagate the 0/2/3/4/5 login error codes.
 
-`KM_KT_PUT`/`KM_KT_GET` maintain the token queue, but the ASCII keyboard
-path (`kbd_getchar`, and therefore BDOS/CCP input) does not consume it:
-tokens are only visible to programs that poll `KM_KT_GET`.  Likewise
-`KM_SET_EXPAND` stores strings that nothing expands yet; keys map straight
-to ASCII characters.
+`KM_KT_PUT`/`KM_KT_GET` share a 16-entry token queue.  A key pressed on the
+matrix becomes a token too: when the queue is empty, `KM_KT_GET` scans the
+keyboard and returns the raw key number with the shift state (bit 0 = Caps
+Shift, bit 1 = Symbol Shift), so programs that poll the call instead of
+BDOS `CONIN` - DISCKIT does - see ordinary keystrokes.  The ASCII path
+(`kbd_getchar`, and therefore BDOS/CCP input) does not consume the queue.
+`KM_SET_EXPAND` still stores strings that nothing expands yet; keys map
+straight to ASCII characters.
 
 `SCR_RUN_ROUTINE` only supports routines in common memory (`C000-F5FF`).
 The +3 memory map used here pages bank 5 (the screen) over `4000-7FFF` in

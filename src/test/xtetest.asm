@@ -1553,13 +1553,15 @@ start:
     ld c, 9
     call BDOS
 
-    ; Drive A, head 0: Ready + Track0, and B/DE must survive.
+    ; Drive A, head 0: the controller reports Ready (a disc is loaded), the
+    ; unit/head bits echo the request, and B/DE must survive.
     ld hl, DD_DRIVE_STATUS
     ld (userf_dw), hl
     ld bc, 0x1200               ; B = 12h, C = unit 0 head 0
     ld de, 0x3456
     call userf_trampoline
-    cp 0x30
+    and 0x27                    ; Ready + head + unit
+    cp 0x20                     ; ready, head 0, unit 0
     jp nz, .t23_fail
     ld a, b
     cp 0x12
@@ -1575,14 +1577,17 @@ start:
     ld bc, 0x1204
     ld de, 0x3456
     call userf_trampoline
-    cp 0x34
+    and 0x27
+    cp 0x24
     jp nz, .t23_fail
 
-    ; Unit 1: not fitted, unit bit set, Ready/WP clear.
+    ; Unit 1: no disc in B: here, so Ready stays clear and the unit bits
+    ; report unit 1 (the rest depends on the drive's track/protection state).
     ld bc, 0x1201
     ld de, 0x3456
     call userf_trampoline
-    cp 0x01
+    and 0x23                    ; Ready + unit
+    cp 0x01                     ; unit 1, not ready
     jp nz, .t23_fail
 
     ld de, msg_ok

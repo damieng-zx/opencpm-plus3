@@ -1847,6 +1847,29 @@ xbios_handler:
     scf
     ret
 .kget_empty:
+    ; Nothing queued: a key pressed on the matrix is a token too.  The +3's
+    ; keyboard driver feeds this queue from its scan, and programs such as
+    ; DISCKIT poll KM_KT_GET instead of BDOS CONIN, so scan once and turn a
+    ; fresh press into a token rather than reporting an empty queue.
+    ;
+    ; The shift byte is the driver's modifier state (bit 0 = Caps Shift,
+    ; bit 1 = Symbol Shift); the lock bits (3-6) stay clear, so a token does
+    ; not change the reported lock state.
+    call _kbd_scan
+    ld a, (kbd_key_ready)
+    or a
+    jr z, .kget_none
+    ld a, (kbd_mods)
+    ld b, a
+    ld a, (kbd_last_raw)         ; +3 key number (0-39)
+    ld c, a
+    xor a
+    ld (kbd_key_ready), a        ; consumed here: BDOS input must not see it
+    pop hl
+    pop de
+    scf
+    ret
+.kget_none:
     ld a, (kbd_lock_state)
     ld b, a
     pop hl
@@ -2246,23 +2269,32 @@ xbios_handler:
 .dd_drive_status:
     ; DD_DRIVE_STATUS (0x0098): SENSE DRIVE STATUS, return ST3 in A.
     ;   In:  C = bits 1-0 unit, bit 2 head
-    ;   Out: A = µPD765A ST3 byte
+    ;   Out: A = uPD765A ST3 byte
     ;          bit 7 Fault, bit 6 WP, bit 5 Ready, bit 4 T0
     ;          bit 3 Two-Sided, bit 2 Head, bits 1-0 Unit
-    ; Drive A (unit 0): report Ready + T0 + single-sided + drive A.
-    ; Drive B (unit 1): not fitted — Ready and WP both clear (per spec).
+    ;
+    ; The byte comes from the controller rather than a constant: bit 5
+    ; (Ready) follows the drive's READY line, which on these drives means "a
+    ; disc is in the drive".  Programs notice a disc being removed with it -
+    ; DISCKIT polls this while asking for a disc swap - so reporting a fixed
+    ; "ready" leaves them waiting forever.
     ld a, c
     and 0x03                       ; isolate unit number
-    or a
-    jr nz, .drive_absent
-    ; Unit 0 (drive A): Ready | Track0 | requested head
+    ld (disk_drive), a             ; the FDC helpers use the selected unit
+    push bc                        ; the FDC helpers clobber BC/DE
+    push de
+    ld a, 0x04                     ; SENSE DRIVE STATUS
+    call fdc_send_byte
+    pop de
+    pop bc
     ld a, c
-    and 0x04                       ; bit 2 = head
-    or 0x30                        ; bit 5 = Ready, bit 4 = Track 0
-    ret
-.drive_absent:
-    ; Unit 1 (or higher): drive not fitted.
-    ld a, 0x01                     ; unit bit set, Ready=0, WP=0
+    and 0x07                       ; parameter: unit + head bit
+    push bc
+    push de
+    call fdc_send_byte
+    call fdc_read_byte             ; ST3
+    pop de
+    pop bc
     ret
 
 

@@ -23,7 +23,10 @@ python tools/zx84_diskit.py --bin /path/to/your/tools
 
 The tool copies the **built** image to `build/disckit-test.dsk`, adds your
 local `DISCKIT.COM` to that disposable copy, boots it and checks that the
-Locomotive banner appears.  Nothing is written back to `references/` and
+Locomotive banner appears.  It then follows the first prompt - press a key,
+remove the disc, press a key again - and requires the main menu (Format /
+Verify) to appear, which covers `DD_DRIVE_STATUS` reporting a disc removal
+through SENSE DRIVE STATUS and `KM_KT_GET` delivering ordinary keypresses.  Nothing is written back to `references/` and
 nothing is committed.  Without a local copy the tool prints the notice and
 exits 0, so CI does not need the binary.
 
