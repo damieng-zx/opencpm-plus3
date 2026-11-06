@@ -80,10 +80,10 @@ class Headroom(unittest.TestCase):
         table = labels()
         if not table:
             self.skipTest("build/bios.lst not present; run build.cmd first")
-        self.assertEqual(table["copy_record_to_tpa"].addr, 0xF9BF)
-        self.assertEqual(table["copy_record_from_tpa"].addr, 0xF9C5)
-        self.assertEqual(table["ccp_fcb"].addr, 0xFB66)
-        self.assertEqual(table["ccp_run_prog"].addr, 0xFD0F)
+        self.assertEqual(table["copy_record_to_tpa"].addr, 0xF97A)
+        self.assertEqual(table["copy_record_from_tpa"].addr, 0xF980)
+        self.assertEqual(table["ccp_fcb"].addr, 0xFB21)
+        self.assertEqual(table["ccp_run_prog"].addr, 0xFCCA)
 
     def test_common_window_still_has_room(self):
         table = labels()

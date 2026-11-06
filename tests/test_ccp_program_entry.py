@@ -15,8 +15,8 @@ class ComHeaderLoader(unittest.TestCase):
         # that common.zpa asserts against.  Check the built label agrees.
         lbl = labels().get("ccp_run_prog")
         if lbl is not None:
-            self.assertEqual(lbl.addr, 0xFD0F)
-        self.assertIn('assert ccp_run_prog == 0xFD0F', source("src/bios/common.zpa"))
+            self.assertEqual(lbl.addr, 0xFCCA)
+        self.assertIn('assert ccp_run_prog == 0xFCCA', source("src/bios/common.zpa"))
 
     def test_helper_moves_the_module_down(self):
         body = source("src/bios/common.zpa")

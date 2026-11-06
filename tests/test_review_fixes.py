@@ -266,28 +266,30 @@ class Issue14ComFcb(unittest.TestCase):
 
     def test_ccp_uses_common_fcb(self):
         text = source("src/ccp/miniccp.zpa")
-        self.assertIn("CCP_FCB_ADDR equ 0xFB66", text)
+        self.assertIn("CCP_FCB_ADDR equ 0xFB21", text)
         self.assertIn("ld hl, CCP_FCB_ADDR", text)
         self.assertNotIn("0xF600 - 36", text)
 
     def test_common_reserves_fcb(self):
         text = source("src/bios/common.zpa")
         self.assertIn("ccp_fcb: ds 36", text)
-        self.assertIn("ccp_fcb == 0xFB66", text)
+        self.assertIn("ccp_fcb == 0xFB21", text)
 
 
 class Issue15FdcTimeouts(unittest.TestCase):
     """FDC polling must be bounded; the data loop must not race EXM."""
 
     def test_transfer_loops_have_poll_timeouts(self):
+        # The read and write calls share fdc_transfer; each execution loop
+        # still bounds its own RQM polling.
         text = source("src/bios/fdc765.zpa")
-        read = text[text.index("fdc_read_sector:"):text.index("fdc_write_sector:")]
-        write = text[text.index("fdc_write_sector:"):text.index("fdc_send_byte:")]
-        for body in (read, write):
-            self.assertIn("fdc_poll", body)
-            # EXM is 0 during the command phase; aborting there caused
-            # zero-byte reads.  The loop counts 512 bytes instead.
-            self.assertNotIn("bit 5, a", body)
+        body = text[text.index("fdc_transfer:"):text.index("fdc_send_byte:")]
+        self.assertIn("fdc_exec_rd:", body)
+        self.assertIn("fdc_exec_wr:", body)
+        self.assertGreaterEqual(body.count("(fdc_poll), a"), 2)
+        # EXM is 0 during the command phase; aborting there caused zero-byte
+        # reads.  The loops count 512 bytes instead.
+        self.assertNotIn("bit 5, a", body)
 
     def test_command_and_seek_polls_have_timeouts(self):
         text = source("src/bios/fdc765.zpa")

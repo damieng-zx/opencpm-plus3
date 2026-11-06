@@ -844,7 +844,7 @@ class Bank6Scratch(unittest.TestCase):
         self.assertIn("saved_col:  equ 0xA739", scr)
         common = source("src/bios/common.zpa")
         self.assertIn("fcb_buf:        equ 0xAD80", common)
-        self.assertIn("ccp_fcb == 0xFB66", common)
+        self.assertIn("ccp_fcb == 0xFB21", common)
 
     def test_blocks_fit_the_free_windows(self):
         # A600-A6FF ends before the row table at A700.

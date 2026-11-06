@@ -673,12 +673,37 @@ write_user_byte:
 
 
 ; ------------------------------------------------------------------
-; copy_from_user — Copy block from TPA to system memory
+; copy_from_user / copy_to_user - move a block across the bank boundary
 ;
-; Uses xfer_staging in 128-byte chunks.
+;   The TPA is not mapped while the BDOS runs, so a block has to bounce
+;   through xfer_staging in the common area: copy a chunk, switch banks,
+;   copy the chunk again.  The two directions are mirrors of each other -
+;   same chunking, same accounting, same two LDIRs - and differ only in
+;   which bank each half of the copy runs in.
 ;
+;   They therefore share one body (copy_xfer).  Each entry point writes the
+;   two bank values into the OR immediates at copy_xfer_b1/copy_xfer_b2
+;   before falling into it.  That is deliberate self-modifying code:
+;
+;     - it lives in the common stub, which is RAM (copied from bank 6 at
+;       cold boot), and the routine never re-enters, so a later call cannot
+;       observe a half-chosen direction;
+;     - every entry writes BOTH immediates before use, so the patched state
+;       never outlives a call and a warm boot cannot inherit it;
+;     - each site is a single byte written with `ld (nn),a`, and the IM 1
+;       handler (also in common memory) never executes this routine;
+;     - a direction flag would instead test every chunk (two per 128-byte
+;       record) and still need both bank values loaded.
+;
+;   `or` immediates are patched, so motor_flag is OR'd in exactly as before
+;   and the motor bit is preserved.
+;
+;   In:  HL = source, DE = destination, BC = byte count
+;   Out: HL/DE advanced past the copied bytes
+;   Clobbers: AF, BC
+; ------------------------------------------------------------------
 ; @proc copy_from_user
-; @param %src:u16   hl          ; source address in TPA
+; @param %src:u16   hl          ; source address in the TPA
 ; @param %dst:u16   de          ; destination in system memory
 ; @param %count:u16 bc          ; byte count
 ; @out   hl                     ; advanced past copied bytes
@@ -686,116 +711,93 @@ write_user_byte:
 ; @clobbers af,bc
 ; @end
 copy_from_user:
-    ld (_cfu_src), %src
-    ld (_cfu_dst), %dst
-    ld (_cfu_cnt), %count
-.loop:
-    ld bc, (_cfu_cnt)
-    ld a, b
-    or c
-    ret z
-    ; Clamp to 128
-    ld a, b
-    or a
-    jr nz, .c128
-    ld a, c
-    cp 33
-    jr c, .cok
-.c128:
-    ld bc, 32
-.cok:
-    ld (_cfu_chunk), bc
-    ; Update remaining
-    ld hl, (_cfu_cnt)
-    or a
-    sbc hl, bc
-    ld (_cfu_cnt), hl
-    ; Switch to TPA and copy to staging
-    ld a, (motor_flag)
-    or BANK0_1FFD
-    call write_1ffd
-    ld hl, (_cfu_src)
-    ld de, xfer_staging
-    ld bc, (_cfu_chunk)
-    ldir
-    ld (_cfu_src), hl
-    ; Switch back to system
-    ld a, (motor_flag)
-    or BANK1_1FFD
-    call write_1ffd
-    ; Copy staging to destination
-    ld hl, xfer_staging
-    ld de, (_cfu_dst)
-    ld bc, (_cfu_chunk)
-    ldir
-    ld (_cfu_dst), de
-    jr .loop
+    ld a, BANK0_1FFD           ; first half reads the TPA
+    ld (copy_xfer_b1 + 1), a
+    ld a, BANK1_1FFD           ; second half writes system memory
+    ld (copy_xfer_b2 + 1), a
+    jr copy_xfer
 
-_cfu_src:   dw 0
-_cfu_dst:   dw 0
-_cfu_cnt:   dw 0
-_cfu_chunk: dw 0
-
-
-; ------------------------------------------------------------------
-; copy_to_user — Copy block from system memory to TPA
-;
 ; @proc copy_to_user
 ; @param %src:u16   hl          ; source in system memory
-; @param %dst:u16   de          ; destination address in TPA
+; @param %dst:u16   de          ; destination address in the TPA
 ; @param %count:u16 bc          ; byte count
 ; @out   hl                     ; advanced past copied bytes
 ; @out   de                     ; advanced past copied bytes
 ; @clobbers af,bc
 ; @end
 copy_to_user:
-    ld (_ctu_src), %src
-    ld (_ctu_dst), %dst
-    ld (_ctu_cnt), %count
-.loop:
-    ld bc, (_ctu_cnt)
+    ld a, BANK1_1FFD           ; first half reads system memory (already
+    ld (copy_xfer_b1 + 1), a   ; mapped; the switch keeps one path)
+    ld a, BANK0_1FFD           ; second half writes the TPA
+    ld (copy_xfer_b2 + 1), a
+    ; fall through into the shared body
+
+; copy_xfer - shared body of copy_from_user / copy_to_user
+;   In:  HL = source, DE = destination, BC = byte count
+;   Out: HL/DE advanced past the copied bytes
+;   Clobbers: AF, BC, HL, DE
+; @proc copy_xfer
+; @param %src:u16   hl
+; @param %dst:u16   de
+; @param %count:u16 bc
+; @clobbers af,bc,hl,de
+; @end
+copy_xfer:
+    ld (_cfu_src), hl
+    ld (_cfu_dst), de
+    ld (_cfu_cnt), bc
+copy_xfer_loop:
+    ld bc, (_cfu_cnt)
     ld a, b
     or c
-    ret z
+    jr z, copy_xfer_done
+    ; Clamp the chunk to 32 bytes (xfer_staging holds 32).
     ld a, b
     or a
-    jr nz, .c128
+    jr nz, copy_xfer_c32
     ld a, c
     cp 33
-    jr c, .cok
-.c128:
+    jr c, copy_xfer_cok
+copy_xfer_c32:
     ld bc, 32
-.cok:
-    ld (_ctu_chunk), bc
-    ld hl, (_ctu_cnt)
+copy_xfer_cok:
+    ld (_cfu_chunk), bc
+    ld hl, (_cfu_cnt)
     or a
     sbc hl, bc
-    ld (_ctu_cnt), hl
-    ; Copy source to staging
-    ld hl, (_ctu_src)
-    ld de, xfer_staging
-    ld bc, (_ctu_chunk)
-    ldir
-    ld (_ctu_src), hl
-    ; Switch to TPA and copy staging to dest
+    ld (_cfu_cnt), hl
+    ; First half: source bank -> staging.
     ld a, (motor_flag)
-    or BANK0_1FFD
+copy_xfer_b1:
+    or 0                       ; PATCHED: BANK0 for from_user, BANK1 for to_user
+    call write_1ffd
+    ld hl, (_cfu_src)
+    ld de, xfer_staging
+    ld bc, (_cfu_chunk)
+    ldir
+    ld (_cfu_src), hl
+    ; Second half: staging -> destination bank.
+    ld a, (motor_flag)
+copy_xfer_b2:
+    or 0                       ; PATCHED: BANK1 for from_user, BANK0 for to_user
     call write_1ffd
     ld hl, xfer_staging
-    ld de, (_ctu_dst)
-    ld bc, (_ctu_chunk)
+    ld de, (_cfu_dst)
+    ld bc, (_cfu_chunk)
     ldir
-    ld (_ctu_dst), de
-    ; Switch back to system
+    ld (_cfu_dst), de
+    jr copy_xfer_loop
+copy_xfer_done:
+    ; Leave the system banks mapped: the last TO_USER chunk ran in TPA mode.
     ld a, (motor_flag)
     or BANK1_1FFD
     call write_1ffd
-    jr .loop
+    ret
 
-_ctu_src:   dw 0
-_ctu_dst:   dw 0
-_ctu_cnt:   dw 0
-_ctu_chunk: dw 0
+_cfu_src:   dw 0
+_cfu_dst:   dw 0
+_cfu_cnt:   dw 0
+_cfu_chunk: dw 0
 
 
 ; ==========================================================================
@@ -835,8 +837,8 @@ copy_record_from_tpa:
 ; RAMDISK.FID hardcodes these two addresses (see src/fid/ramdisk.asm).
 ; If these asserts fail, common memory has shifted and the FID source
 ; needs its COPY_RECORD_*_TPA equates updated.
-    assert copy_record_to_tpa == 0xF9BF, "RAMDISK.FID expects copy_record_to_tpa at 0xF9BF"
-    assert copy_record_from_tpa == 0xF9C5, "RAMDISK.FID expects copy_record_from_tpa at 0xF9C5"
+    assert copy_record_to_tpa == 0xF97A, "RAMDISK.FID expects copy_record_to_tpa at 0xF97A"
+    assert copy_record_from_tpa == 0xF980, "RAMDISK.FID expects copy_record_from_tpa at 0xF980"
 
 
 ; ------------------------------------------------------------------
@@ -1066,7 +1068,7 @@ xfer_staging: ds 32
 ; so a large program cannot overwrite it while the stub is still reading.
 ccp_fcb: ds 36
     assert $ - ccp_fcb == 36, "ccp_fcb must be exactly 36 bytes (CP/M FCB format)"
-    assert ccp_fcb == 0xFB66, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
+    assert ccp_fcb == 0xFB21, "miniccp.zpa CCP_FCB_ADDR must match ccp_fcb"
 
 
 ; BDOS stack (grows downward from bdos_stack label)
@@ -1168,8 +1170,10 @@ dd_results: db 0                   ; DD_READ_ID result count
     ds 7                           ; ST0 ST1 ST2 C H R N
 ; Reserved: DD_FORMAT used to stage its CHRN table here (36 bytes = 9
 ; sectors).  It now stages it in the FDC deblock buffer, which holds up to
-; 32 entries, but the space stays reserved so ccp_run_prog and the staged
-; CCP's fixed addresses (FD0F etc.) do not move.
+; 32 entries.  The space is kept as a cushion so a small addition here does
+; not immediately shift the pinned addresses below (see the asserts at
+; ccp_fcb/ccp_run_prog: the separately built CCP.COM and RAMDISK.FID
+; hard-code them, so the build fails loudly if they move).
 dd_reserved: ds 36
     assert dd_reserved + 36 <= 0x10000, "USERF/disc save area must fit in common memory"
 
@@ -1220,7 +1224,7 @@ ccp_run_prog:
     push hl                        ; RET from the program returns to warm boot
     jp 0x0100
 
-    assert ccp_run_prog == 0xFD0F, "miniccp.zpa CCP_RUN_PROG must match ccp_run_prog"
+    assert ccp_run_prog == 0xFCCA, "miniccp.zpa CCP_RUN_PROG must match ccp_run_prog"
 
 ; ==========================================================================
 ; BDOS directory and FCB helpers (relocated from bank 4)
