@@ -55,13 +55,28 @@ start:
 
 got_arg:
     cp '['
-    jr z, .bracketed
-    ; Not a bracket — assume drive list (A:, *, etc.)
+    jr z, .bracket_here
+    ; Not a bracket — a drive list (A:, *, etc.).  CP/M 3 also allows options
+    ; after it, as in SETDEF *,C:[ORDER=(SUB,COM)].  parse_drive_list stops at
+    ; the first character that is not part of the list, so scan from there.
     call parse_drive_list
-    jp done
-.bracketed:
+.list_done:
+    ld a, (hl)
+    or a
+    jp z, done                 ; end of the command line
+    cp 0x0D
+    jp z, done
+    cp ' '
+    jr z, .skip_one
+    cp '['
+    jr z, .bracket_here
+    jp err_syntax
+.skip_one:
     inc hl
-    dec b
+    jr .list_done
+.bracket_here:
+    inc hl                     ; past '['
+    ld b, 0xFF                 ; parse_bracket stops at ']' or the NUL
     call parse_bracket
     jp done
 
@@ -82,6 +97,8 @@ parse_bracket:
     ld a, (hl)
     cp ']'
     jr z, .terminated
+    or a
+    jp z, err_syntax           ; end of the command line before ']'
     call upper
     ld (de), a
     inc de
@@ -390,15 +407,24 @@ parse_drive_list:
     ld a, (hl)
     cp ' '
     jr z, .done
+    cp '['
+    jr z, .done                ; options may follow the list
     cp ','
     jp nz, err_syntax
     inc hl
     dec b
     jp .entry
 .done:
+    ; Set the path, but hand HL/BC back so a "[options]" group that follows
+    ; the drive list is still parsed.
+    push hl
+    push bc
     ld de, path_buf
     ld c, F_SET_PATH
-    jp BDOS
+    call BDOS
+    pop bc
+    pop hl
+    ret
 
 
 show_settings:

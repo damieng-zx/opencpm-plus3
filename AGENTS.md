@@ -37,7 +37,9 @@ lists every region. Before adding a large feature, read `docs/boot.md`
 
 `references/binaries/` is optional third-party software added to both images
 (that is how BBC BASIC gets onto the distribution disk); `SUBMIT.COM`,
-`RENAME.COM` and `NULU11.COM` (an LBR library manager) are excluded.  The
+`RENAME.COM`, `NULU11.COM` (an LBR library manager) and `PROFILE.SUB`
+(Amstrad's start-up script, whose PIP section needs `<` program input we do
+not implement) are excluded.  The
 smoke runner adds `RENAME.COM` to a scratch copy so a real third-party F23
 caller is still covered, and drops the big optional utilities it never runs
 (`BBCBASIC.COM`, `NULU11.COM`) if they are present, to leave room for
@@ -228,7 +230,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   `dir_sector_to_bios`, `search_next_entry`, `match_fcb`, `bf_f15`-`bf_f18`,
   `close_dir_update`) live at the end of `common.asm` instead, in common
   memory, to leave room in the 16K bank-4 image; see `docs/boot.md`
-- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`
+- `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`.  On a cold start it submits `PROFILE.SUB` from the default drive — the SCB byte at `0x0A` (`scb_coldboot`) marks a cold boot and the CCP clears it, so a warm boot does not run the profile again
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
 - `src/tools/sysgen.asm` — `SYSGEN.COM`: reads the system from A: (track 0
   via `DD_READ_SECTOR` and the three system files via the BDOS) into memory,

@@ -68,6 +68,11 @@ listing with sizes (`STAT *.TXT` reports `2 file(s)`), setting and clearing
 the R/O attribute (`$R/O` shows `R/O` in the listing, `$R/W` clears it), the
 wildcard refusal for attribute changes, and the usage text for a bad option.
 
+`PROFILE.SUB` is checked once, on a scratch image: the profile turns page
+mode off, so after boot `SETDEF` must report `Page mode: OFF`.  The check
+then turns page mode back on, runs a program (which warm-boots) and requires
+it to stay on — proving the profile ran at the cold boot only.
+
 `SYSGEN` is checked twice.  With the distribution image in B:, `SYSGEN B:`
 must copy track 0 (every sector is compared byte for byte through
 `sector_read`) and the three system files, report `Checking ... ok` for

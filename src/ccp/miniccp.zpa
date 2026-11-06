@@ -24,6 +24,7 @@ CCP_FCB_ADDR equ 0xFB66        ; common-memory FCB for the COM loader stub
 CCP_RUN_PROG equ 0xFD0F        ; common-memory ccp_run_prog (COM header check)
 CCP_CHAIN_ADDR equ 0xF607      ; SCB[0x07]: BDOS F47 chain pending
 CCP_RC_ADDR    equ 0xF608      ; SCB[0x08]: program return code (F108)
+CCP_COLD_ADDR  equ 0xF60A      ; SCB[0x0A]: 1 = cold start, PROFILE.SUB due
 
 ; BDOS function numbers
 F_CIN   equ 1                  ; Console input (blocking, echoes)
@@ -68,6 +69,18 @@ ccp_start:
     ld e, a
     ld c, 14                   ; F14: Select Disk — restore user's drive
     call BDOS
+
+    ; Cold start: run PROFILE.SUB once, the way CP/M 3 does.  The flag is in
+    ; the SCB, which every cold boot re-initialises, so a warm boot (each
+    ; program exit) does not run the profile a second time.
+    ld a, (CCP_COLD_ADDR)
+    or a
+    jr z, .no_profile
+    xor a
+    ld (CCP_COLD_ADDR), a
+    call profile_cmd           ; fills cmd_buf if PROFILE.SUB exists
+    jp c, .got_line
+.no_profile:
 
     ; BDOS F47 (chain to program) leaves a flag and the command tail at
     ; 0080h, then warm boots.  Consume it here instead of prompting.
@@ -1565,6 +1578,46 @@ to_upper:
 
 
 ; ==========================================================================
+; profile_cmd - Run PROFILE.SUB on a cold start
+;
+;   CP/M 3 submits PROFILE.SUB before the first prompt.  We hand it to
+;   SUBMIT.COM through the normal command path: cmd_buf is filled with
+;   "SUBMIT PROFILE.SUB" and the caller jumps to its ".got_line" entry, so
+;   the profile runs exactly like a typed command and the $$$.SUB drain
+;   takes over from there.
+;
+;   The search is on the default drive (drive byte 0), which is A: after a
+;   cold boot.  A missing PROFILE.SUB leaves the prompt alone; a missing
+;   SUBMIT.COM reports "?" like any other unknown command.
+;
+;   Out:      carry set   = cmd_buf holds the command to run
+;             carry clear = no PROFILE.SUB, just prompt
+;   Clobbers: AF, BC, DE, HL
+; ==========================================================================
+; @proc profile_cmd
+; @out   carry
+; @clobbers af,bc,de,hl
+; @end
+profile_cmd:
+    ld de, profile_fcb
+    ld c, 17                   ; F17: Search First on the default drive
+    call BDOS
+    inc a                      ; 0xFF (not found) wraps to zero
+    jp nz, .found
+    xor a                      ; carry clear: nothing to submit
+    ret
+.found:
+    ld hl, str_profile_cmd
+    ld de, cmd_buf + 2
+    ld bc, PROFILE_CMD_LEN + 1 ; command text plus its NUL
+    ldir
+    ld a, PROFILE_CMD_LEN
+    ld (cmd_buf + 1), a
+    scf
+    ret
+
+
+; ==========================================================================
 ; try_sub — If A:$$$.SUB is active, load the next line into cmd_buf and echo
 ;   it; otherwise leave cmd_buf untouched.
 ;
@@ -2167,6 +2220,22 @@ ccp_search_buf:
 ; through SUBMIT.COM.
 str_submit_prefix:
     db 'SUBMIT '
+
+; Command submitted on a cold start when PROFILE.SUB is on the default drive.
+; PROFILE_CMD_LEN must match its length (the assert below keeps them in step).
+PROFILE_CMD_LEN equ 18
+str_profile_cmd:
+    db 'SUBMIT PROFILE.SUB'
+    db 0
+    assert $ - str_profile_cmd == PROFILE_CMD_LEN + 1, \
+        "PROFILE_CMD_LEN must match str_profile_cmd"
+
+; FCB for the cold-start PROFILE.SUB search: drive 0 = default drive.
+profile_fcb:
+    db 0
+    db 'PROFILE '
+    db 'SUB'
+    ds 24
 
 ccp_chain_drive:
     db 0

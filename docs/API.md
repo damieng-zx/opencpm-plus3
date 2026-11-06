@@ -88,6 +88,20 @@ Programs should close any open files before exiting (BDOS F16).
 ~61K available (0100h to F5FFh). The top of the TPA is fixed at 0xF600
 (the first byte of common memory); the word at 0006h is the BDOS entry.
 
+### Cold start and PROFILE.SUB
+
+After a cold boot the CCP looks for `PROFILE.SUB` on the default drive and,
+if it exists, submits it (through `SUBMIT.COM`) before the first prompt, so
+start-up commands run exactly like typed ones. A warm boot does not run it
+again: the SCB byte at offset 0x0A (`scb_coldboot`) is re-initialised to 1
+by a cold boot and the CCP clears it when it fires the profile. Because the
+CCP itself is reloaded from the bank-6 staging copy on every warm boot, that
+SCB byte is the only place the distinction can live.
+
+Only the CCP sees submit lines. A line beginning with `<` — which CP/M Plus
+passes to the program that is running, and which Amstrad's `PROFILE.SUB` uses
+to feed `PIP` — is treated as a command and will not work.
+
 ---
 
 ## 2. BDOS Calling Convention

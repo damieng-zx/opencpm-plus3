@@ -70,6 +70,9 @@ SETKEYS, TYPE and so on. Those files are copyrighted: they are not part of the
 repository, are never shipped with a release, and a fresh clone builds a
 source-only image with our own tools. Mallard BASIC is not included.
 
+No `PROFILE.SUB` is shipped (Amstrad's needs `<` program input, see the
+wishlist); put your own on the disk and it runs once at cold boot.
+
 ## Features
 
 - **Three text modes**: 32x24 (8px font), 51x24 (5px, the +3's native width)
@@ -117,6 +120,12 @@ source-only image with our own tools. Mallard BASIC is not included.
   (including GENCOM COM files with a 256-byte header), the CP/M 3 warm-boot
   return address on the program stack, SUBMIT chaining and F47 program
   chaining.
+- **Cold-start profile**: a `PROFILE.SUB` on the boot drive is submitted
+  once, at cold boot, before the first prompt — so `SETDEF`, screen settings
+  and start-up commands run automatically, exactly as CP/M 3 does.  A warm
+  boot (a program exiting) does not run it again.  Amstrad's original
+  `PROFILE.SUB` feeds `PIP` through `<`-prefixed lines; that program-input
+  redirection is not implemented, so it is not shipped (see the wishlist).
 - **C: RAM disk**: optional 16K `RAMDISK.FID` in bank 7.
 - **Clock**: tick-driven date/time (F104/F105), maintained by an ISR in common
   memory so it keeps running while a TPA program executes.
@@ -311,6 +320,10 @@ Also supported:
 
 ## Wishlist / TODO
 
+- **`<` program input in submit files** — CP/M Plus passes a submit line
+  that starts with `<` to the running program, which is how Amstrad's
+  `PROFILE.SUB` feeds `PIP`. We currently hand every line to the CCP, so a
+  profile has to use one `PIP C:=FILE` per copy instead.
 - **DISKCOPY: optional check of the source as well** (a full source-read
   pass before the copy).
 - **FORMAT options** — no-verify, a bootable system layout and mapping bad
@@ -385,8 +398,10 @@ the distribution disk carries BBC BASIC and your other tools; a fresh clone
 (and CI) builds a source-only disk, and the smoke runner skips the checks
 that need them.  `RENAME.COM` is deliberately excluded (the CCP's built-in
 `REN` covers it), the smoke adds it to a scratch copy to keep a real
-third-party F23 caller covered, and `NULU11.COM` (an LBR library manager) is
-left off the image.
+third-party F23 caller covered, `NULU11.COM` (an LBR library manager) is left
+off the image, and so is `PROFILE.SUB`: it is Amstrad's start-up script and
+its `PIP` section needs `<` program input, which this system does not
+implement.  Write your own `PROFILE.SUB` and it runs at cold boot.
 
 ### Testing
 

@@ -917,6 +917,48 @@ class Smoke:
         self.command("STAT FORMAT.COM $BOGUS", 600)
         self.expect("STAT usage", "free space per drive")
 
+    def run_profile(self) -> None:
+        """PROFILE.SUB runs once, at cold boot.
+
+        The CCP submits PROFILE.SUB on the boot drive when the SCB's
+        cold-boot flag is set.  The profile here turns page mode off; the
+        check then turns it back on, runs a program (exiting a program is a
+        warm boot) and requires page mode to stay on, which proves the
+        profile did not run a second time.
+        """
+        tools = str(ROOT / "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import mkdsk  # noqa: E402
+
+        scratch = ROOT / "build" / "profile-test.dsk"
+        shutil.copyfile(self.dsk, scratch)
+        image = mkdsk.DSKImage().load(scratch)
+        image.delete_cpm_file("PROFILE.SUB")
+        image.add_cpm_file("PROFILE.SUB", b"SETDEF [NOPAGE]\r\n")
+        image.save(scratch)
+
+        old_dsk = self.dsk
+        self.dsk = scratch
+        try:
+            self.log("PROFILE.SUB at cold boot")
+            self.boot()
+            self.expect("PROFILE.SUB submitted", "SETDEF [NOPAGE]")
+            self.command("SETDEF", 600)
+            self.expect("PROFILE.SUB applied", "Page mode:       OFF")
+
+            # Warm boot (run a program) must not run the profile again.
+            self.command("SETDEF [PAGE]", 600)
+            self.command("STAT", 700)
+            self.command("SETDEF", 600)
+            self.expect("PROFILE.SUB ran once", "Page mode:       ON")
+        finally:
+            self.dsk = old_dsk
+            try:
+                scratch.unlink()
+            except OSError:
+                pass
+
     def run_diskcopy(self) -> None:
         """DISKCOPY: A:->B:, a same-drive A:->A:, and a 10-sector layout copy.
 
@@ -1743,6 +1785,7 @@ class Smoke:
         self.run_stat()
         # Check before the scratch-image format test reboots the machine.
         self.check_bank6_sentinels()
+        self.run_profile()
         if quick:
             self.log("quick mode: skipping the destructive format test")
         else:

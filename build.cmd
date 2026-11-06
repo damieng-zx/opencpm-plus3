@@ -102,7 +102,10 @@ if errorlevel 1 goto :fail
 echo   Building DSK...
 
 set REF_BINS=
-for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" if /I not "%%~nxF"=="NULU11.COM" set REF_BINS=!REF_BINS! %%F
+:: RENAME.COM: the CCP's built-in REN covers it.  NULU11.COM: not needed.
+:: PROFILE.SUB: Amstrad's start-up script for the original CP/M; its PIP
+:: section uses '<' program-input redirection, which we do not implement.
+for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" if /I not "%%~nxF"=="NULU11.COM" if /I not "%%~nxF"=="PROFILE.SUB" set REF_BINS=!REF_BINS! %%F
 
 set EXTRA_FILES=
 if /I "%~1"=="--add" shift
