@@ -16,7 +16,8 @@ build.cmd --add FILE ...     # Build with extra CP/M files on both images
 Two 180K images are produced from the same system files:
 
 - `build/cpm3.dsk` — **distribution**: system, the utilities we build
-  (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`) and
+  (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`,
+  `FORMAT`) and
   the local `references/binaries/` utilities (BBC BASIC, ED, PIP, ...).  No
   test programs.
 - `build/cpm3-test.dsk` — the distribution files **plus** the `*TEST.COM`
@@ -226,6 +227,10 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   memory, to leave room in the 16K bank-4 image; see `docs/boot.md`
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
+- `src/tools/format.asm` — `FORMAT.COM`, the disc formatter (XBIOS `DD_L_XDPB`,
+  `DD_FORMAT`, `DD_CHECK_SECTOR`, `DD_WRITE`): 180K SS/40 and 720K DS/80,
+  one track formatted then verified, live progress line, and an AMSDOS disc
+  spec written so login detects the new geometry
 - `tools/mkdsk.py` — DSK image builder (`--format 180k` or `720k`); the
   720K layout uses 2K blocks, 128 directory entries and 16-bit block
   numbers, and the build writes it as `build/cpm3_720.dsk`

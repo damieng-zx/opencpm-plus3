@@ -167,6 +167,11 @@ Also supported:
 - `SHOWXDPB` — show the extended disk parameter blocks and detected geometry.
 - `SUBMIT` — build the `$$$.SUB` file the CCP drains (supports `$1`..`$9`;
   nested submits are rejected).
+- `FORMAT` — format a disc in A:. Asks for the disc to be swapped, then for
+  a geometry (180K SS/40 track or 720K DS/80 track), formats one track and
+  verifies it before moving on, with a live `percentage / track / side /
+  FORMAT|VERIFY` line. Writes the AMSDOS disc spec so the BIOS detects the
+  new format. No interleave, skew, CPC or system options yet.
 
 ## Test programs
 
@@ -185,7 +190,10 @@ Also supported:
 
 ## Wishlist / TODO
 
-- **FORMAT** command (and a disk copy/verify tool).
+- **Disk copy/verify** tool (the sector layer is in place; FORMAT covers the
+  format side).
+- **FORMAT options** — no-verify, interleave/skew, CPC System/Data layouts,
+  and mapping bad sectors into a hidden file.
 - **VT-100/CSI parser** — in addition to the VT-52/ADM-3A sequences.
 - **3px 80-column font** — a true 80x24 display with no paging (optional;
   24x80 already provides the width).

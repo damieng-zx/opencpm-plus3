@@ -39,14 +39,26 @@ defaults `motor_off_ticks=250`, `fdc_spec1=4Fh`, `fdc_spec2=05h`.  It then boots
 byte, runs `XTETEST` again, requires `10.FMT..OK` and checks the formatted
 track with `sector_read`.
 
+It then runs the `FORMAT` utility twice: a 180K SS/40-track disc on a
+scratch copy of the test image, and a 720K DS/80-track disc on a copy of
+`build/cpm3_720.dsk`.  `FORMAT` is started from the system disc and the
+target image is hot-swapped in at the "put the disc in" prompt, so the two
+disc-change prompts and the geometry menu are exercised as well.  The checks
+require the `percentage / Track / Side / FORMAT|VERIFY` progress line, the
+`Done - 40 tracks, 9 sectors` / `Done - 160 tracks, 9 sectors` summary, the
+`E5` filler on the last track and the AMSDOS disc spec (`00 00 28 09 ...`
+for 180K, `03 00 ... 02` for 720K) in the boot sector.  The emulator keeps
+disc writes in memory rather than writing the `.dsk` back, so the sectors
+are read back through the FDC with `sector_read`.
+
 ```text
 python3 tools/zx84_smoke.py
 python3 tools/zx84_smoke.py --zx84 /path/to/zx84 --dsk build/cpm3-test.dsk
-python3 tools/zx84_smoke.py --quick     # skip the destructive format test
+python3 tools/zx84_smoke.py --quick     # skip the destructive format tests
 ```
 
-`--quick` runs everything except the scratch-image `DD_FORMAT` test, which
-is the only part that reboots a second image.
+`--quick` runs everything except the scratch-image `DD_FORMAT` and `FORMAT`
+tests, which are the parts that reboot other images.
 
 The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, the `SCREEN` utility
 (`SCREEN 32`/`SCREEN 51`),

@@ -63,6 +63,7 @@ echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/submit.com src/tools/submit.asm
 "$SJASMPLUS" --raw=build/screen.com src/tools/screen.asm
 "$SJASMPLUS" --raw=build/set24x80.com src/tools/set24x80.asm
+"$SJASMPLUS" --raw=build/format.com src/tools/format.asm
 
 echo "  Assembling FID modules..."
 "$SJASMPLUS" --raw=build/RAMDISK.FID src/fid/ramdisk.asm
@@ -98,6 +99,7 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     build/RAMDISK.FID \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
     build/submit.com build/screen.com build/set24x80.com \
+    build/format.com \
     "${REF_FILES[@]}" \
     $EXTRAFILES
 
@@ -112,6 +114,7 @@ python3 tools/mkdsk.py create build/cpm3-test.dsk \
     build/RAMDISK.FID \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
     build/submit.com build/screen.com build/set24x80.com \
+    build/format.com \
     build/bdostest.com build/xtetest.com build/stltest.com \
     build/m80test.com build/m80bit.com \
     build/disktest.com build/termtest.com build/systest.com build/regtest.com \

@@ -644,6 +644,126 @@ class Smoke:
             except OSError:
                 pass
 
+    def run_format(self) -> None:
+        """FORMAT.COM: format and verify 180K SS and 720K DS discs.
+
+        FORMAT is started from the system disc, so the target image is hot
+        swapped in at the "put the disc in" prompt, exactly as the command
+        expects.  The emulator keeps disc writes in memory (it does not
+        persist them back to the .dsk file), so the checks read sectors
+        back through the FDC with sector_read.
+        """
+        if not (ROOT / "build" / "cpm3_720.dsk").exists():
+            raise SmokeError(
+                "build/cpm3_720.dsk is missing; run build.cmd first")
+        scratch = ROOT / "build" / "format-smoke.dsk"
+        blank180 = ROOT / "build" / "format-blank180.dsk"
+        blank720 = ROOT / "build" / "format-blank720.dsk"
+        shutil.copyfile(self.dsk, scratch)
+        shutil.copyfile(self.dsk, blank180)
+        shutil.copyfile(ROOT / "build" / "cpm3_720.dsk", blank720)
+        old_dsk = self.dsk
+        self.dsk = scratch
+        try:
+            self.log("FORMAT A: 180K SS/40 track")
+            self.boot()
+            # Argument handling and the ESC escape hatch, before anything
+            # destructive happens.
+            self.command("FORMAT", 300)
+            self.expect("FORMAT usage", "Format the disc in drive A:.")
+            self.command("FORMAT B:", 300)
+            self.expect("FORMAT B: refused", "cannot be formatted",
+                        "Only drive A: is supported")
+            self.command("FORMAT A:", 300)
+            self.wait_for(["Take the disc out"], frames=50, attempts=4)
+            self.key("escape", 300)
+            self.expect("FORMAT cancelled", "Cancelled.")
+
+            self.format_disc(blank180, "1", "Done - 40 tracks", "Side 0")
+            self.expect("180K format",
+                        "Every track formatted and verified",
+                        "Done - 40 tracks, 9 sectors")
+            self.check_sector(0, 0, 1, "00 00 28 09 02 01 03 02")
+            self.check_e5(39, 0, 1)
+            self.check_e5(1, 0, 1)
+
+            # The system disc was formatted in place; put the system image
+            # back so FORMAT.COM can be loaded again for the second run.
+            self.mcp.call("eject", {"target": "disk", "drive": "A"})
+            self.mcp.call("load", {"file": str(scratch), "drive": "A"})
+            self.wait_for(["A>"], frames=200, attempts=4)
+
+            self.log("FORMAT A: 720K DS/80 track")
+            self.format_disc(blank720, "2", "Done - 160 tracks", "Side 1")
+            self.expect("720K format",
+                        "Every track formatted and verified",
+                        "Done - 160 tracks, 9 sectors")
+            self.check_sector(0, 0, 1, "03 01 50 09 02 01 04 02")
+            self.check_e5(79, 1, 9)
+            self.check_e5(40, 1, 4)
+        finally:
+            self.dsk = old_dsk
+            for path in (scratch, blank180, blank720):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+
+    def format_disc(self, target: Path, choice: str, done_needle: str,
+                    side_needle: str) -> None:
+        """Drive FORMAT.COM's prompts and hand it `target` at the swap.
+
+        Waits for this run's own summary line: the screen still holds the
+        previous run's progress, so a generic "verified" match would return
+        before the second disc is done.
+        """
+        self.command("FORMAT A:", 400)
+        self.wait_for(["FORMAT A: - ALL DATA"], frames=400, attempts=4)
+        self.wait_for(["Take the disc out"], frames=50, attempts=4)
+        self.key("enter", 200)
+        self.mcp.call("eject", {"target": "disk", "drive": "A"})
+        self.mcp.call("load", {"file": str(target), "drive": "A"})
+        self.wait_for(["Put the disc"], frames=50, attempts=4)
+        self.key("enter", 200)
+        self.wait_for(["Format type", "180K", "720K"], frames=300,
+                      attempts=4)
+        self.mcp.call("type", {"text": choice})
+        self.mcp.call("run", {"frames": 200})
+
+        # The progress line is rewritten in place: percentage first, then
+        # the cylinder, the head and the format/verify phase.
+        saw_side = saw_verify = saw_percent = False
+        for _ in range(240):
+            self.mcp.call("run", {"frames": 500})
+            screen = self.text()
+            self.record()
+            saw_side = saw_side or side_needle in screen
+            saw_verify = saw_verify or "VERIFY" in screen
+            saw_percent = saw_percent or "%" in screen
+            if done_needle in screen:
+                if not (saw_side and saw_verify and saw_percent):
+                    raise SmokeError(
+                        "FORMAT progress line missing "
+                        f"(track/side={saw_side} verify={saw_verify} "
+                        f"percent={saw_percent}):\n" + screen)
+                return
+            if "FAILED" in screen:
+                raise SmokeError("FORMAT reported a failure:\n" + screen)
+        raise SmokeError("FORMAT did not finish:\n" + self.text())
+
+    def check_sector(self, track: int, side: int, sector: int,
+                     needle: str) -> None:
+        dump = self.mcp.call("sector_read", {
+            "track": track, "sector": sector, "side": side, "drive": 0,
+            "length": 16})
+        if needle.replace(" ", "") not in dump.replace(" ", ""):
+            raise SmokeError(
+                f"track {track} side {side} sector {sector} does not "
+                f"start {needle}:\\n{dump}")
+
+    def check_e5(self, track: int, side: int, sector: int) -> None:
+        self.check_sector(track, side, sector, "E5 E5 E5 E5 E5 E5 E5 E5")
+
     def run_bbcbasic(self) -> None:
         """BBC BASIC must start from the distribution image when it is on it.
 
@@ -1215,6 +1335,7 @@ class Smoke:
             self.log("quick mode: skipping the destructive format test")
         else:
             self.run_xtetest_format()
+            self.run_format()
         # The distribution image is a different file; this reboots into it.
         self.run_bbcbasic()
         self.check_fdc()
