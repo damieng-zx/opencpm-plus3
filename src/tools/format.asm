@@ -15,13 +15,12 @@
 ;   3   CPC System  40 track        disc type 1, first sector 41h
 ;   4   CPC Data    40 track        disc type 2, first sector C1h
 ;   5   HiForm 203  42 track        10 sectors, 12/22 gaps, interleave 3
-;   6   Ultra 208   42 track        10 sectors, no reserved track
-;   7   SuperMat 192 40 track       10 sectors, 3 directory blocks
-;   8   CPC IBM     40 track        8 sectors
+;   6   SuperMat 192 40 track       10 sectors, 3 directory blocks
+;   7   CPC IBM     40 track        8 sectors
 ;
-; The 10-sector layouts lay their sector IDs down with an interleave (and,
-; for Ultra, a per-track skew), so consecutive IDs are not physically
-; adjacent; CP/M addresses sectors by ID, so this only changes timing.
+; The 10-sector layouts lay their sector IDs down with an interleave, so
+; consecutive IDs are not physically adjacent; CP/M addresses sectors by
+; ID, so this only changes timing.
 ;
 ; Every track is formatted and then verified sector by sector before the
 ; next track is touched.  A single progress line is rewritten in place:
@@ -157,8 +156,6 @@ start:
     call userf_call
 
     ; ---- Geometry ----
-    ld hl, 0
-    ld (note_ptr), hl
     ld de, msg_menu
     call pstr
 menu_key:
@@ -176,10 +173,8 @@ menu_key:
     cp '5'
     jr z, choose_hiform
     cp '6'
-    jr z, choose_ultra
-    cp '7'
     jr z, choose_supermat
-    cp '8'
+    cp '7'
     jp z, choose_cpc_ibm
     ld de, msg_bad_choice
     call pstr
@@ -221,32 +216,19 @@ choose_hiform:
     ld de, name_hiform
     ld bc, 0x0300                   ; interleave 3, no skew
     jr have_type
-choose_ultra:
-    ld a, '6'
-    call echo_choice
-    ld hl, spec_ultra
-    ld de, name_ultra
-    ld bc, 0x0302                   ; interleave 3, skew 2
-    push hl
-    push de
-    ld hl, msg_ultra_note
-    ld (note_ptr), hl
-    pop de
-    pop hl
-    jr have_type
 choose_supermat:
-    ld a, '7'
+    ld a, '6'
     call echo_choice
     ld hl, spec_supermat
     ld de, name_supermat
     ld bc, 0x0100
     jr have_type
 choose_cpc_ibm:
-    ld a, '8'
+    ld a, '7'
     call echo_choice
     ld hl, spec_cpc_ibm
     ld de, name_cpc_ibm
-    ld bc, 0x0200
+    ld bc, 0x0200                   ; interleave 2
 have_type:
     ld (layout_ptr), de
     ld a, b
@@ -363,12 +345,6 @@ track_loop:
     call pstr
     ld de, msg_verified
     call pstr
-    ld de, (note_ptr)
-    ld a, d
-    or e
-    jr z, .no_note
-    call pstr
-.no_note:
     rst 0
 
 ; ==========================================================================
@@ -754,9 +730,8 @@ verify_track:
 ;   Clobbers: AF, BC, DE, HL, IX
 write_disc_spec:
     ; A data layout (OFF = 0) has no boot sector: its first sector is the
-    ; directory, so leave it as filler.  (The original Ultra 208 wrote the
-    ; spec there, which leaves junk directory entries; the login probe
-    ; cannot see that geometry without it, hence the note after the run.)
+    ; directory, so leave it as filler (CPC Data is identified by its
+    ; sector IDs instead).
     ld a, (XDPB + XDPB_OFF)
     or a
     jr nz, .write
@@ -1129,8 +1104,6 @@ spec_cpc_data:
 ; size code, directory blocks, gap R/W, gap format.
 spec_hiform:
     db 0, 0, 42, 10, 2, 1, 3, 2, 12, 22
-spec_ultra:
-    db 0, 0, 42, 10, 2, 0, 3, 2, 12, 22
 spec_supermat:
     db 0, 0, 40, 10, 2, 1, 3, 3, 12, 23
 spec_cpc_ibm:
@@ -1156,7 +1129,6 @@ pcur:          db 0
 cur_id:        db 0
 taken:         db 0, 0, 0, 0
 idtab:         ds 32
-note_ptr:      dw 0
 last_error:    db 0
 num_hund:      db 0
 num_tens:      db 0
@@ -1193,12 +1165,11 @@ msg_menu:
     db "  3   CPC System  40 track", 0x0D, 0x0A
     db "  4   CPC Data    40 track", 0x0D, 0x0A
     db "  5   HiForm 203  42 track", 0x0D, 0x0A
-    db "  6   Ultra 208   42 track", 0x0D, 0x0A
-    db "  7   SuperMat 192 40 track", 0x0D, 0x0A
-    db "  8   CPC IBM     40 track", 0x0D, 0x0A
-    db 0x0A, "Choice (1-8, ESC cancels): ", '$'
+    db "  6   SuperMat 192 40 track", 0x0D, 0x0A
+    db "  7   CPC IBM     40 track", 0x0D, 0x0A
+    db 0x0A, "Choice (1-7, ESC cancels): ", '$'
 msg_bad_choice:
-    db 0x0D, 0x0A, "1-8: ", '$'
+    db 0x0D, 0x0A, "1-7: ", '$'
 
 msg_done:
     db 0x0A, "Done - ", '$'
@@ -1210,8 +1181,6 @@ msg_sectors:
     db " sectors.", 0x0D, 0x0A, '$'
 msg_verified:
     db "Every track formatted and verified.", 0x0D, 0x0A, '$'
-msg_ultra_note:
-    db "Note: no boot track, so CP/M sees 180K.", 0x0D, 0x0A, '$'
 
 name_180:
     db "180K SS/40 track", '$'
@@ -1223,8 +1192,6 @@ name_cpc_data:
     db "CPC Data 40 track", '$'
 name_hiform:
     db "HiForm 203 42 track", '$'
-name_ultra:
-    db "Ultra 208 42 track", '$'
 name_supermat:
     db "SuperMat 192 40 track", '$'
 name_cpc_ibm:

@@ -240,7 +240,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/tools/format.asm` — `FORMAT.COM`, the disc formatter (XBIOS `DD_L_XDPB`,
   `DD_FORMAT`, `DD_CHECK_SECTOR`, `DD_WRITE`): `FORMAT A:`/`FORMAT B:`;
   180K SS/40, 720K DS/80, CPC System, CPC Data, HiForm 203 (42T/10),
-  Ultra 208 (42T/10, skewed), SuperMat 192 (40T/10) and CPC IBM (8 sector).
+  SuperMat 192 (40T/10) and CPC IBM (8 sector).
   One track is formatted then verified, a live progress line shows
   percentage/track/side/phase, the CHRN table is built with interleave and
   skew, and the AMSDOS disc spec is written into the boot sector of the

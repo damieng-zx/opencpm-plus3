@@ -109,7 +109,8 @@ format gap, and is destructive by definition.  The login probe's spec
 build rejects a spec that does not produce a usable disk (bad type,
 arrangement, track/sector count, size code, block shift or directory
 size) and falls back to the standard template.  A data layout that
-reserves no track (Ultra 208) has no spec block for it to read.
+reserves no track has no spec block for it to read (CPC Data is identified
+by its sector IDs instead).
 `DD_LOGIN`'s probe falls
 back to the standard type-0 template if the READ ID/boot-sector read
 fails, so it does not yet propagate the 0/2/3/4/5 login error codes.

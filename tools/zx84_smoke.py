@@ -753,7 +753,7 @@ class Smoke:
 
             # SuperMat 192: 40 tracks, 10 sectors, 3 directory blocks.
             self.log("FORMAT B: SuperMat 192 40 track")
-            self.format_disc("B", None, "7", "Done - SuperMat 192 40 track",
+            self.format_disc("B", None, "6", "Done - SuperMat 192 40 track",
                              "Side 0")
             self.expect("SuperMat format", "Done - SuperMat 192 40 track.",
                         "40 tracks, 10 sectors.")
@@ -764,23 +764,9 @@ class Smoke:
             self.expect("SuperMat XDPB", "10x512", "DSM=194", "DRM=95",
                         "Gap2=17h")
 
-            # Ultra 208: same geometry with no reserved track, so no spec
-            # block and a per-track skew of 2.  Track 1 therefore starts at
-            # ID 5.  Without a boot sector the BIOS sees a 180K disc; the
-            # tool says so.
-            self.log("FORMAT B: Ultra 208 42 track")
-            self.format_disc("B", None, "6", "Done - Ultra 208 42 track",
-                             "Side 0")
-            self.expect("Ultra format", "Done - Ultra 208 42 track.",
-                        "42 tracks, 10 sectors.",
-                        "Note: no boot track, so CP/M sees 180K.")
-            self.check_e5(0, 0, 1, drive=1)
-            self.check_e5(41, 0, 10, drive=1)
-            self.check_track_ids(1, [5, 2, 9, 6, 3, 10, 7, 4, 1, 8], drive=1)
-
             # CPC IBM: 8 sectors of 512, interleave 2.
             self.log("FORMAT B: CPC IBM 40 track")
-            self.format_disc("B", None, "8", "Done - CPC IBM 40 track",
+            self.format_disc("B", None, "7", "Done - CPC IBM 40 track",
                              "Side 0")
             self.expect("CPC IBM format", "Done - CPC IBM 40 track.",
                         "40 tracks, 8 sectors.")

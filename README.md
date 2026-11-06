@@ -177,19 +177,16 @@ Also supported:
   | 3 | CPC System 40 | 9 sectors, 2 reserved, IDs 41h-49h |
   | 4 | CPC Data 40 | 9 sectors, no reserved, IDs C1h-C9h |
   | 5 | HiForm 203 42 | 10 sectors, 12/22 gaps, interleave 3 |
-  | 6 | Ultra 208 42 | 10 sectors, no reserved, interleave 3, skew 2 |
-  | 7 | SuperMat 192 40 | 10 sectors, 3 dir blocks, interleave 1 |
-  | 8 | CPC IBM 40 | 8 sectors, interleave 2 |
+  | 6 | SuperMat 192 40 | 10 sectors, 3 dir blocks, interleave 1 |
+  | 7 | CPC IBM 40 | 8 sectors, interleave 2 |
 
   Formats one track and verifies it sector by sector before moving on,
   with a live `percentage / track / side / FORMAT|VERIFY` line. It writes
   the AMSDOS disc spec into the boot sector of the layouts that reserve
   one, and the login probe rebuilds the geometry from that spec, so
   10-sector and 42-track discs are detected as themselves. CPC Data is
-  identified by its sector IDs instead. Ultra 208 has no reserved track,
-  so the BIOS sees it as a 180K filesystem (the command says so); a format
-  profile/`SETUP` command would fix that. No no-verify option or
-  bad-sector mapping yet.
+  identified by its sector IDs instead. No no-verify option or bad-sector
+  mapping yet.
 - `DISKCOPY` — copy one disc to another: `DISKCOPY A: B:`, `DISKCOPY B: A:`,
   or the same drive twice (`A: A:` / `B: B:`).  It asks for the source
   (and target) discs, detects the source layout with the same login probe
@@ -222,9 +219,8 @@ Also supported:
 ## Wishlist / TODO
 
 - **DISKCOPY verify pass** (read both discs back and compare).
-- **FORMAT options** — no-verify, a bootable system layout, mapping bad
-  sectors into a hidden file, and a format profile (`SETUP`) so a data
-  layout with no boot sector (Ultra 208) keeps its geometry.
+- **FORMAT options** — no-verify, a bootable system layout and mapping bad
+  sectors into a hidden file.
 - **VT-100/CSI parser** — in addition to the VT-52/ADM-3A sequences.
 - **3px 80-column font** — a true 80x24 display with no paging (optional;
   24x80 already provides the width).

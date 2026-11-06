@@ -45,7 +45,7 @@ hot-swapped in at the "put the disc in" prompt, which exercises both
 disc-change prompts; `FORMAT`, `FORMAT C:` and ESC-cancel are checked first.
 The rest run on B: with a scratch copy of `build/cpm3_720.dsk` mounted
 there: 720K DS/80, CPC System, CPC Data, HiForm 203 (42 tracks, 10
-sectors), SuperMat 192, Ultra 208 and CPC IBM.
+sectors), SuperMat 192 and CPC IBM.
 
 The checks require the `percentage / Track / Side / FORMAT|VERIFY` progress
 line, the layout-named summary, `E5` on the last track, the boot-sector
@@ -54,12 +54,12 @@ spec (`00 00 28 09 ...` for 180K, `03 01 50 09 ...` for 720K, `01 00 28 09
 `00 00 28 0A 02 01 03 03 ...` for SuperMat, `00 00 28 08 02 01 03 02 ...`
 for CPC IBM), and the physical ID order from `track_geometry` (HiForm
 `1 8 5 2 9 6 3 10 7 4`, SuperMat `1..10`, CPC IBM `1 5 2 6 3 7 4 8`, and
-Ultra track 1 `5 2 9 6 3 10 7 4 1 8` for the skew).  `SHOWXDPB` must show
+  `SHOWXDPB` must show
 the detected geometry for the layouts with a boot sector (42 tracks x 10
 sectors, `DSM=204` / `DSM=194`, the CPC `First=41h`/`C1h`), which proves the
 login re-probed the disc and rebuilt the XDPB from the spec block.  CPC
-Data and Ultra reserve no track: their first sector stays filler (CPC Data
-is identified by its IDs, Ultra prints a note and is seen as 180K).  The
+Data reserves no track: its first sector stays filler and its IDs
+identify it.  The
 emulator keeps disc writes in memory rather than writing the `.dsk` back,
 so sectors are read back through the FDC with `sector_read`.
 
