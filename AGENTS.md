@@ -230,6 +230,11 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   memory, to leave room in the 16K bank-4 image; see `docs/boot.md`
 - `src/ccp/miniccp.asm` — CCP with DIR, TYPE, ERA, REN, USER and HELP built in, plus `.COM` loading; built as `CCP.COM`
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
+- `src/tools/sysgen.asm` — `SYSGEN.COM`: reads the system from A: (track 0
+  via `DD_READ_SECTOR` and the three system files via the BDOS) into memory,
+  checks the target's geometry with `DD_LOGIN`, then writes the boot track
+  (`DD_WRITE`) and the files, reading every file back to verify it; the
+  buffers live in the TPA so the target may be the same drive
 - `src/tools/stat.asm` — `STAT.COM`: per-drive free space (F46) and capacity
   (F31/DPB), file sizes and attributes from directory searches (F17/F18),
   and `$R/O`/`$R/W`/`$SYS` attribute changes (F30)

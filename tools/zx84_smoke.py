@@ -1073,6 +1073,108 @@ class Smoke:
                 except OSError:
                     pass
 
+    def check_boot_track(self, expected: dict[int, str],
+                         drive: int = 0) -> None:
+        """Every sector of logical track 0 must match the source's."""
+        for sector, dump in expected.items():
+            now = self.mcp.call(
+                "sector_read", {"track": 0, "sector": sector, "side": 0,
+                                "drive": drive, "length": 512}
+            ).split("\n", 1)[1]
+            if now != dump:
+                raise SmokeError(
+                    f"boot track sector {sector} on drive {drive} does not "
+                    "match the system disc")
+
+    def run_sysgen(self) -> None:
+        """SYSGEN: a B: target and the same-drive A: swap.
+
+        Both targets must end up with the source's boot track (compared
+        sector by sector through the emulator) and all three system files,
+        which SYSGEN itself reads back from the target disc and compares
+        with the copy it still holds in memory ("Checking X... ok").  The
+        B: target is the distribution image, so the other files must still
+        be there afterwards.
+        """
+        src = ROOT / "build" / "sysgen-src.dsk"
+        dst = ROOT / "build" / "sysgen-dst.dsk"
+        shutil.copyfile(self.dsk, src)
+        shutil.copyfile(ROOT / "build" / "cpm3.dsk", dst)
+        old_dsk = self.dsk
+        self.dsk = src
+        try:
+            self.boot()
+
+            self.command("SYSGEN", 300)
+            self.expect("SYSGEN usage", "SYSGEN target:")
+            self.command("SYSGEN C:", 300)
+            self.expect("SYSGEN C: rejected", "SYSGEN target:")
+
+            # The source's boot track, for comparing the targets against.
+            boot = {}
+            for sector in range(1, 10):
+                boot[sector] = self.mcp.call(
+                    "sector_read", {"track": 0, "sector": sector, "side": 0,
+                                    "drive": 0, "length": 512}
+                ).split("\n", 1)[1]
+
+            # --- B: target: the distribution image, files must survive ---
+            self.log("SYSGEN B:")
+            self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            self.mcp.call("load", {"file": str(dst), "drive": "B"})
+            self.command("SYSGEN B:", 400)
+            self.wait_for(["The disc must be formatted"], frames=50,
+                          attempts=4)
+            self.key("enter", 300)
+            self.wait_for(["Done - the target disc is bootable."], frames=600,
+                          attempts=60)
+            self.expect("SYSGEN B:",
+                        "Source: SS, 40 tracks, 9 sectors.",
+                        "Writing the boot track...",
+                        "Writing CPM3.SYS... ok",
+                        "Checking CCP.COM... ok",
+                        "Done - the target disc is bootable.")
+            self.check_boot_track(boot, drive=1)
+            # Let the CCP take over again before typing the next command.
+            self.mcp.call("run", {"frames": 2000})
+            self.command("STAT B:CPM3.SYS", 800)
+            self.expect("SYSGEN CPM3.SYS", "CPM3.SYS", "16K", "1 file(s)")
+            self.command("STAT B:CCP.COM", 600)
+            self.expect("SYSGEN CCP.COM", "CCP.COM", "4K", "1 file(s)")
+            # The target was the distribution image: its own files survive.
+            self.command("STAT B:FORMAT.COM", 600)
+            self.expect("SYSGEN kept the other files",
+                        "FORMAT.COM", "1 file(s)")
+
+            # --- Same drive: the system is buffered, then the discs swap ---
+            self.log("SYSGEN A:")
+            self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            self.command("SYSGEN A:", 400)
+            self.wait_for(["The disc must be formatted"], frames=50,
+                          attempts=4)
+            self.key("enter", 300)
+            self.wait_for(["TARGET disc in A:"], frames=400, attempts=20)
+            self.mcp.call("eject", {"target": "disk", "drive": "A"})
+            self.mcp.call("load", {"file": str(dst), "drive": "A"})
+            self.key("enter", 300)
+            self.wait_for(["Done - the target disc is bootable."], frames=600,
+                          attempts=60)
+            self.expect("SYSGEN A:",
+                        "Checking CPM3.SYS... ok",
+                        "Checking CCP.COM... ok",
+                        "Done - the target disc is bootable.")
+            self.check_boot_track(boot, drive=0)
+            self.mcp.call("run", {"frames": 2000})
+            self.command("STAT CPM3.SYS", 600)
+            self.expect("SYSGEN A: CPM3.SYS", "CPM3.SYS", "16K")
+        finally:
+            self.dsk = old_dsk
+            for path in (src, dst):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+
     def run_bbcbasic(self) -> None:
         """BBC BASIC must start from the distribution image when it is on it.
 
@@ -1647,6 +1749,7 @@ class Smoke:
             self.run_xtetest_format()
             self.run_format()
             self.run_diskcopy()
+            self.run_sysgen()
         # The distribution image is a different file; this reboots into it.
         self.run_bbcbasic()
         self.check_fdc()

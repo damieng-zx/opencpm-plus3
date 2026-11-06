@@ -68,6 +68,14 @@ listing with sizes (`STAT *.TXT` reports `2 file(s)`), setting and clearing
 the R/O attribute (`$R/O` shows `R/O` in the listing, `$R/W` clears it), the
 wildcard refusal for attribute changes, and the usage text for a bad option.
 
+`SYSGEN` is checked twice.  With the distribution image in B:, `SYSGEN B:`
+must copy track 0 (every sector is compared byte for byte through
+`sector_read`) and the three system files, report `Checking ... ok` for
+each after reading it back, and leave the target's other files in place
+(`STAT B:FORMAT.COM`).  `SYSGEN A:` buffers the system, asks for the target
+disc in A:, and writes it after the swap; its boot track must match too.
+The usage paths (`SYSGEN`, `SYSGEN C:`) are checked first.
+
 `DISKCOPY` is then checked three times.  `DISKCOPY A: B:` copies the source
 onto a scratch copy of the *720K* image - a different layout - so the copy
 has to format every target track as it goes; a sample of sectors across the

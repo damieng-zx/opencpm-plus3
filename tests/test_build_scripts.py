@@ -63,7 +63,7 @@ UTILITIES = {
     "build/date.com", "build/showxdpb.com", "build/dump.com",
     "build/setdef.com", "build/submit.com", "build/screen.com",
     "build/set24x80.com", "build/format.com", "build/diskcopy.com",
-    "build/stat.com",
+    "build/stat.com", "build/sysgen.com",
 }
 
 

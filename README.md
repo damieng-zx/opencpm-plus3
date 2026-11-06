@@ -208,6 +208,15 @@ Also supported:
   can be a rotation of the source's cycle.  Every written track is then
   read back and compared with the data still in the buffer (DD_CHECK_SECTOR),
   so a write that silently failed is caught on the spot.
+- `SYSGEN` — make a formatted disc bootable: `SYSGEN B:` or `SYSGEN A:`. The
+  system is read from A: (track 0 — boot sector and stage-2 loader — plus
+  `CPM3.SYS`, `CPM3C.SYS` and `CCP.COM`) and buffered in memory, so the
+  target can be the same drive: SYSGEN then asks for the discs to be
+  swapped. The target's geometry is checked against the source's first;
+  only the boot track and the three system files are written, so other
+  files on the target are kept. Every written file is read back and
+  compared with the buffered copy (`Checking CPM3.SYS... ok`), and for the
+  same drive the boot track is written after the swap.
 
 ## Test programs
 

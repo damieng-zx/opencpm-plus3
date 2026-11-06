@@ -25,6 +25,7 @@ class DistributionImage(unittest.TestCase):
                        b"SUBMIT  COM", b"SCREEN  COM", b"SET24X80COM",
                        b"SETDEF  COM", b"DATE    COM", b"DUMP    COM",
                        b"FORMAT  COM", b"DISKCOPYCOM", b"STAT    COM",
+                       b"SYSGEN  COM",
                        b"SHOWXDPBCOM"):
             self.assertIn(wanted, names11)
 
