@@ -67,8 +67,9 @@ so sectors are read back through the FDC with `sector_read`.
 onto a scratch copy of the *720K* image - a different layout - so the copy
 has to format every target track as it goes; a sample of sectors across the
 disc (boot sector, directory, file data, last track) must match the source
-byte for byte, and the target track must end up with the source's 9-sector
-layout.  The usage errors for a missing argument and for `C:` are checked
+byte for byte, the target track must end up with the source's 9-sector
+layout, and the summary must report "Every track verified." (each written
+track is read back with DD_CHECK_SECTOR).  The usage errors for a missing argument and for `C:` are checked
 first.  `DISKCOPY A: A:` exercises the single-drive swapping: the 48K
 buffer takes ten tracks a pass, so the harness answers the "put the TARGET
 disc in A:" prompt by swapping the target image in and the "put the SOURCE

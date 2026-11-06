@@ -932,7 +932,8 @@ class Smoke:
             self.key("enter", 300)
             self.wait_for(["Copied 40 tracks."], frames=600, attempts=40)
             self.expect("DISKCOPY A->B",
-                        "Source: SS, 40 tracks, 9 sectors of 512 bytes.")
+                        "Source: SS, 40 tracks, 9 sectors of 512 bytes.",
+                        "Every track verified.")
             for track, sector in ((0, 1), (0, 5), (1, 1), (3, 4), (9, 9),
                                   (17, 2), (25, 7), (39, 9)):
                 a = self.mcp.call("sector_read", {
@@ -992,6 +993,7 @@ class Smoke:
                 self.mcp.call("load", {"file": str(src), "drive": "A"})
                 self.key("enter", 300)
             self.wait_for(["Copied 40 tracks."], frames=600, attempts=40)
+            self.expect("DISKCOPY A: A:", "Every track verified.")
 
             # --- Layout capture: copy a 10-sector HiForm disc ---
             self.log("FORMAT B: HiForm 203 (copy source)")
@@ -1010,6 +1012,7 @@ class Smoke:
                           frames=50, attempts=4)
             self.key("enter", 300)
             self.wait_for(["Copied 42 tracks."], frames=600, attempts=60)
+            self.expect("DISKCOPY B: A:", "Every track verified.")
             info = self.track_info(0, drive=0)
             if "Sectors: 10" not in info or "Gap3: 16" not in info:
                 raise SmokeError(

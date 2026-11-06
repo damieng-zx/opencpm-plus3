@@ -199,7 +199,9 @@ Also supported:
   first, using the source track's own ID layout (captured with repeated
   READ ID, so the interleave and skew are copied rather than re-chosen).
   The absolute rotational phase is not observable, so the target's ID order
-  can be a rotation of the source's cycle.  It does not verify yet.
+  can be a rotation of the source's cycle.  Every written track is then
+  read back and compared with the data still in the buffer (DD_CHECK_SECTOR),
+  so a write that silently failed is caught on the spot.
 
 ## Test programs
 
@@ -218,7 +220,8 @@ Also supported:
 
 ## Wishlist / TODO
 
-- **DISKCOPY verify pass** (read both discs back and compare).
+- **DISKCOPY: optional check of the source as well** (a full source-read
+  pass before the copy).
 - **FORMAT options** — no-verify, a bootable system layout and mapping bad
   sectors into a hidden file.
 - **VT-100/CSI parser** — in addition to the VT-52/ADM-3A sequences.

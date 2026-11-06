@@ -235,8 +235,8 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   `DD_READ_ID` captures each source track's ID order, then `DD_FORMAT` plus
   `DD_READ_SECTOR`/`DD_WRITE` copy track by track (formatting each target
   track just before its data, so the target needs no pre-format and the
-  interleave/skew are preserved); a 48K TPA buffer bridges the disc swaps
-  for a single drive
+  interleave/skew are preserved) and `DD_CHECK_SECTOR` reads every written
+  track back; a 48K TPA buffer bridges the disc swaps for a single drive
 - `src/tools/format.asm` — `FORMAT.COM`, the disc formatter (XBIOS `DD_L_XDPB`,
   `DD_FORMAT`, `DD_CHECK_SECTOR`, `DD_WRITE`): `FORMAT A:`/`FORMAT B:`;
   180K SS/40, 720K DS/80, CPC System, CPC Data, HiForm 203 (42T/10),

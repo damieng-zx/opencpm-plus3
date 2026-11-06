@@ -26,7 +26,13 @@
 ; is being read or written:
 ;
 ;    37%  Track 045 of 160  Side 0  READ
+;    37%  Track 045 of 160  Side 0  FORMAT
 ;    37%  Track 045 of 160  Side 0  WRITE
+;    37%  Track 045 of 160  Side 0  VERIFY
+;
+; Every target track is read back with DD_CHECK_SECTOR straight after it is
+; written, so a write that silently failed is caught while the data is still
+; in the buffer.
 ;
 ; Build: sjasmplus --raw=build/diskcopy.com src/tools/diskcopy.asm
 
@@ -45,6 +51,7 @@ USERF_OFFSET   equ 90           ; USERF = bios_visible + 3*30
 DD_INIT         equ 0x0080
 DD_READ_SECTOR  equ 0x0086
 DD_WRITE        equ 0x0089
+DD_CHECK_SECTOR equ 0x008C
 DD_FORMAT       equ 0x008F
 DD_LOGIN        equ 0x0092
 DD_READ_ID      equ 0x009B
@@ -309,6 +316,8 @@ start:
     call print_dec
     ld de, msg_done_tracks
     call pstr
+    ld de, msg_all_verified
+    call pstr
 
     ; Let the BDOS probe the drives again (the target changed).
     ld c, F_RESET
@@ -353,6 +362,8 @@ do_chunk:
 
     ; --- Write: format the target track as the source has it, then data ---
 .write_track:
+    ld hl, (buf_ptr)
+    ld (track_buf), hl
     ld de, st_format
     ld (status_ptr), de
     call progress
@@ -366,6 +377,15 @@ do_chunk:
     ld de, msg_write_fail
     ld (fail_msg), de
     call transfer_sectors
+    jr nc, .failed
+
+    ; Read the target track back and compare it with what we wrote.
+    ld de, st_verify
+    ld (status_ptr), de
+    call progress
+    ld de, msg_verify_fail
+    ld (fail_msg), de
+    call verify_track
     jr nc, .failed
 
 .next_track:
@@ -532,7 +552,66 @@ transfer_sectors:
     or a
     ret
 
-; report_track - error line, after the "Read/Format/Write error: track "
+; verify_track - read the target track back and compare it with the buffer
+;   In:       t_track, dst_unit, track_buf, sectors, psh
+;   Out:      carry set OK, or carry clear + A = error (0xFF = different)
+;   Clobbers: everything ; lint: ignore
+verify_track:
+    ld hl, (track_buf)
+    ld (cmp_ptr), hl
+    xor a
+    ld (s_idx), a
+.loop:
+    ; E = sector index << PSH
+    ld a, (s_idx)
+    ld b, a
+    ld a, (psh)
+    or a
+    jr z, .have_e
+    ld c, a
+    ld a, b
+.shift:
+    sla a
+    dec c
+    jr nz, .shift
+.have_e:
+    ld e, a
+
+    ld hl, DD_CHECK_SECTOR
+    ld (userf_dw), hl
+    ld a, (dst_unit)
+    ld c, a
+    ld a, (t_track)
+    ld d, a
+    ld b, 1                       ; CP/M bank 1 (TPA)
+    ld hl, (cmp_ptr)
+    ld ix, XDPB
+    call userf_call
+    jr nc, .error
+    jr nz, .different
+
+    ld hl, (cmp_ptr)
+    ld de, SECTOR_SIZE
+    add hl, de
+    ld (cmp_ptr), hl
+    ld a, (s_idx)
+    inc a
+    ld (s_idx), a
+    ld b, a
+    ld a, (sectors)
+    cp b
+    jr nz, .loop
+    scf
+    ret
+.error:
+    or a
+    ret
+.different:
+    ld a, 0xFF
+    or a
+    ret
+
+; report_track - error line, after the "Read/Format/Write/Verify error: track "
 ;   In:       t_track, cur_side, last_error
 ;   Clobbers: everything ; lint: ignore
 report_track:
@@ -557,6 +636,12 @@ report_track:
     call pstr
     jr .stop
 .not_wp:
+    cp 0xFF
+    jr nz, .damaged
+    ld de, msg_verify_mismatch
+    call pstr
+    jr .stop
+.damaged:
     ld de, msg_check_target
     call pstr
 .stop:
@@ -1055,6 +1140,8 @@ layout_ptr:    dw 0
 layout_fill:   dw 0
 fail_msg:      dw 0
 buf_ptr:       dw 0
+track_buf:     dw 0
+cmp_ptr:       dw 0
 status_ptr:    dw 0
 last_error:    db 0
 pd_h:          db 0
@@ -1066,11 +1153,13 @@ msg_crlf:      db 0x0D, 0x0A, '$'
 st_read:       db "READ  ", '$'
 st_format:     db "FORMAT", '$'
 st_write:      db "WRITE ", '$'
+st_verify:     db "VERIFY", '$'
 
 msg_title:     db "DISKCOPY ", '$'
 msg_arrow:     db " -> ", '$'
 msg_target_wiped:
-    db "The TARGET disc is reformatted and overwritten.", 0x0D, 0x0A, '$'
+    db "The TARGET disc is reformatted,", 0x0D, 0x0A
+    db "overwritten and checked.", 0x0D, 0x0A, '$'
 msg_geometry:  db 0x0D, 0x0A, "Source: ", '$'
 msg_ss:        db "SS, ", '$'
 msg_ds:        db "DS, ", '$'
@@ -1093,12 +1182,15 @@ msg_line_gap:     db "  ", '$'
 
 msg_done:         db 0x0A, "Copied ", '$'
 msg_done_tracks:  db " tracks.", 0x0D, 0x0A, '$'
+msg_all_verified: db "Every track verified.", 0x0D, 0x0A, '$'
 
 msg_read_fail:    db "Read error: track ", '$'
 msg_format_fail:  db "Format error: track ", '$'
 msg_write_fail:   db "Write error: track ", '$'
+msg_verify_fail:  db "Verify error: track ", '$'
 msg_side_line:    db " side ", '$'
 msg_write_protect: db " - the TARGET disc is write-protected.", 0x0D, 0x0A, '$'
+msg_verify_mismatch: db " - the data read back does not match.", 0x0D, 0x0A, '$'
 msg_check_target: db " - the TARGET disc may be damaged.", 0x0D, 0x0A, '$'
 
 msg_bad_geometry:
@@ -1111,4 +1203,4 @@ msg_usage:
     db "DISKCOPY source: target:", 0x0D, 0x0A
     db "  e.g. DISKCOPY A: B:", 0x0D, 0x0A
     db "  A: A: and B: B: work too - you swap the discs.", 0x0D, 0x0A
-    db "  The target is formatted as the copy goes.", 0x0D, 0x0A, '$'
+    db "  The target is formatted and verified as it is copied.", 0x0D, 0x0A, '$'
