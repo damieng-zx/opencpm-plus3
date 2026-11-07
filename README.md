@@ -290,8 +290,13 @@ python3 tools/zx84_smoke.py              # boot, system tests, CCP, terminal
 python3 tools/zx84_negative.py           # corrupted images must not boot
 python3 tools/zx84_dri.py                # DRI utilities (needs local copies)
 python3 tools/zx84_realworld.py          # the third-party packages
+python3 tools/screen_bench.py            # screen rendering, in T-states
 python3 -m unittest discover -s tests -t .
 ```
+
+The screen benchmark runs the same binary on this system and on Locomotive's
+CP/M Plus, and `--compare` tabulates the two; see
+[screen benchmark](docs/screen-benchmark.md).
 
 The smoke runner defaults to the test image; pass `--dsk build/cpm3.dsk` to
 boot the distribution image (that only makes sense with `--quick`).  When BBC
@@ -322,6 +327,7 @@ docs/       API reference, filesystem and compatibility documentation
 - [XBIOS/TE Interface](docs/cpm-plus-xbios.md)
 - [CP/M Software Compatibility](docs/compatibility.md)
 - [Real-world CP/M Suite](docs/realworld-suite.md)
+- [Screen Rendering Benchmark](docs/screen-benchmark.md)
 - [zx84 MCP Smoke Test](docs/mcp-smoke-test.md)
 - [Third-party Application Tests](docs/third-party-tests.md)
 - [CI with zx84](docs/ci.md)

@@ -65,6 +65,9 @@ UTILITIES = {
     "build/set24x80.com", "build/format.com", "build/diskcopy.com",
     "build/stat.com", "build/sysgen.com",
 }
+# Built for the benchmark (it runs on Locomotive's disk too) but only shipped
+# on the test image, like the other test programs.
+BENCHMARK = {"build/screenbm.com"}
 
 
 class BuildScripts(unittest.TestCase):
@@ -102,6 +105,13 @@ class BuildScripts(unittest.TestCase):
             self.assertTrue(dist <= test, name)
             self.assertTrue(TEST_PROGRAMS <= test, name)
             self.assertTrue(TEST_FIXTURES <= test, name)
+
+    def test_the_benchmark_ships_with_the_tests_only(self):
+        for name, text in (("build.cmd", self.cmd), ("build.sh", self.sh)):
+            self.assertFalse(disk_files(text) & BENCHMARK, name)
+            self.assertTrue(BENCHMARK <= disk_files(
+                text, "cpm3-test.dsk", "cpm3_720.dsk"), name)
+            self.assertIn("build/screenbm.com", assembled_programs(text), name)
 
     def test_both_split_the_system_image(self):
         for name, text in (("build.cmd", self.cmd), ("build.sh", self.sh)):

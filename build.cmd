@@ -74,6 +74,11 @@ if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\chaintest.com src\test\chaintest.asm
 if errorlevel 1 goto :fail
 
+:: SCREENBM is the screen benchmark; tools/screen_bench.py reads the phase
+:: addresses from its listing, so the --lst is not optional.
+%SJASMPLUS% --raw=build\screenbm.com --lst=build\screenbm.lst src\test\screenbm.asm
+if errorlevel 1 goto :fail
+
 echo   Assembling utilities...
 %SJASMPLUS% --raw=build\date.com build\zpa\date.asm
 if errorlevel 1 goto :fail
@@ -126,7 +131,7 @@ goto collect_extra_files
 python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
-python3 tools\mkdsk.py create build\cpm3-test.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com build\biostest.com build\chaintest.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3-test.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com build\biostest.com build\chaintest.com build\screenbm.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 python3 tools\mkdsk.py create build\cpm3_720.dsk --format 720k --add src\test\hello16.txt

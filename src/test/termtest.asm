@@ -7,6 +7,7 @@
 ;   * status:   ESC 0/1 (TE_STL_ASK + the 23-row viewport) and the
 ;               23-row scroll path
 ;   * wrapping: ESC v/w
+;   * control:  BS (non-destructive cursor motion)
 ;   * erasing:  ESC E/J/K/d/l/o
 ;   * editing:  ESC L/M/N and ESC I (reverse index)
 ;   * 24x80:    ESC x/y, TE_ASK width 80, LG_BUF writes, auto-flip and the
@@ -65,6 +66,7 @@ start:
     ldir
 
     ; Known state: page mode off, status line off, 51 columns, auto-flip on.
+    ; ESC 5 0 turns auto-flip ON (the +3 manual's polarity), 1 turns it off.
     ld a, '4'
     ld b, '0'
     call esc_1p
@@ -74,7 +76,7 @@ start:
     ld b, '1'
     call esc_1p
     ld a, '5'
-    ld b, '1'
+    ld b, '0'
     call esc_1p
 
     call t_cursor_y
@@ -85,6 +87,7 @@ start:
     call t_page_mode
     call t_status_line
     call t_wrap
+    call t_backspace
     call t_clear
     call t_erase_j
     call t_erase_k
@@ -333,6 +336,84 @@ t_wrap:
     ld b, '1'
     call esc_1p
     ld de, n_wrap
+    jp pass_
+
+; ---- BS: cursor motion only, it must not erase ----
+;
+; CP/M Plus BS is a pure cursor move.  DISCKIT draws box edges right to
+; left as "corner, BS, BS, dash, BS, BS, dash" and a destructive BS eats the
+; glyphs it just wrote; that is what truncated the DISCKIT menu's boxes.
+t_backspace:
+    ld de, n_bs
+    ld (v_name), de
+    call clear_screen
+
+    ; 1. "ABCDE" then two backspaces leaves ABCDE in the buffer.
+    ld d, 3
+    ld e, 5
+    call set_cur
+    ld de, s_abcde
+    call pstr
+    call bs
+    call bs
+    ld d, 3
+    ld e, 5
+    ld c, 'A'
+    call expect_cell
+    ld d, 3
+    ld e, 6
+    ld c, 'B'
+    call expect_cell
+    ld d, 3
+    ld e, 7
+    ld c, 'C'
+    call expect_cell
+    ld d, 3
+    ld e, 8
+    ld c, 'D'
+    call expect_cell
+    ld d, 3
+    ld e, 9
+    ld c, 'E'
+    call expect_cell
+    ; ...and the cursor did move back two columns (5 chars from col 5 leave
+    ; the cursor at col 10; two backspaces put it at col 8).
+    ld d, 3
+    ld e, 8
+    call expect_cur
+
+    ; 2. Overwriting after the backspaces still works (the classic
+    ;    "BS BS XY" case): the two characters are replaced in place.
+    ld d, 6
+    ld e, 5
+    call set_cur
+    ld de, s_abcde
+    call pstr
+    call bs
+    call bs
+    ld de, s_xy
+    call pstr
+    ld d, 6
+    ld e, 5
+    ld c, 'A'
+    call expect_cell
+    ld d, 6
+    ld e, 6
+    ld c, 'B'
+    call expect_cell
+    ld d, 6
+    ld e, 7
+    ld c, 'C'
+    call expect_cell
+    ld d, 6
+    ld e, 8
+    ld c, 'X'
+    call expect_cell
+    ld d, 6
+    ld e, 9
+    ld c, 'Y'
+    call expect_cell
+    ld de, n_bs
     jp pass_
 
 ; ---- ESC E: clear the viewport, cursor unchanged ----
@@ -779,6 +860,33 @@ t_m80:
     ld d, 0
     ld e, 0
     call expect_cur
+    ; ESC 5 1 disables auto-flip (the +3 manual's polarity, shared with
+    ; Locomotive).  The window is on page 0 here; with paging off, moving the
+    ; cursor out to column 60 must leave it there.
+    ld a, '5'
+    ld b, '1'
+    call esc_1p
+    ld a, 0
+    call expect_off
+    ld d, 0
+    ld e, 60
+    call set_cur
+    ld a, 0
+    call expect_off
+    ; ESC 5 0 enables it again; the next out-of-window move must page right.
+    ld a, '5'
+    ld b, '0'
+    call esc_1p
+    ld d, 0
+    ld e, 60
+    call set_cur
+    ld a, 29
+    call expect_off
+    ld d, 0
+    ld e, 0
+    call set_cur
+    ld a, 0
+    call expect_off
     ld a, 'y'
     call esc_cmd
     ld a, 51
@@ -914,6 +1022,11 @@ set_cur:
     call cout
     ld a, e
     add a, 0x20
+    jp cout
+
+; bs - send a backspace via BDOS CONOUT
+bs:
+    ld a, 0x08
     jp cout
 
 ; esc_cmd - send ESC followed by the command in A
@@ -1266,6 +1379,7 @@ n_width:    db "WIDTH", 0
 n_page:     db "PAGE", 0
 n_stl:      db "STL", 0
 n_wrap:     db "WRAP", 0
+n_bs:       db "BS", 0
 n_clr:      db "CLR", 0
 n_eraj:     db "ERAJ", 0
 n_erak:     db "ERAK", 0
@@ -1282,6 +1396,8 @@ n_m80:      db "24x80", 0
 s_ok_line:   db "..OK", CR, LF, "$"
 s_fail_line: db "..FAIL", CR, LF, "$"
 s_abc:       db "ABC$"
+s_abcde:     db "ABCDE$"
+s_xy:        db "XY$"
 s_vis32:     db "VIS32", CR, LF, "$"
 s_vis51:     db "VIS51", CR, LF, "$"
 s_ok:        db "TERMTEST..OK", '$'
