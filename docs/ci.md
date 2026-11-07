@@ -29,6 +29,7 @@ needs the checkout, `npm ci`, and a writable ROM cache.
 2. **emulator-test** — checks out zx84 into `zx84/`, runs `npm ci`, caches
    `zx84/mcp/.cache`, builds the DSK, then runs:
    - `python3 tools/zx84_smoke.py --zx84 zx84`
+   - `python3 tools/zx84_ansi.py --zx84 zx84`
    - `python3 tools/zx84_negative.py --zx84 zx84`
 
 `tools/install-sjasmplus.sh` clones the pinned `v1.21.0` tag into
@@ -57,6 +58,7 @@ The zx84 checkout uses the current repository name,
 SJASMPLUS=$(tools/install-sjasmplus.sh) ./build.sh
 python3 -m unittest discover -s tests -t .
 python3 tools/zx84_smoke.py --zx84 ../zx84
+python3 tools/zx84_ansi.py --zx84 ../zx84
 python3 tools/zx84_negative.py --zx84 ../zx84
 ```
 
