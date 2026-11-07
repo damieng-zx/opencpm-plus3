@@ -40,9 +40,11 @@ class RealWorldManifestTests(unittest.TestCase):
                 self.assertTrue(pkg["id"])
                 self.assertTrue(pkg["title"])
                 self.assertTrue(pkg["url"].startswith(("http://", "https://")))
-                self.assertIn(pkg.get("archive", "zip"), ("zip", "file"))
+                self.assertIn(pkg.get("archive", "zip"),
+                              ("zip", "file", "dsk"))
                 self.assertTrue(pkg["command"])
-                if pkg.get("archive", "zip") == "zip":
+                archive = pkg.get("archive", "zip")
+                if archive in ("zip", "dsk"):
                     self.assertTrue(pkg.get("members"))
                 else:
                     self.assertTrue(pkg.get("save_as"))

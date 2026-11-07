@@ -102,9 +102,9 @@ SETDEF search path.
 ## Compatibility
 
 The system boots from a standard 40-track +3 DSK and runs real CP/M 3 software.
-It has been exercised end to end with 24 third-party packages — interpreters,
-compilers, assemblers, debuggers, screen editors and databases — plus the DRI
-CP/M 3 utilities, all downloaded, booted and driven under the zx84 MCP
+It has been exercised end to end with 34 third-party packages — interpreters,
+compilers, assemblers, debuggers, screen editors, databases and games — plus
+the DRI CP/M 3 utilities, all downloaded, booted and driven under the zx84 MCP
 emulator.
 
 - **Compilers and toolchains** — M80/L80, FORTRAN-80, BASIC Compiler, Aztec C,
@@ -112,16 +112,21 @@ emulator.
 - **Applications** — Zork I-III, dBASE II, SuperCalc, Multiplan, WordStar,
   WordMaster, VEDIT Plus, Turbo Pascal and BASIC-80 work; the large data files,
   overlays and random FCB I/O they use are the interesting part.
+- **Games** — Pac-Man 95, STAR, Hunt, Ladder, Othello and Colossal Cave run,
+  which covers dense full-screen redraws and keyboard input at play speed.
+- **Interactive fiction** — Hitchhiker's Guide, Planetfall and Starcross run
+  from their Infocom CP/M disks, streaming large `.DAT` files as they play.
 - **DRI utilities** — ED, SET, SETKEYS and SHOW, including GENCOM files with a
   COM header.
 - **Disk formats** — +3/CPC 8-bit blocks, the CP/M 3 16-bit block format (DSM >
   255) and PCW 720K images, with `SHOWXDPB` reporting the probed geometry.
 
 The known gaps are documented rather than hidden: 3CLCK's clock FID needs a
-generic +3 FID loader, BDS C's compiler exits with a hang, and VT-100 escapes
-(SuperCalc2) are still printed literally.  WordStar, Turbo Pascal, SuperCalc2
-and Multiplan need the [24x80 screen](#screen-modes) or, for Turbo Pascal,
-`SCREEN 64` after a TINST 64-column install.
+generic +3 FID loader, BDS C's compiler exits with a hang, Sargon fails a
+copy-protection check on the boot track, and VT-100 escapes (SuperCalc2) are
+still printed literally.  WordStar, Turbo Pascal, SuperCalc2 and Multiplan
+need the [24x80 screen](#screen-modes) or, for Turbo Pascal, `SCREEN 64` after
+a TINST 64-column install.
 
 Per-package results, the exact checks run and why the failures fail are in the
 [compatibility tables](docs/compatibility.md); the harness is described in the

@@ -118,33 +118,123 @@ class DSKImage:
         self.set_boot_sector(bytes(spec))
 
     def load(self, path):
-        """Load an existing CPCEMU DSK image into self.tracks."""
+        """Load a CPCEMU DSK image into self.tracks.
+
+        Handles both the plain ("MV - CPCEMU Disk-File") container and the
+        extended one ("EXTENDED CPC DSK File"), which stores a per-track size
+        table and allows tracks to carry a different sector size.  Sectors are
+        reordered by their recorded ID, which is what CP/M's block numbering
+        assumes.
+        """
         with open(path, "rb") as f:
             data = f.read()
-        if not data.startswith(b"MV - CPCEMU Disk-File"):
+
+        extended = data.startswith(b"EXTENDED CPC DSK")
+        if not extended and not data.startswith(b"MV - CPCEMU Disk-File"):
             raise ValueError(f"{path}: not a CPCEMU DSK image")
 
         cylinders = data[0x30]
         sides = data[0x31] or 1
         self.set_format(format_for_geometry(cylinders, sides))
+        self.reserved = self._detect_reserved_tracks(data, cylinders, sides)
+        self.dir_entries = (self.dir_blocks * self.block_size) // DIR_ENTRY_SIZE
 
         logical = cylinders * sides
+        track_sizes = data[0x34:0x34 + 204] if extended else None
         off = 0x100
         for t in range(logical):
             header = data[off:off + TRACK_HEADER_SIZE]
             if not header.startswith(b"Track-Info"):
                 raise ValueError(f"{path}: bad track header at track {t}")
-            sectors = header[0x15] or self.sectors
-            off += TRACK_HEADER_SIZE
-            if off + sectors * self.sector_size > len(data):
-                raise ValueError(f"{path}: truncated DSK image")
-            track = []
+            sectors = header[0x15]
+            sector_size = 128 << header[0x14]
+            entries = []
+            base = off + TRACK_HEADER_SIZE
             for s in range(sectors):
-                start = off + s * self.sector_size
-                track.append(bytearray(data[start:start + self.sector_size]))
-            self.tracks[t] = track
-            off += sectors * self.sector_size
+                sid = header[0x18 + s * 8 + 2]
+                start = base + s * sector_size
+                entries.append((sid, bytearray(data[start:start + sector_size])))
+            entries.sort(key=lambda e: e[0])
+            self.tracks[t] = [e[1] for e in entries]
+            if extended:
+                off += track_sizes[t] * 256
+            else:
+                off += TRACK_HEADER_SIZE + sectors * sector_size
         return self
+
+    def _detect_reserved_tracks(self, data, cylinders, sides):
+        """Guess the reserved track count from where the directory lives.
+
+        Bootable system disks reserve track 0 (or more); data-only disks have
+        their directory at track 0.  A blank disk is all 0xE5 filler, which
+        looks like a free directory anywhere, so candidates are scored by the
+        number of *used* entries and ties go to the format's own default.
+        """
+        try:
+            extended = data.startswith(b"EXTENDED CPC DSK")
+            track_sizes = data[0x34:0x34 + 204] if extended else None
+            off = 0x100
+            starts = []
+            for t in range(cylinders * sides):
+                starts.append(off)
+                header = data[off:off + TRACK_HEADER_SIZE]
+                sectors = header[0x15]
+                sector_size = 128 << header[0x14]
+                if extended:
+                    off += track_sizes[t] * 256
+                else:
+                    off += TRACK_HEADER_SIZE + sectors * sector_size
+            best = self.reserved
+            best_score = -1
+            for reserved in (0, 1, 2, 3):
+                if reserved >= len(starts):
+                    continue
+                score = self._dir_score(data, starts[reserved])
+                if score is None:
+                    continue
+                # Prefer real entries; on a tie keep the format's default.
+                weighted = score * 10 + (1 if reserved == self.reserved else 0)
+                if weighted > best_score:
+                    best, best_score = reserved, weighted
+            return best
+        except (IndexError, ValueError):
+            pass
+        return self.reserved
+
+    @classmethod
+    def _dir_score(cls, data, track_off):
+        """Count used directory entries at track_off, or None if implausible."""
+        header = data[track_off:track_off + TRACK_HEADER_SIZE]
+        if not header.startswith(b"Track-Info"):
+            return None
+        sectors = header[0x15]
+        sector_size = 128 << header[0x14]
+        entries = []
+        base = track_off + TRACK_HEADER_SIZE
+        for s in range(sectors):
+            sid = header[0x18 + s * 8 + 2]
+            entries.append((sid, data[base + s * sector_size:
+                                    base + (s + 1) * sector_size]))
+        entries.sort(key=lambda e: e[0])
+        blob = b"".join(e[1] for e in entries)
+        good = free = 0
+        for i in range(0, min(len(blob), 2048), DIR_ENTRY_SIZE):
+            entry = blob[i:i + DIR_ENTRY_SIZE]
+            if len(entry) < DIR_ENTRY_SIZE:
+                break
+            if entry[0] == 0xE5:
+                free += 1
+                continue
+            if entry[0] > 31:
+                return None
+            name = entry[1:9]
+            ext = entry[9:12]
+            if not all(0x20 <= (b & 0x7F) < 0x7F for b in name + ext):
+                return None
+            good += 1
+        if good + free < 8:
+            return None
+        return good
 
     # --- Record/directory addressing ------------------------------------
 
@@ -333,6 +423,59 @@ class DSKImage:
             extent_num += 1
         return True
 
+    # --- Reading files back out -----------------------------------------
+
+    def list_files(self):
+        """Return [(name.ext, size_bytes, user)] for the live directory."""
+        found = {}
+        for i in range(self.dir_entries):
+            entry = self._read_dir_entry(i)
+            if entry[0] == 0xE5:
+                continue
+            user = entry[0]
+            name = bytes(b & 0x7F for b in entry[1:9]).decode(
+                'ascii', 'replace').rstrip()
+            ext = bytes(b & 0x7F for b in entry[9:12]).decode(
+                'ascii', 'replace').rstrip()
+            key = (user, f"{name}.{ext}" if ext else name)
+            records = found.get(key, 0)
+            blocks = len(self._entry_blocks(entry))
+            records += blocks * (self.block_size // 128)
+            found[key] = records
+        return [(label, records * 128, user)
+                for (user, label), records in sorted(found.items(),
+                                                     key=lambda kv: kv[0][1])]
+
+    def read_cpm_file(self, filename, user=None):
+        """Reassemble a CP/M file from its directory extents.
+
+        CP/M records no byte length, so the result is always a whole number of
+        128-byte records; callers that need the exact length know it from the
+        source archive.
+        """
+        want = filename.upper().strip()
+        name, ext = self._parse_cpm_filename(want)
+        wanted = name + ext
+        data = bytearray()
+        matched = False
+        records_per_block = self.block_size // 128
+        for i in range(self.dir_entries):
+            entry = self._read_dir_entry(i)
+            if entry[0] == 0xE5:
+                continue
+            if user is not None and entry[0] != user:
+                continue
+            if bytes(b & 0x7F for b in entry[1:12]) != wanted:
+                continue
+            matched = True
+            for block_num in self._entry_blocks(entry):
+                base = block_num * records_per_block
+                for r in range(records_per_block):
+                    data.extend(self._read_record(base + r))
+        if not matched:
+            raise KeyError(f"{filename} is not in the directory")
+        return bytes(data)
+
     # --- DSK container --------------------------------------------------
 
     def save(self, path):
@@ -385,7 +528,6 @@ class DSKImage:
             if entry[0] != 0xE5:
                 fname = entry[1:12].decode('ascii', errors='replace').strip()
                 files.add(fname)
-
         total_kb = (self.cylinders * self.sides * self.sectors *
                     self.sector_size) // 1024
         free_kb = free_blocks * self.block_size // 1024
@@ -452,6 +594,24 @@ def cmd_add(args):
     print(f"Written: {args.image}")
 
 
+def cmd_extract(args):
+    """List or extract CP/M files from a DSK image."""
+    dsk = DSKImage().load(args.image)
+    listing = dsk.list_files()
+    if not args.names:
+        for label, size, user in listing:
+            print(f"  {label:<14} {size:>7} bytes  user {user}")
+        return
+    out_dir = args.output or "."
+    os.makedirs(out_dir, exist_ok=True)
+    for name in args.names:
+        data = dsk.read_cpm_file(name)
+        dest = os.path.join(out_dir, os.path.basename(name).upper())
+        with open(dest, 'wb') as f:
+            f.write(data)
+        print(f"Extracted {name} ({len(data)} bytes) to {dest}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Create Spectrum +3 / PCW CP/M 3.1 DSK disk images')
@@ -476,6 +636,13 @@ def main():
     ap.add_argument('files', nargs='+', metavar='FILE',
                     help='CP/M files to add')
 
+    ep = sub.add_parser('extract',
+                        help='List or extract CP/M files from a DSK image')
+    ep.add_argument('image', help='Input .dsk filename')
+    ep.add_argument('names', nargs='*', metavar='FILE',
+                    help='CP/M files to extract (omit to list)')
+    ep.add_argument('--output', '-o', help='Output directory')
+
     args = parser.parse_args()
 
     if args.command == 'create':
@@ -484,6 +651,8 @@ def main():
         cmd_add(args)
     elif args.command == 'info':
         DSKImage().load(args.input).info()
+    elif args.command == 'extract':
+        cmd_extract(args)
     else:
         parser.print_help()
         sys.exit(1)

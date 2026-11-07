@@ -647,6 +647,320 @@
       "notes": "Infocom Zork III: paged intro (one More prompt), large .DAT reads, save-file write and directory listing."
     },
     {
+      "id": "pacman95",
+      "title": "Pac-Man 95",
+      "url": "http://www.retroarchive.org/cpm/games/manygame.zip",
+      "archive": "zip",
+      "members": [
+        "GAMES/PACMAN95.COM"
+      ],
+      "command": "PACMAN95",
+      "expect": [
+        "Wait a few seconds, and type a CR:"
+      ],
+      "frames": 2500,
+      "steps": [
+        {
+          "key": "enter",
+          "frames": 2500,
+          "expect": [
+            "to move left",
+            "normal game"
+          ]
+        },
+        {
+          "text": "1",
+          "frames": 3500,
+          "expect": [
+            "SCORE:"
+          ]
+        }
+      ],
+      "notes": "Arcade game: draws an 80x24 maze directly into the screen buffer with direct BIOS console output, so it exercises the 51-column text path and the keyboard at a realistic rate."
+    },
+    {
+      "id": "star",
+      "title": "STAR (Star Trek)",
+      "url": "http://www.retroarchive.org/cpm/games/manygame.zip",
+      "archive": "zip",
+      "members": [
+        "GAMES/STAR.COM"
+      ],
+      "command": "STAR",
+      "expect": [
+        "HOW MANY MISSIONS HAVE YOU COMMANDED?"
+      ],
+      "frames": 2500,
+      "steps": [
+        {
+          "text": "0",
+          "frames": 2500,
+          "expect": [
+            "S T A R   T R E K",
+            "ENTER YOUR NAME"
+          ]
+        },
+        {
+          "text": "KIRK",
+          "frames": 3000,
+          "expect": [
+            "DO YOU WISH A LIST OF THE POSSIBLE COMMANDS"
+          ]
+        }
+      ],
+      "notes": "Star Trek strategy game. Long multi-line console output and a name prompt, so it covers wrapped text and interactive line input."
+    },
+    {
+      "id": "hunt",
+      "title": "Hunt",
+      "url": "http://www.retroarchive.org/cpm/games/manygame.zip",
+      "archive": "zip",
+      "members": [
+        "GAMES/HUNT.COM"
+      ],
+      "command": "HUNT",
+      "expect": [
+        "THREE DIGIT RANDOM NUMBER"
+      ],
+      "frames": 2500,
+      "steps": [
+        {
+          "text": "123",
+          "frames": 2500,
+          "expect": [
+            "WHAT DO YOU WISH TO BUY",
+            "GOLD PIECES"
+          ]
+        },
+        {
+          "text": "Z",
+          "frames": 3000,
+          "expect": [
+            "7-11 ABOVE"
+          ]
+        }
+      ],
+      "notes": "Dungeon game with a shop screen and a maze drawn from block characters. The random-number prompt makes the opening deterministic; the maze covers dense full-screen redraws."
+    },
+    {
+      "id": "ladder",
+      "title": "Ladder",
+      "url": "http://www.retroarchive.org/cpm/misc/LADDER.ZIP",
+      "archive": "zip",
+      "members": [
+        "LADDER.COM",
+        "LADDER.DAT"
+      ],
+      "command": "LADDER",
+      "expect": [
+        "Enter one of the above",
+        "Yahoo Software"
+      ],
+      "frames": 4000,
+      "steps": [
+        {
+          "wait": true,
+          "frames": 1000
+        },
+        {
+          "text": "P",
+          "frames": 3500,
+          "expect": [
+            "Level",
+            "Score"
+          ]
+        }
+      ],
+      "notes": "Platform game with a high-score menu and a live status line. Needs its .DAT data file alongside the .COM."
+    },
+    {
+      "id": "othello",
+      "title": "Othello",
+      "url": "http://www.retroarchive.org/cpm/games/manygame.zip",
+      "archive": "zip",
+      "members": [
+        "GAMES&~6/D1/OTHELLO.COM"
+      ],
+      "command": "OTHELLO",
+      "expect": [
+        "Press RETURN to continue."
+      ],
+      "frames": 3000,
+      "steps": [
+        {
+          "key": "enter",
+          "frames": 2500,
+          "expect": [
+            "DO YOU WISH TO GO FIRST ?"
+          ]
+        }
+      ],
+      "notes": "Board game, compiled from FORTRAN; the paged prompt exercises the console wait-for-key path."
+    },
+    {
+      "id": "sargon",
+      "title": "Sargon (chess)",
+      "url": "http://www.retroarchive.org/cpm/games/sargon.zip",
+      "archive": "file",
+      "save_as": "SARGON.COM",
+      "command": "SARGON",
+      "expect": [
+        "HAYDEN BOOK"
+      ],
+      "frames": 4000,
+      "known_issue": "This Sargon build is copy-protected: it issues raw uPD765 READ DATA commands against the boot track (reads of C=1 R=1..N on port 2FFD) and loops forever waiting for the original disk's sector IDs. Our FDC returns the real disk, so nothing is drawn and the program never reaches its title screen.",
+      "notes": "Chess engine that fails its media check; kept to document the copy-protection case rather than as a working title."
+    },
+    {
+      "id": "advent",
+      "title": "Colossal Cave Adventure (A02)",
+      "url": "https://ifarchive.org/if-archive/games/cpm/cpm-advent.zip",
+      "archive": "zip",
+      "members": [
+        "adv-A02/ad.com",
+        "adv-A02/adventur.msg",
+        "adv-A02/atab.dat",
+        "adv-A02/common.dat",
+        "adv-A02/ktab.dat",
+        "adv-A02/ltext.dat",
+        "adv-A02/rtext.dat",
+        "adv-A02/stext.dat",
+        "adv-A02/travel.dat"
+      ],
+      "command": "AD",
+      "expect": [
+        "Type 3 digits, please."
+      ],
+      "frames": 4000,
+      "steps": [
+        {
+          "text": "123",
+          "frames": 2500,
+          "expect": [
+            "You are following a wide path around the outer edge"
+          ]
+        },
+        {
+          "text": "n",
+          "frames": 2500,
+          "expect": [
+            "You are standing at the end of a road"
+          ]
+        },
+        {
+          "text": "s",
+          "frames": 2500,
+          "expect": [
+            "valley in the forest beside a stream"
+          ]
+        }
+      ],
+      "notes": "Mike Goetz's CP/M port of Crowther and Woods' Colossal Cave. The game takes a 3-digit seed before play; the output is wrapped to the 51-column screen and the message/vocabulary files are read from disk as the player moves, so it exercises repeated small file reads."
+    },
+    {
+      "id": "hitchhiker",
+      "title": "The Hitchhiker's Guide to the Galaxy",
+      "url": "https://archive.org/download/Hitchhikers_Guide_to_the_Galaxy_The_1984_Infocom_cpm_version/Hitchhikers_Guide_to_the_Galaxy_The_1984_Infocom_cpm_version.dsk",
+      "archive": "dsk",
+      "members": [
+        "HITCHHIK.COM",
+        "HITC128.COM",
+        "HITCHHIK.DAT"
+      ],
+      "command": "HITC128",
+      "expect": [
+        "THE HITCHHIKER'S GUIDE TO THE GALAXY",
+        "Infocom interactive fiction"
+      ],
+      "frames": 5000,
+      "steps": [
+        {
+          "text": "inventory",
+          "frames": 2500,
+          "expect": [
+            "a splitting headache",
+            "no tea"
+          ]
+        },
+        {
+          "text": "look",
+          "frames": 2500,
+          "expect": [
+            "It is pitch black."
+          ]
+        }
+      ],
+      "notes": "Infocom's Hitchhiker's Guide (Douglas Adams and Steve Meretzky). HITCHHIK.COM is a stub that picks HITC64/HITC128/HITC256 for the TPA size; the suite runs the 128K build. The 113K .DAT is streamed from disk as the game runs, so it exercises repeated small random reads."
+    },
+    {
+      "id": "planetfall",
+      "title": "Planetfall",
+      "url": "https://archive.org/download/Planetfall_1983_Infocom_cpm_version/Planetfall_1983_Infocom_cpm_version.dsk",
+      "archive": "dsk",
+      "members": [
+        "PLANET.COM",
+        "PLAN128.COM",
+        "PLANETFA.DAT"
+      ],
+      "command": "PLAN128",
+      "expect": [
+        "PLANETFALL is a trademark of Infocom",
+        "Deck Nine"
+      ],
+      "frames": 5000,
+      "steps": [
+        {
+          "text": "look",
+          "frames": 2500,
+          "expect": [
+            "featureless corridor"
+          ]
+        },
+        {
+          "text": "inventory",
+          "frames": 2500,
+          "expect": [
+            "You are carrying:",
+            "Patrol uniform"
+          ]
+        }
+      ],
+      "notes": "Infocom's Planetfall. PLANET.COM is the TPA-size stub; the suite runs PLAN128.COM. The opening screen is several screens of setup text, which covers scrolling and the status line."
+    },
+    {
+      "id": "starcross",
+      "title": "Starcross",
+      "url": "https://archive.org/download/Starcross_1982_Infocom_cpm_version/Starcross_1982_Infocom_cpm_version.dsk",
+      "archive": "dsk",
+      "members": [
+        "STARCROS.COM",
+        "STARCROS.DAT"
+      ],
+      "command": "STARCROS",
+      "expect": [
+        "STARCROSS",
+        "Infocom"
+      ],
+      "frames": 5000,
+      "steps": [
+        {
+          "text": "look",
+          "frames": 2500,
+          "expect": [
+            "Living Quarters"
+          ]
+        },
+        {
+          "text": "inventory",
+          "frames": 2500,
+          "expect": [
+            "You are empty handed."
+          ]
+        }
+      ],
+      "notes": "Infocom's Starcross, a two-file build (no TPA-size stub). Exercises the game's own status line, which updates on every turn."
+    },
+    {
       "id": "wordmaster",
       "title": "MicroPro WordMaster 1.07A",
       "url": "http://www.retroarchive.org/cpm/text/Wrdmastr.zip",

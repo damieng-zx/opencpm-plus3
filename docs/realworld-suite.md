@@ -77,6 +77,16 @@ separate, explicitly triggered workflow.
 | `zork3` | Zork III | Paged intro, large `.DAT`, save-file write | Pass |
 | `wordmaster` | MicroPro WordMaster 1.07A | Full-screen edit, BREAK/ESC, save, TYPE | Pass |
 | `supercalc1` | SuperCalc 1.05 | Spreadsheet start, cell entry, quit | Pass |
+| `pacman95` | Pac-Man 95 | Arcade maze redraw, keyboard at speed | Pass |
+| `star` | STAR (Star Trek) | Long wrapped console output, name prompt | Pass |
+| `hunt` | Hunt | Shop screen, maze redraw | Pass |
+| `ladder` | Ladder | High-score menu, live status line, `.DAT` file | Pass |
+| `othello` | Othello | Paged prompt, FORTRAN-built board game | Pass |
+| `sargon` | Sargon (chess) | Copy-protected; raw boot-track reads spin forever | Known issue |
+| `advent` | Colossal Cave Adventure (A02) | 3-digit seed, movement, on-disk message files | Pass |
+| `hitchhiker` | The Hitchhiker's Guide to the Galaxy | 113K `.DAT` streamed as the game runs | Pass |
+| `planetfall` | Planetfall | Multi-screen intro, status line | Pass |
+| `starcross` | Starcross | Game's own status line updates every turn | Pass |
 
 Notes on individual packages (the display caveats are recorded known
 issues; the others are history):
@@ -155,6 +165,29 @@ issues; the others are history):
   enters `010180` so the screen is deterministic, then checks `2+2` and a
   vector sum in the 30 KB workspace.
 
+- **Pac-Man 95** waits for a CR, then a game-mode digit (1-4); it draws an
+  arcade maze straight into the screen buffer and reads the keyboard at speed,
+  which exercises the console path under load.
+- **STAR**, **Hunt**, **Ladder** and **Othello** are scripted through their
+  first screen only, so the checks stay deterministic: a random-number prompt
+  (Hunt), a randomised starship name (STAR), a menu and status line (Ladder)
+  and a paged prompt (Othello).  Ladder needs one settle step after its menu
+  appears, otherwise the `P` keypress arrives before the program reads input.
+- **Sargon** is copy-protected.  It issues raw uPD765 `READ DATA` commands
+  against the boot track (C=1, R=1..N, polled on port `2FFD`) and loops forever
+  waiting for the original disk's sector IDs, so it never draws its title.
+
+- **Colossal Cave Adventure** (Mike Goetz's CP/M port of Crowther and Woods)
+  takes a 3-digit seed before play; the harness enters `123`.  Its parser only
+  accepts short forms (`n`, `s`, not `north`/`south`) and its output is wrapped
+  to whatever screen width is current.
+- **Hitchhiker's**, **Planetfall** and **Starcross** are Infocom's CP/M builds,
+  taken from archive.org `.dsk` images with `"archive": "dsk"` (the runner
+  reads the CP/M directory out of the image and copies the named files out).
+  `HITCHHIK.COM` and `PLANET.COM` are 256-byte stubs that pick a
+  `HITCnnn`/`PLANnnn` build for the TPA size, so the suite runs the 128K
+  variants directly and leaves the stubs on the disk.
+
 - **WordMaster 1.07A** edits and saves.  Leaving its insert mode needs
   `ESC`, which on the +3 is the BREAK key (`Caps Shift + Space`) per the
   CP/M Plus manual; the package now runs the full edit-save-`TYPE` cycle.
@@ -197,8 +230,11 @@ Edit `tests/realworld/manifest.json`:
 }
 ```
 
-`archive` may be `zip` or `file`. For `file`, use `save_as` to name the CP/M
-file. `fixtures` refers to `tests/realworld/fixtures/`.
+`archive` may be `zip`, `file` or `dsk`. For `file`, use `save_as` to name the
+CP/M file.  For `dsk`, `members` names files inside the image's CP/M
+directory; they are extracted with `tools/mkdsk.py` (which reads both plain
+and extended CPCEMU containers).  `fixtures` refers to
+`tests/realworld/fixtures/`.
 
 `setup` is optional: each entry is typed at the `A>` prompt before
 `command` (a string is a command, or an object with `command`, `frames` and
@@ -299,12 +335,31 @@ need conversion first.
 
 | Software | Download |
 |---|---|
-| Large text-adventure collection | [MANYGAME.ZIP](http://www.retroarchive.org/cpm/games/manygame.zip) |
-| Sargon chess | [SARGON.ZIP](http://www.retroarchive.org/cpm/games/sargon.zip) |
+| Large text-adventure collection | [MANYGAME.ZIP](http://www.retroarchive.org/cpm/games/manygame.zip) - automated as `pacman95`, `star`, `hunt` and `othello` |
+| Sargon chess | [SARGON.ZIP](http://www.retroarchive.org/cpm/games/sargon.zip) - automated as `sargon` (copy-protected) |
 | Creative Computing games | [CCGAMES.ZIP](http://www.retroarchive.org/cpm/games/ccgames.zip) |
 | Nemesis | [nemesis.zip](http://www.retroarchive.org/cpm/games/nemesis.zip) |
-| Ladder | [LADDER.ZIP](http://www.retroarchive.org/cpm/misc/LADDER.ZIP) |
+| Ladder | [LADDER.ZIP](http://www.retroarchive.org/cpm/misc/LADDER.ZIP) - automated as `ladder` |
 | Catchum | [CATCHUM.ZIP](http://www.retroarchive.org/cpm/misc/CATCHUM.ZIP) |
+
+### Interactive fiction (CP/M `.dsk` images)
+
+The [IF Archive](https://ifarchive.org/indexes/if-archive/games/cpm/) carries
+Mike Goetz's Colossal Cave ports; archive.org has the Infocom CP/M disks as
+extended CPCEMU `.dsk` images, which the `dsk` archive type reads directly.
+
+| Software | Download |
+|---|---|
+| Colossal Cave Adventure A02 | [cpm-advent.zip](https://ifarchive.org/if-archive/games/cpm/cpm-advent.zip) - automated as `advent` |
+| Colossal Cave B00-B03 | [cpm-advent.zip](https://ifarchive.org/if-archive/games/cpm/cpm-advent.zip) (other directories in the same ZIP) |
+| The Hitchhiker's Guide to the Galaxy | [`.dsk`](https://archive.org/download/Hitchhikers_Guide_to_the_Galaxy_The_1984_Infocom_cpm_version/Hitchhikers_Guide_to_the_Galaxy_The_1984_Infocom_cpm_version.dsk) - automated as `hitchhiker` |
+| Planetfall | [`.dsk`](https://archive.org/download/Planetfall_1983_Infocom_cpm_version/Planetfall_1983_Infocom_cpm_version.dsk) - automated as `planetfall` |
+| Starcross | [`.dsk`](https://archive.org/download/Starcross_1982_Infocom_cpm_version/Starcross_1982_Infocom_cpm_version.dsk) - automated as `starcross` |
+| Enchanter, Suspect, Suspended, Seastalker, Cutthroats, Ballyhoo, Deadline | same archive.org `*_Infocom_cpm_version` naming |
+
+The Infocom disks whose games ship a `*nnn.COM` stub (Enchanter, Hitchhiker's,
+Planetfall) need the matching variant run directly, because the stub picks a
+build from the detected TPA size.
 
 ### +3 / Amstrad-specific
 

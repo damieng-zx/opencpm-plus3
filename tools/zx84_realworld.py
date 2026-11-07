@@ -143,6 +143,31 @@ def _extract_zip(zip_path: Path, members: list[str], dest: Path) -> None:
                         f"{result.stderr or result.stdout}")
 
 
+def _extract_dsk(dsk_path: Path, members: list[str], dest: Path) -> None:
+    """Pull CP/M files out of a DSK image into dest.
+
+    CP/M records no byte length, so extracted files are a whole number of
+    128-byte records; the trailing 0x1A / 0xE5 padding is harmless because
+    CP/M ignores it.
+    """
+    sys.path.insert(0, str(ROOT / "tools"))
+    from mkdsk import DSKImage
+
+    dsk = DSKImage().load(dsk_path)
+    dest.mkdir(parents=True, exist_ok=True)
+    available = {label.upper(): label for label, _size, _user in dsk.list_files()}
+    for wanted in members:
+        want = Path(wanted).name.upper()
+        if want not in available:
+            sample = ", ".join(sorted(available)) or "(empty)"
+            raise SetupError(
+                f"{dsk_path.name}: {wanted} not in directory; has: {sample}")
+        data = dsk.read_cpm_file(want)
+        out = dest / want
+        _check_cpm_name(out)
+        out.write_bytes(data)
+
+
 def _check_cpm_name(path: Path) -> None:
     stem, dot, ext = path.name.partition(".")
     if len(stem) > 8 or (dot and len(ext) > 3):
@@ -174,6 +199,12 @@ def prepare_package(manifest: dict, pkg: dict, refresh: bool) -> list[Path]:
         if not members:
             raise SetupError(f"{pkg_id}: no members for zip archive")
         _extract_zip(raw_path, members, files_dir)
+    elif archive == "dsk":
+        # A CP/M disk image: pull the named files out of its directory.
+        members = pkg.get("members", [])
+        if not members:
+            raise SetupError(f"{pkg_id}: no members for dsk archive")
+        _extract_dsk(raw_path, members, files_dir)
     else:
         raise SetupError(f"{pkg_id}: unsupported archive type {archive!r}")
 

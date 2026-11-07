@@ -56,6 +56,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. `supercalc2_80` fits the banner and right half in 24x80; the escapes remain. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
 | **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The clock is a FID installed at cold boot. This loader only stages `RAMDISK.FID`; a generic +3 FID loader is needed. |
 | **BDS C compiler exit** | Part II prints `38K to spare`, then the CPU loops in TPA (PC around `183B`-`184D`) after a directory write; no CCP return. | The write completes, so the loop is in the compiler's exit path; needs a debugger session. |
+| **Sargon (chess)** | Prints nothing after the command line; the CPU spins polling port `2FFD`. | Copy protection. The program issues raw uPD765 `READ DATA` commands against the boot track (`C=1`, `R=1..N`) and waits for the original disk's sector IDs, which never match, so it never reaches its title screen. Not a BIOS bug: no CP/M file or console call is involved. |
 
 Recently fixed: **DRI ED/SET/SETKEYS**.  ED's `E` command corrupted page
 zero because its record-buffer base lives at `FCB+21h` (a 33-byte FCB) and
@@ -161,12 +162,18 @@ It does not help WordStar, whose 80-column layout is unchanged.
 
 ### Games and entertainment
 
-- [ ] Zork II
-- [ ] Zork III
-- [ ] Sargon chess
+- [x] Pac-Man 95 - automated as `pacman95`
+- [x] STAR (Star Trek) - automated as `star`
+- [x] Hunt - automated as `hunt`
+- [x] Ladder - automated as `ladder`
+- [x] Othello - automated as `othello`
+- [x] Colossal Cave Adventure - automated as `advent`
+- [x] The Hitchhiker's Guide to the Galaxy - automated as `hitchhiker`
+- [x] Planetfall - automated as `planetfall`
+- [x] Starcross - automated as `starcross`
+- [x] Sargon chess - automated as `sargon` (fails its copy-protection check)
 - [ ] Creative Computing games
 - [ ] Nemesis
-- [ ] Ladder
 - [ ] Catchum
 - [ ] Manygame text-adventure collection
 
