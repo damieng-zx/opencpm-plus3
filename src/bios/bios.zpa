@@ -422,39 +422,74 @@ con_out_status:
 ; ==========================================================================
 
 ; @proc list_out
-; @clobbers
+; @param %char:u8  c               ; character to output
+; @clobbers af,bc,de,hl,ix
 ; @end
+; list_out - drive LIST through its redirection vector (SCB @LOVEC).
+; Only reached in system mode, so the dispatcher lives in common memory to
+; keep bank 4 within its headroom budget (see docs/boot.md).
 list_out:
+    ld hl, (scb_lovec)
+    jp dev_out
+
 ; @proc aux_out
-; @clobbers
+; @param %char:u8  c               ; character to output
+; @clobbers af,bc,de,hl,ix
 ; @end
 aux_out:
-    ret
+    ld hl, (scb_aovec)
+    jp dev_out
 
 ; @proc aux_in
 ; @out a                           ; 0x1A (EOF)
-; @clobbers bc,de,hl
+; @clobbers af
 ; @end
+; aux_in - first ready device selected by @AIVEC.  No AUX input device.
 aux_in:
     ld a, 0x1A                     ; Return EOF
     ret
 
 ; @proc list_status
 ; @out a
-; @clobbers
+; @clobbers af,hl
 ; @end
+; Ready when @LOVEC selects CON (the only sink that can emit).
 list_status:
+    ld hl, (scb_lovec)
+    jr dev_status
+
 ; @proc aux_in_status
 ; @out a
-; @clobbers
+; @clobbers af
 ; @end
 aux_in_status:
+    xor a                          ; no AUX input device
+    ret
+
 ; @proc aux_out_status
-; @out a                           ; 0 (not ready)
-; @clobbers
+; @out a
+; @clobbers af,hl
 ; @end
+; Ready when @AOVEC selects CON.
 aux_out_status:
-    xor a                          ; Not ready
+    ld hl, (scb_aovec)
+
+; dev_status - A = 0xFF when the vector in HL selects CON, else 0.  Status
+; reports "ready" only for a device that can actually accept output.
+; Falls through from aux_out_status.
+; @proc dev_status
+; @param %vec:u16  hl
+; @out   a
+; @clobbers af
+; @end
+dev_status:
+    ld a, h
+    and 0x80                       ; CON is bit 15
+    jr z, .ds_no
+    ld a, 0xFF
+    ret
+.ds_no:
+    xor a
     ret
 
 

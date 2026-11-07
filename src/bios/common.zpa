@@ -61,7 +61,28 @@ scb_conwidth:
     db 0                           ; 0x1B: reserved
 scb_conpage:
     db 23                          ; 0x1C: console page height - 1
-    ds 23                          ; 0x1D-0x33: reserved
+    ds 5                           ; 0x1D-0x21: reserved
+; I/O redirection bit vectors (CP/M 3 System Guide, Table 3-11 and the
+; SCB.ASM listing).  One bit per physical device in the character device
+; table: bit 15 = device 0, bit 14 = device 1, ... bits 0-3 reserved.
+; A logical device with no bit set goes nowhere.
+;
+; We only have four devices and no second peripheral, so every logical
+; device points at a single physical entry:
+;   CONIN/CONOUT -> CON  (table entry 0, mask 0x8000)
+;   AUXIN/AUXOUT -> AUX  (table entry 3, mask 0x1000)
+;   LIST         -> LST  (table entry 2, mask 0x2000)
+scb_civec:
+    dw 0x8000                      ; 0x22: console input  -> CON
+scb_covec:
+    dw 0x8000                      ; 0x24: console output -> CON
+scb_aivec:
+    dw 0x1000                      ; 0x26: aux input      -> AUX
+scb_aovec:
+    dw 0x1000                      ; 0x28: aux output     -> AUX
+scb_lovec:
+    dw 0x2000                      ; 0x2A: list output    -> LST
+    ds 8                           ; 0x2C-0x33: reserved
 scb_tempdrv:
     db 0                           ; 0x34: SETDEF TEMPORARY drive (0=current, 1..16=A..P)
     ds 5                           ; 0x35-0x39: reserved
@@ -2023,5 +2044,30 @@ char_dev_table:
     db 0                           ; table terminator
 
     assert char_dev_table + 33 <= 0x10000, "Device table must fit in common memory"
+
+
+; ==========================================================================
+; Character device redirection dispatch
+; ==========================================================================
+; The BIOS list_out / aux_out entries load the SCB redirection vector and
+; branch here.  Lives in common memory because it only ever runs in system
+; mode and bank 4 is short of headroom (docs/boot.md, "Remaining strategies").
+;
+; A vector is a bit per character-device table entry: bit 15 = entry 0 (CON),
+; bit 14 = entry 1, ...  A +3 has no printer or serial port, so only the CON
+; bit does anything; the rest are sinks, which CP/M 3 allows.
+
+; dev_out - emit C to the console if HL selects CON, else discard.
+; @proc dev_out
+; @param %vec:u16  hl
+; @param %char:u8  c
+; @clobbers af,bc,de,hl,ix
+; @end
+dev_out:
+    ld a, h
+    and 0x80                       ; CON is bit 15 of the vector
+    ret z                          ; not assigned to CON: drop it
+    ld a, %char
+    jp scr_putchar
 
 

@@ -50,6 +50,18 @@
 ; @clobbers af,bc,de,hl
 ; @end
 ;
+; BIOS character output for the LIST and AUX logical devices.  These live in
+; bank 4 but are reached by label from the BDOS (both run in system mode).
+; @extern list_out
+; @param  %char:u8  c
+; @clobbers af,bc,de,hl,ix
+; @end
+;
+; @extern aux_out
+; @param  %char:u8  c
+; @clobbers af,bc,de,hl,ix
+; @end
+;
 ; Implements the CP/M 2.2 BDOS API in native Z80 assembly.
 ; Called via JP at address 0005h.
 ;
@@ -657,31 +669,37 @@ bf_f03:
 
 ; F4: Auxiliary Output (punch)
 ;   In: E = character to send to aux device
-;   Silently discards (no aux hardware)
+;   The character goes to the BIOS, which walks the SCB @AOVEC redirection
+;   vector.  With no physical AUX device selected, BIOS aux_out discards it.
 ; @proc bf_f04
 ; @param %param:u16 de
 ; @param %func:u8   c
 ; @out   a
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f04:
     pop de
     pop bc
+    ld c, e
+    call aux_out
     xor a
     jp bdos_ret
 
 ; F5: List Output (printer)
 ;   In: E = character to send to printer
-;   Silently discards (no printer hardware)
+;   Routed through the BIOS so the SCB @LOVEC redirection vector applies:
+;   DEVICE can point LIST at CON, and then this arrives on the screen.
 ; @proc bf_f05
 ; @param %param:u16 de
 ; @param %func:u8   c
 ; @out   a
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 bf_f05:
     pop de
     pop bc
+    ld c, e
+    call list_out
     xor a
     jp bdos_ret
 
@@ -700,6 +718,8 @@ bf_f06:
     jp z, .input
     cp 0xFE
     jp z, .status
+    cp 0xFD
+    jp z, .wait
     ld c, e
     call con_out               ; direct I/O bypasses BDOS pagination
     jp bdos_ret
@@ -713,6 +733,14 @@ bf_f06:
     jp bdos_ret
 .none:
     xor a
+    jp bdos_ret
+; E=FDh: wait for a character and return it without echoing (CP/M 3).
+; "Press any key" prompts use this, so returning 0 here would look like a
+; keypress and the program would carry straight on.
+.wait:
+    xor a
+    ld (bdos_page_row), a
+    call con_in
     jp bdos_ret
 .status:
     call con_status
