@@ -255,28 +255,135 @@ class RealWorld:
         self.cb = label_address("char_buffer")
         self.cb_bank = bank_for_address(self.cb)
         self.scr_cols = label_address("scr_cols")
+        # 24x80 logical-screen state (bank 6, outside the image).
+        self.mode80 = label_address("mode80")
+        self.lg_off = label_address("lg_off")
+        self.lg_auto = label_address("lg_auto")
+        self.lg_step = label_address("lg_step")
+        self.lg_savecols = label_address("lg_savecols")
+        self.stl_on = label_address("stl_on")
+        self.vp_height = label_address("vp_height")
+        self.vp_width = label_address("vp_width")
+        self.lg_buf = label_address("LG_BUF")
         self.history: list[str] = []
 
+    def bank(self, addr: int) -> int:
+        """RAM bank holding `addr` in system mode.
+
+        `char_buffer` (A000) and the bank-6 scratch area live in bank 6;
+        the rest of the image is bank 4.  `LG_BUF` is the exception and is
+        always read with an explicit bank of 5.
+        """
+        return self.cb_bank if 0x8000 <= addr < 0xC000 else 4
+
     def memory(self, bank: int, addr: int, length: int) -> bytes:
+        """Read `length` bytes from `bank` at `addr`.
+
+        The MCP takes the address as an offset *within* a 16K bank, so an
+        absolute address (0xA8C1) has to lose its top two bits (0x28C1).
+        Masking happens here so callers can keep using label addresses.
+        """
+        offset = addr & 0x3FFF
         txt = self.mcp.call("read_memory", {
-            "address": hex(addr), "length": length, "bank": bank})
+            "address": hex(offset), "length": min(length, 0x4000 - offset),
+            "bank": bank})
         out = bytearray()
         for line in txt.splitlines():
             m = re.match(r"^([0-9A-F]{4})\s+((?:[0-9A-F]{2} )+)", line)
             if m:
                 out.extend(bytes.fromhex(m.group(2)))
-        return bytes(out)
+        return bytes(out[:length])
 
-    def screen(self) -> list[str]:
-        cols = self.memory(4, self.scr_cols, 1)[0]
+    def byte(self, addr: int, bank: int | None = None) -> int:
+        got = self.memory(self.bank(addr) if bank is None else bank, addr, 1)
+        return got[0] if got else 0
+
+    def screen_state(self) -> dict:
+        """Current terminal geometry, read from the BIOS state bytes."""
+        cols = self.byte(self.scr_cols)
         if cols not in (32, 51, 64):
             cols = 51
+        return {
+            "cols": cols,
+            "mode80": bool(self.byte(self.mode80)),
+            "lg_off": self.byte(self.lg_off),
+            "lg_auto": bool(self.byte(self.lg_auto)),
+            "lg_step": self.byte(self.lg_step),
+            "save_cols": self.byte(self.lg_savecols),
+            "status": bool(self.byte(self.stl_on)),
+            # Row 23 (0-based) is the status bar when it is on.
+            "text_rows": 23 if self.byte(self.stl_on) else 24,
+        }
+
+    def _rows(self, data: bytes, cols: int, rows: int) -> list[str]:
+        return ["".join(chr(b) if 32 <= b < 127 else "."
+                        for b in data[r * cols:(r + 1) * cols]).rstrip()
+                for r in range(rows)]
+
+    def screen(self, rows: int | None = None) -> list[str]:
+        """The screen as text, in one of four shapes.
+
+        * 32 / 51 / 64 columns, no 24x80 - `char_buffer` *is* the screen.
+        * 24x80 - `char_buffer` mirrors only the visible window
+          (`lg_off .. lg_off+cols`), so reading it alone shows the left 51
+          columns of an 80-column world.  The full logical screen is in
+          LG_BUF at stride 80 in bank 5.
+
+        With the status line on, row 23 is the status bar and only 23 rows
+        carry text.
+        """
+        st = self.screen_state()
+        cols, text_rows = st["cols"], st["text_rows"]
+        if rows is None:
+            rows = text_rows
+
+        if st["mode80"]:
+            # The logical screen is the whole 80-column world; char_buffer
+            # only mirrors lg_off..lg_off+cols of it.  Return all 80 columns
+            # so an assertion finds text whichever half is on show.
+            data = self.memory(5, self.lg_buf, 80 * 24)
+            if len(data) >= 80 * 24:
+                return self._rows(data, 80, min(rows, 24))
+
         data = self.memory(self.cb_bank, self.cb, cols * 24)
         if len(data) < cols * 24:
             raise RunError(f"short char_buffer read: {len(data)} bytes")
-        return ["".join(chr(b) if 32 <= b < 127 else "."
-                        for b in data[r * cols:(r + 1) * cols]).rstrip()
-                for r in range(24)]
+        return self._rows(data, cols, min(rows, 24))
+
+    def window(self) -> list[str]:
+        """Only the columns physically on screen right now.
+
+        In 24x80 that is `lg_off .. lg_off+cols` of the logical screen; in
+        the narrow modes it is the whole screen.
+        """
+        st = self.screen_state()
+        rows = st["text_rows"]
+        if not st["mode80"]:
+            return self.screen(rows)
+        data = self.memory(5, self.lg_buf, 80 * 24)
+        if len(data) < 80 * 24:
+            return self.screen(rows)
+        off, cols = st["lg_off"], st["cols"]
+        lines = self._rows(data, 80, rows)
+        return [line[off:off + cols].rstrip() for line in lines]
+
+    def status_line(self) -> str | None:
+        """Row 23 when the status bar is enabled, else None.
+
+        The bar is drawn straight into `char_buffer` (see `_stl_mark`), not
+        into LG_BUF, so it has to be read from the physical buffer even in
+        24x80 mode.  In 24x80 it also carries the '<'/'>' page markers.
+        """
+        st = self.screen_state()
+        if not st["status"]:
+            return None
+        cols = st["cols"]
+        data = self.memory(self.cb_bank, self.cb, cols * 24)
+        if len(data) < cols * 24:
+            return None
+        row = data[23 * cols:24 * cols]
+        return "".join(chr(b) if 32 <= b < 127 else "."
+                       for b in row).rstrip()
 
     def text(self) -> str:
         return "\n".join(self.screen())

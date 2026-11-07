@@ -52,7 +52,7 @@ separate, explicitly triggered workflow.
 | `zork1` | Zork I | Large `.DAT`, random reads, console | Pass |
 | `dbase2` | dBASE II 2.43 | FCB random I/O, overlays, dot prompt | Pass |
 | `supercalc2` | SuperCalc2 1.00 | Spreadsheet, overlays, VT-100 output | Pass |
-| `supercalc2_80` | SuperCalc2 1.00 (24x80) | 80-column banner, right-half flip | Pass (VT-100 escapes) |
+| `supercalc2_80` | SuperCalc2 1.00 (24x80) | 80-column banner, grid and status row, right-half flip | Pass |
 | `multiplan` | Microsoft Multiplan 1.05 | Spreadsheet, overlays, 80-column grid | Pass |
 | `multiplan_80` | Microsoft Multiplan 1.05 (24x80) | 80-column command bar/grid, right-half flip | Pass |
 | `vedit` | VEDIT Plus 2.33 (CRT) | Installer (VT-52), then open/edit a file | Pass |
@@ -259,6 +259,42 @@ and `wait: true` just runs the emulator for `frames` without typing — use it
 when a tool needs time after its last output (for example Link-80 writing a
 large `.COM`) before the next command is sent.  `key: "shift+sym+enter"` is
 the EXTEND+Enter chord that flips the 24x80 halves.
+
+### Reading the screen
+
+`RealWorld.screen()` adapts to the four display shapes:
+
+| Mode | Source | Width |
+|---|---|---|
+| 32, 51 or 64 columns | `char_buffer` | `scr_cols` |
+| 24x80 | `LG_BUF` in bank 5 | always 80 |
+
+The 24x80 case is the one that catches people out.  `scr_cols` stays the
+*physical* width (32/51/64) there, and `char_buffer` only mirrors the window
+on show — `lg_off .. lg_off + scr_cols`.  Reading `char_buffer` at that
+stride therefore shows the left 51 columns of an 80-column screen and
+silently hides the rest, which is why a `_80` package could pass while its
+right-hand columns were never checked.
+
+Two helpers cover the other views:
+
+- `window()` — only the columns physically on screen right now, sliced at
+  `lg_off` (the full 51-column page, not a spurious overlap).
+- `status_line()` — row 23 when the status bar is on, otherwise `None`.
+  With the bar on, `screen()` returns 23 rows because row 23 is the bar.
+  In 24x80 the bar is the only place the `<` / `>` page markers appear:
+  `>` means text is hidden to the right, `<` that it is hidden to the left.
+  It is read from `char_buffer`, because `_stl_mark` renders the bar
+  straight into the physical buffer rather than into `LG_BUF`.
+
+`screen_state()` returns the raw geometry (`cols`, `mode80`, `lg_off`,
+`lg_auto`, `lg_step`, `save_cols`, `status`, `text_rows`) when a test needs
+to assert on the mode itself.
+
+Assertions for the right half should name text that lives past column 51 —
+SuperCalc2's grid status row is `... ? for HELP` starting at column 43, and
+only the last three characters fall outside the window, so `? for HELP`
+passes in 24x80 and fails on the left-only read.
 
 The package image is built from the manifest's `base` list: `CPM3.SYS`,
 `CPM3C.SYS`, `CCP.COM`, the three fonts, `SET24X80.COM` and

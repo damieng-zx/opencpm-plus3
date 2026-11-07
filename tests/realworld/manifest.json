@@ -152,9 +152,14 @@
           "key": "shift+sym+enter",
           "frames": 1800,
           "expect": ["CORP."]
+        },
+        {
+          "key": "enter",
+          "frames": 2500,
+          "expect": ["Width:", "Memory:", "? for HELP"]
         }
       ],
-      "notes": "24x80 variant: the banner and grid fit 80 columns, but the VT-100 escapes ([?3h[2J[H, [22;1H[0K) are still printed literally; the VT-100 parser is the remaining blocker."
+      "notes": "24x80 variant: the banner and the grid fit 80 columns and the VT-100 escapes are consumed (the CSI subset in docs/ansi-subset.md).  The grid step asserts '? for HELP', which starts at column 43 and runs past column 51 - in the 51-column window it is cut to '? for HEL', so the check only passes now that the harness reads the 80-column logical screen."
     },
     {
       "id": "wordstar30",
