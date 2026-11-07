@@ -264,6 +264,51 @@ class Smoke:
         self.mcp.call("run", {"frames": frames})
         self.record()
 
+    def tstates(self) -> int:
+        txt = self.mcp.call("registers", {})
+        match = re.search(r"T-states:\s*(\d+)", txt)
+        if not match:
+            raise SmokeError("registers did not report T-states:\n" + txt)
+        return int(match.group(1))
+
+    def timed_command(self, cmd: str, marker: str, budget: int) -> None:
+        """Run a command to the next prompt and assert a cycle budget.
+
+        The clock includes the emulator's typing delay (the `type` tool runs
+        frames while it presses keys), so this is an end-to-end budget for a
+        fixed command string, not an instruction-level measurement.
+        """
+        start = self.tstates()
+        self.mcp.call("type", {"text": cmd})
+        self.mcp.call("key", {"name": "enter"})
+        frames = 0
+        while frames < 3000:
+            self.mcp.call("run", {"frames": 5})
+            frames += 5
+            text = self.text()
+            if marker in text and text.rstrip().endswith("A>"):
+                break
+        else:
+            raise SmokeError(f"{cmd!r} did not finish within 3000 frames")
+        cycles = self.tstates() - start
+        self.record()
+        self.log(f"  {cmd}: {frames} frames, {cycles} cycles (budget {budget})")
+        if cycles > budget:
+            raise SmokeError(
+                f"{cmd!r} took {cycles} cycles, budget {budget}")
+
+    def run_performance(self) -> None:
+        """A loose end-to-end cycle budget for two common commands.
+
+        The values are deterministic under the emulator (they include the
+        fixed typing delay), so a gross regression in the console, BDOS or
+        FDC path shows up as a budget failure.  The thresholds are roughly
+        twice the current measurements.
+        """
+        self.log("performance budgets")
+        self.timed_command("TYPE SMOKE.TXT", "SMOKE OK", 25_000_000)
+        self.timed_command("DIR", "CPM3     SYS", 15_000_000)
+
     def last_output_line(self) -> str:
         """The last non-empty line above the prompt.
 
@@ -2165,6 +2210,7 @@ class Smoke:
         self.boot()
         self.run_loader_stage()
         self.run_bank6_sentinels()
+        self.run_performance()
         self.run_systest()
         self.run_xtetest()
         self.run_termtest()

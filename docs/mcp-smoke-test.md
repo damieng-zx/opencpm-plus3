@@ -279,6 +279,13 @@ At each disk-heavy step below:
 Treat retries as a bug. Treat a noticeable cycle-count increase across the same
 workflow as a regression to investigate before committing.
 
+The automated runner does a small version of this: after boot it measures
+`TYPE SMOKE.TXT` and `DIR` from the prompt to the next prompt using the
+emulator's T-state counter and fails above 25,000,000 and 15,000,000 cycles
+respectively.  Those numbers include the fixed typing delay (the `type` tool
+runs frames while pressing keys); the current measurements are about 10.4M
+and 6.2M, so the budgets are roughly 2x headroom rather than a tight bound.
+
 ## Test Flow
 
 ## Fast Regression Gate
