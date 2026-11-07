@@ -15,8 +15,8 @@ byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), fills the remaining
 free bank-6 gaps with a sentinel and verifies they survive the app runs,
 then runs
 `SYSTEST`, `XTETEST`, `TERMTEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
-`F59` overlay load and an `F111` print-block check), and the main CCP flows,
-and asserts the 51x24 character buffer plus an empty FDC retry log:
+`F59` overlay load and an `F111` print-block check), `BIOSTEST`, and the main
+CCP flows, and asserts the 51x24 character buffer plus an empty FDC retry log:
 
 `XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry (including a set
 `ESC X` viewport and the 23-row status-line viewport), `TE_RESET`,
@@ -220,6 +220,7 @@ distribution image deliberately leaves them out.
 | Program | Covers |
 |---|---|
 | `BDOSTEST` | BDOS functions F1-F37, F98, F104/F105, F107, F111/F112, one line of output per call; blocking console calls are skipped unless input is pending |
+| `BIOSTEST` | Direct calls through the visible BIOS jump table (fn 2, 4-26, 28-29), including a boot-track read/write/read-back and TPA `MOVE`/`XMOVE` |
 | `SYSTEST` | Stack balance, `MOVE`, the clock, page zero, TAB stops and F110 delimiters |
 | `DISKTEST` | File, directory, extent and SCB behaviour, T1-T30; T30 is the 16-bit block test and only runs on a 2K-block disk |
 | `REGTEST` | BDOS register preservation: B/D (the high bytes of BC/DE), IX and IY across F12, F2, F25, F13 and F15 |
@@ -558,6 +559,16 @@ no-op clean-up contract, `F107 SERIAL : PASS` compares the six bytes written
 to the TPA buffer with `OPNCP3`, and `F112 PRTBLK : PASS` checks that the
 printer control block is accepted and discarded (the printer is not fitted).
 The smoke runner requires all four `PASS` lines.
+
+`BIOSTEST` calls the BIOS entries directly through the common-memory
+`bios_visible` wrappers rather than the BDOS: `CONST`, `CONOUT`, `LIST`,
+`AUXOUT`/`AUXIN`, `HOME`, `SELDSK`, `SETTRK`/`SETSEC`/`SETDMA`, `READ`,
+`WRITE`, the status stubs, `SECTRN`, `DEVTBL`/`DEVINIT`/`DRVTBL`, `MULTIO`,
+`FLUSH`, `MOVE`/`XMOVE` and `SETBNK`.  The disc test reads the boot-track
+record, writes the same bytes back, re-reads it into a second buffer and
+compares, so the system disc is not changed.  `BOOT`/`WBOOT`, blocking
+`CONIN`, `BNKSEL` and the XBIOS `USERF` entry are deliberately not called.
+The runner requires every `Bnn name : PASS` line and `BIOS DONE`.
 
 `fdc_log` must stay retry-free.  A `FAIL` on T4 usually means the directory
 cache key/sector was corrupted; a `FAIL` on T11 means an extent's RC/alloc

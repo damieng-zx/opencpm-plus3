@@ -1757,6 +1757,45 @@ class Smoke:
                        "F107 SERIAL  : PASS", "F112 PRTBLK  : PASS"):
             if not any(marker in l for l in self.history):
                 raise SmokeError("BDOSTEST did not report " + marker)
+    def run_biostest(self) -> None:
+        """BIOSTEST: the BIOS jump table called directly."""
+        self.log("BIOSTEST")
+        self.mcp.call("type", {"text": "BIOSTEST"})
+        self.mcp.call("key", {"name": "enter"})
+        # Small steps so the 24-line screen does not scroll the early
+        # per-function lines out of the history before they are recorded.
+        # Page mode pauses after 23 lines, so answer the pager too.
+        for _ in range(40):
+            self.record()
+            screen = self.text()
+            if "Press RETURN" in screen:
+                self.mcp.call("key", {"name": "enter"})
+                self.mcp.call("run", {"frames": 200})
+                continue
+            if "BIOS DONE" in screen:
+                break
+            self.mcp.call("run", {"frames": 100})
+        else:
+            raise SmokeError("BIOSTEST did not finish:\n" + self.text())
+        self.wait_for(["A>"], frames=200, attempts=10)
+        if any(re.match(r"^B\d\d ", l.strip()) and "FAIL" in l
+               for l in self.history):
+            bad = [l for l in self.history if re.match(r"^B\d\d ", l.strip())
+                   and "FAIL" in l]
+            raise SmokeError("BIOSTEST failures:\n" + "\n".join(bad))
+        for fn, name in ((2, "CONST"), (4, "CONOUT"), (5, "LIST"),
+                         (6, "AUXOUT"), (7, "AUXIN"), (8, "HOME"),
+                         (9, "SELDSK"), (10, "SETTRK"), (11, "SETSEC"),
+                         (12, "SETDMA"), (13, "READ"), (14, "WRITE"),
+                         (15, "LISTST"), (16, "SECTRN"), (17, "CONOST"),
+                         (18, "AUXIST"), (19, "AUXOST"), (20, "DEVTBL"),
+                         (21, "DEVINIT"), (22, "DRVTBL"), (23, "MULTIO"),
+                         (24, "FLUSH"), (25, "MOVE"), (26, "TIME"),
+                         (28, "SETBNK"), (29, "XMOVE")):
+            marker = f"B{fn:02d} {name}"
+            if not any(marker in l and "PASS" in l for l in self.history):
+                raise SmokeError("BIOSTEST did not report " + marker)
+
     def run_ccp(self) -> None:
         self.command("DIR", 500)
         listing = self.text()
@@ -2124,6 +2163,7 @@ class Smoke:
         self.expect("DIR after SYSTEST", "CPM3     SYS", "A>")
         self.run_disktest()
         self.run_bdostest()
+        self.run_biostest()
         self.run_ccp()
         self.run_dump()
         self.run_inptest_edit()

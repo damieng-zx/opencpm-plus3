@@ -52,6 +52,7 @@ echo "  Assembling test programs..."
 "$SJASMPLUS" --raw=build/systest.com src/test/systest.asm
 "$SJASMPLUS" --raw=build/regtest.com src/test/regtest.asm
 "$SJASMPLUS" --raw=build/inptest.com src/test/inptest.asm
+"$SJASMPLUS" --raw=build/biostest.com src/test/biostest.asm
 
 echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/date.com build/zpa/date.asm
@@ -127,7 +128,7 @@ python3 tools/mkdsk.py create build/cpm3-test.dsk \
     build/sysgen.com \
     build/bdostest.com build/xtetest.com \
     build/disktest.com build/termtest.com build/systest.com build/regtest.com \
-    build/inptest.com \
+    build/inptest.com build/biostest.com \
     src/test/smoke.txt src/test/page.txt src/test/smoke.sub \
     src/test/param.sub \
     "${REF_FILES[@]}" \
