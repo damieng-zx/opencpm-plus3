@@ -14,14 +14,14 @@ checks that the stage-2 loader staged the three fonts and `RAMDISK.FID`
 byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), fills the remaining
 free bank-6 gaps with a sentinel and verifies they survive the app runs,
 then runs
-`SYSTEST`, `XTETEST`, `STLTEST`, `M80TEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
+`SYSTEST`, `XTETEST`, `TERMTEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
 `F59` overlay load and an `F111` print-block check), and the main CCP flows,
 and asserts the 51x24 character buffer plus an empty FDC retry log:
 
 `XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry (including a set
 `ESC X` viewport and the 23-row status-line viewport), `TE_RESET`,
 `TE_STL_ASK`/`TE_STL_ON_OFF` (the full status-line toggle and 23-row
-scroll are covered by `STLTEST` below),
+scroll are covered by `TERMTEST` below),
 `TE_SET_INK` (including FLASH), `TE_SET_BORDER`, `TE_SET_SPEED` and
 `SCR_RUN_ROUTINE`, plus the disc calls (`DD_INIT`, `DD_SETUP`,
 `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`,
@@ -192,14 +192,10 @@ distribution image deliberately leaves them out.
 | `DISKTEST` | File, directory, extent and SCB behaviour, T1-T30; T30 is the 16-bit block test and only runs on a 2K-block disk |
 | `REGTEST` | BDOS register preservation: B/D (the high bytes of BC/DE), IX and IY across F12, F2, F25, F13 and F15 |
 | `XTETEST` | The XBIOS terminal, disc and keyboard calls through `USERF`, including ink/border/speed, `SCR_RUN_ROUTINE`, `DD_*` and `KM_*` |
-| `STLTEST` | The status line (`TE_STL`), the 23-row viewport and scrolling |
-| `M80TEST` | 24x80 mode: `TE_ASK` width, auto-flip and leaving |
-| `M80BIT` | The fast 24x80 page flip, checked against an independent reference render |
-| `TERMTEST` | An interactive walkthrough of the terminal escape sequences, one sequence at a time, waiting for a key between each |
+| `TERMTEST` | All screen modes and terminal escapes: cursor/erase/edit sequences, 32/51-column glyph rendering, status line and the 24x80 page flip (self-checked; the bitmaps are checked by the runner) |
 | `INPTEST` | Reads a line with F10 and prints it back; used to prove a submit file can drive a program |
 
-The smoke runner exercises all of these except `TERMTEST` and `REGTEST`:
-`TERMTEST` is for eyeballing the screen, one sequence at a time, and `REGTEST`
+The smoke runner exercises all of these except `REGTEST`: `REGTEST`
 has its own harness, `tools/zx84_regtest.py`.  `INPTEST` is driven by the
 profile and submit-file checks rather than directly.
 
@@ -454,48 +450,54 @@ full-screen viewport with `ESC X 0 0 23 50` and prints `33.VIEWPORT..OK`.
 The viewport state lives in bank 6 (`A73A-A73F`), and the loader stages
 the screen row-address table at `A890` so it costs no image space.
 
-### Status-line suite (`STLTEST`)
+### Screen suite (`TERMTEST`) and `SET24X80`
 
 Run:
 
 ```text
-type "STLTEST`enter`"
-run 1500
+type "TERMTEST`enter`"
+run 1200
 ```
 
-Require `STL..OK`.  The program disables the status line, checks
-`TE_STL_ASK` (`A=00h`, Zero set), enables it with `TE_STL_ON_OFF`
-(`A=FFh`, Zero clear), and checks that `TE_ASK` drops to 23 rows
-(`D=22`).  It then turns page mode off and scrolls 30 numbered lines
-through the 23-row viewport, which exercises the height-parameterised
-fast scroll and must leave the status row alone.  Disabling again must
-give `D=23` and `A=00h`/Zero set.  XTETEST test 4 runs the same checks,
-but so early in its burst that the runner's frame sampling misses the
-marker; `STLTEST` is the one the smoke gates on.
+`TERMTEST` is the single screen-driver regression.  It checks the cursor
+sequences (`ESC Y`, `ESC H`, `ESC A/B/C/D` including clamping, `ESC j/k`),
+the widths (`ESC 3 0/1/2`, `ESC y`), page mode (`ESC 4`, and `ESC 3`
+cancelling it), the status line (`ESC 0/1`, `TE_STL_ASK` and the 23-row
+viewport), wrapping (`ESC v/w`), the erase/edit sequences (`ESC E`, `J`,
+`K`, `d`, `l`, `o`, `L`, `M`, `N`, `I`) and 24x80 (`ESC x/y`, `TE_ASK`
+width 80, `LG_BUF` writes, auto-flip and the visible-window mapping).
 
-### 24x80 suite (`M80TEST`) and `SET24X80`
+Screen contents are read back by a small position-independent reader that
+the program copies to `D000h` and runs through `SCR_RUN_ROUTINE`
+(XBIOS `0x00E9`): it reads `char_buffer` (`A000h`, bank 6) and `LG_BUF`
+(`5B00h`, bank 5) with the screen banks paged in, so the erase/edit checks
+compare real cells rather than asking a human.  Each test prints
+`<name>..OK`; a mismatch prints `TERMTEST..FAIL <name>` and waits for a
+key so the screen can be read before the warm boot.
 
-`M80TEST` enters `ESC x`, checks `TE_ASK` reports an 80-column viewport
-(`E=79`), moves the cursor to column 70 (auto-flip), checks the logical
-cursor (`L=70`), leaves with `ESC y` and checks the width is back to
-`E=50`.  It prints `M80..OK`; the runner also checks that the physical
-width and 24x80 flag are restored afterwards.
+The last three phases leave the screen on a known state and block on a
+key, so the runner can compare the bitmap:
+
+| phase | screen | reference |
+|---|---|---|
+| `VIS32` | 32 columns, a 32-character line on row 0 | `font32.bin`, byte-aligned |
+| `VIS51` | 51 columns, a 51-character line on row 0 | `font51.bin`, 5px pitch |
+| `TERMTEST..OK` | 24x80 page 29 (`W` at col 29, `Q` at 51) | `LG_BUF`, 5px pitch, offset 29 |
+
+`tools/zx84_smoke.py` renders each reference itself from the character
+buffer (the 24x80 case uses `LG_BUF` and the page offset at `A8C2h`) and
+requires an exact match for all eight scan lines of each checked row.  It
+then sends EXTEND+Enter to flip back to page 0 and checks the right-hand
+shift the same way, presses a key to let `TERMTEST` leave 24x80, and
+verifies the 51-column prompt, the 24x80 flag (`A8C1h`) and `scr_cols`
+are restored.  A wrong shift direction, a bad exposed-column source, a
+missing 51-column clip or a stale byte on either side of the shift fails
+here.
 
 The runner then exercises `SET24X80.COM` from the prompt: no argument and
 `ON` must enter 24x80, `OFF` must leave it, the prompt must still appear,
 and `SET24X80 JUNK` must print `SET24X80 [ON|OFF]`.  After each switch it
 reads `mode80` (bank 6, `A8C1h`) and requires the expected state.
-
-`M80BIT` covers the fast page flip itself.  It writes `W` at logical column
-29, moves to column 51 (which leaves the first 51-column page) and writes
-`Q` there, then prints `M80BIT..OK` without a newline so the cursor stays
-on page 29.  The runner reads the logical buffer (`LG_BUF`, bank 5
-`5B00h`), the page offset (`A8C2h`) and the bitmap, renders rows 0-2 with
-an independent reference (5px font) and requires an exact match for all
-eight scan lines.  A wrong shift direction, a bad source address in the
-exposed-column re-render or a missing 51-column clip all fail here.  After
-the check a key press makes `M80BIT` leave 24x80 itself, so the following
-tests start at a 51-column prompt.
 
 ### BDOS file regression suite
 

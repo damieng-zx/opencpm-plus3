@@ -47,12 +47,9 @@ python3 tools/patchsum.py build/bootsect.bin
 echo "  Assembling test programs..."
 "$SJASMPLUS" --raw=build/bdostest.com src/test/bdostest.asm
 "$SJASMPLUS" --raw=build/xtetest.com src/test/xtetest.asm
-"$SJASMPLUS" --raw=build/stltest.com src/test/stltest.asm
 "$SJASMPLUS" --raw=build/disktest.com src/test/disktest.asm
 "$SJASMPLUS" --raw=build/termtest.com src/test/termtest.asm
 "$SJASMPLUS" --raw=build/systest.com src/test/systest.asm
-"$SJASMPLUS" --raw=build/m80test.com src/test/m80test.asm
-"$SJASMPLUS" --raw=build/m80bit.com src/test/m80bit.asm
 "$SJASMPLUS" --raw=build/regtest.com src/test/regtest.asm
 "$SJASMPLUS" --raw=build/inptest.com src/test/inptest.asm
 
@@ -128,8 +125,7 @@ python3 tools/mkdsk.py create build/cpm3-test.dsk \
     build/diskcopy.com \
     build/stat.com \
     build/sysgen.com \
-    build/bdostest.com build/xtetest.com build/stltest.com \
-    build/m80test.com build/m80bit.com \
+    build/bdostest.com build/xtetest.com \
     build/disktest.com build/termtest.com build/systest.com build/regtest.com \
     build/inptest.com \
     src/test/smoke.txt src/test/page.txt src/test/smoke.sub \

@@ -258,6 +258,29 @@ class Wide80(unittest.TestCase):
         self.assertIn("_render_char_body:", text)
 
 
+class TermTest(unittest.TestCase):
+    """TERMTEST.COM is the single self-checking screen regression."""
+
+    def test_uses_the_screen_checker_and_phase_markers(self):
+        text = source("src/test/termtest.asm")
+        self.assertIn("SCR_RUN_ROUTINE equ 0x00E9", text)
+        self.assertIn("checker_start:", text)
+        # The three runner-checked glyph phases.
+        self.assertIn("VIS32", text)
+        self.assertIn("VIS51", text)
+        self.assertIn("TERMTEST..OK", text)
+        self.assertIn("TERMTEST..FAIL", text)
+
+    def test_checker_reads_match_the_screen_layout(self):
+        """The counter routine hardcodes bank-6/bank-5 addresses."""
+        screen = source("src/bios/screen.zpa")
+        term = source("src/test/termtest.asm")
+        for name, value in (("char_buffer", 0xA000), ("LG_BUF", 0x5B00),
+                            ("mode80", 0xA8C1), ("lg_off", 0xA8C2)):
+            self.assertRegex(screen, rf"{name}:?\s+equ\s+0x{value:04X}\b")
+            self.assertIn(f"0x{value:04X}", term)
+
+
 class PromptEscapeEcho(unittest.TestCase):
     """F10 must pass ESC to the screen: BREAK 3 0 works at the A> prompt."""
 

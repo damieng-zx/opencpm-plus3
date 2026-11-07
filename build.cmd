@@ -58,15 +58,12 @@ echo   Assembling test programs...
 %SJASMPLUS% --raw=build\bdostest.com src\test\bdostest.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\xtetest.com src\test\xtetest.asm
-%SJASMPLUS% --raw=build\stltest.com src\test\stltest.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\disktest.com src\test\disktest.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\termtest.com src\test\termtest.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\systest.com src\test\systest.asm
-%SJASMPLUS% --raw=build\m80test.com src\test\m80test.asm
-%SJASMPLUS% --raw=build\m80bit.com src\test\m80bit.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\regtest.com src\test\regtest.asm
 if errorlevel 1 goto :fail
@@ -125,7 +122,7 @@ goto collect_extra_files
 python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
-python3 tools\mkdsk.py create build\cpm3-test.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\bdostest.com build\xtetest.com build\stltest.com build\m80test.com build\m80bit.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3-test.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 python3 tools\mkdsk.py create build\cpm3_720.dsk --format 720k --add src\test\hello16.txt

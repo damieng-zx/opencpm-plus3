@@ -31,8 +31,7 @@ class DistributionImage(unittest.TestCase):
 
     def test_has_no_test_programs_or_fixtures(self):
         names11 = names(DIST)
-        for stripped in (b"BDOSTESTCOM", b"XTETEST COM", b"STLTEST COM",
-                         b"M80TEST COM", b"M80BIT  COM", b"DISKTESTCOM",
+        for stripped in (b"BDOSTESTCOM", b"XTETEST COM", b"DISKTESTCOM",
                          b"TERMTESTCOM", b"SYSTEST COM", b"REGTEST COM",
                          b"SMOKE   TXT", b"PAGE    TXT",
                          b"SMOKE   SUB", b"PARAM   SUB"):
@@ -53,8 +52,7 @@ class DistributionImage(unittest.TestCase):
 class TestImage(unittest.TestCase):
     def test_is_the_distribution_plus_the_test_programs(self):
         names11 = names(TEST)
-        for wanted in (b"BDOSTESTCOM", b"XTETEST COM", b"STLTEST COM",
-                       b"M80TEST COM", b"M80BIT  COM", b"DISKTESTCOM",
+        for wanted in (b"BDOSTESTCOM", b"XTETEST COM", b"DISKTESTCOM",
                        b"TERMTESTCOM", b"SYSTEST COM", b"REGTEST COM",
                        b"SMOKE   TXT", b"PAGE    TXT",
                        b"SMOKE   SUB", b"PARAM   SUB"):
