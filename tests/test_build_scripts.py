@@ -53,7 +53,7 @@ def disk_files(text: str, image: str = "cpm3.dsk",
 TEST_PROGRAMS = {
     "build/bdostest.com", "build/xtetest.com", "build/disktest.com",
     "build/termtest.com", "build/systest.com", "build/regtest.com",
-    "build/inptest.com", "build/biostest.com",
+    "build/inptest.com", "build/biostest.com", "build/chaintest.com",
 }
 TEST_FIXTURES = {
     "src/test/smoke.txt", "src/test/page.txt",

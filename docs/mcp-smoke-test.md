@@ -15,8 +15,9 @@ byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), fills the remaining
 free bank-6 gaps with a sentinel and verifies they survive the app runs,
 then runs
 `SYSTEST`, `XTETEST`, `TERMTEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
-`F59` overlay load and an `F111` print-block check), `BIOSTEST`, and the main
-CCP flows, and asserts the 51x24 character buffer plus an empty FDC retry log:
+`F59` overlay load and an `F111` print-block check), `BIOSTEST`, `CHAINTEST`,
+and the main CCP flows, and asserts the 51x24 character buffer plus an empty
+FDC retry log:
 
 `XTETEST` covers the XBIOS TE calls: `TE_ASK` geometry (including a set
 `ESC X` viewport and the 23-row status-line viewport), `TE_RESET`,
@@ -221,6 +222,7 @@ distribution image deliberately leaves them out.
 |---|---|
 | `BDOSTEST` | BDOS functions F1-F37, F98, F104/F105, F107, F111/F112, one line of output per call; blocking console calls are skipped unless input is pending |
 | `BIOSTEST` | Direct calls through the visible BIOS jump table (fn 2, 4-26, 28-29), including a boot-track read/write/read-back and TPA `MOVE`/`XMOVE` |
+| `CHAINTEST` | BDOS F47 chains to `SCREEN` through the command tail at 0080h; the program must not return |
 | `SYSTEST` | Stack balance, `MOVE`, the clock, page zero, TAB stops and F110 delimiters |
 | `DISKTEST` | File, directory, extent and SCB behaviour, T1-T30; T30 is the 16-bit block test and only runs on a 2K-block disk |
 | `REGTEST` | BDOS register preservation: B/D (the high bytes of BC/DE), IX and IY across F12, F2, F25, F13 and F15 |
@@ -574,6 +576,11 @@ record, writes the same bytes back, re-reads it into a second buffer and
 compares, so the system disc is not changed.  `BOOT`/`WBOOT`, blocking
 `CONIN`, `BNKSEL` and the XBIOS `USERF` entry are deliberately not called.
 The runner requires every `Bnn name : PASS` line and `BIOS DONE`.
+
+`CHAINTEST` calls BDOS F47 after putting `SCREEN` in the command tail at
+0080h.  F47 sets the CCP chain flag and warm-boots; the CCP must run the
+tail instead of prompting, so `CHAINTEST START` is followed by
+`Mode: 51 columns` and a fresh `A>` without `CHAINTEST RETURNED`.
 
 `fdc_log` must stay retry-free.  A `FAIL` on T4 usually means the directory
 cache key/sector was corrupted; a `FAIL` on T11 means an extent's RC/alloc

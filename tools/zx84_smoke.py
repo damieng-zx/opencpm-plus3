@@ -1800,6 +1800,14 @@ class Smoke:
             if not any(marker in l and "PASS" in l for l in self.history):
                 raise SmokeError("BIOSTEST did not report " + marker)
 
+    def run_chaintest(self) -> None:
+        """CHAINTEST: F47 hands a command tail to the CCP and warm-boots."""
+        self.log("CHAINTEST")
+        self.command("CHAINTEST", 1200)
+        self.wait_for(["Mode: 51 columns", "A>"], frames=500, attempts=10)
+        if any("CHAINTEST RETURNED" in l for l in self.history):
+            raise SmokeError("F47 returned instead of chaining")
+
     def run_ccp(self) -> None:
         self.command("DIR", 500)
         listing = self.text()
@@ -2168,6 +2176,7 @@ class Smoke:
         self.run_disktest()
         self.run_bdostest()
         self.run_biostest()
+        self.run_chaintest()
         self.run_ccp()
         self.run_dump()
         self.run_inptest_edit()
