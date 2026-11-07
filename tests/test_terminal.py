@@ -226,6 +226,29 @@ class Wide80(unittest.TestCase):
         # page step is width-dependent (32/51/64 -> 24/29/16)
         self.assertIn("ld (lg_step), a", text)
 
+    def test_width_change_in_24x80_refreshes_the_page_geometry(self):
+        """SCREEN n while already in 24x80 must recompute lg_step.
+
+        _lg_step_for_cols used to be called only from _enter80, so changing
+        the width in 24x80 mode left the old step in place: at 32 columns
+        flips jumped 0 -> 29 (not a page boundary) and at 64 columns 0 -> 0,
+        leaving the rightmost 16 columns of the 80-column sheet unreachable.
+        """
+        text = source("src/bios/screen.zpa")
+        body = text[text.index("scr_set_cols:"):text.index(
+            "; 24x80 mode", text.index("scr_set_cols:"))]
+        self.assertIn("call _lg_step_for_cols", body)
+        self.assertIn("ld (lg_off), a", body)
+
+    def test_page_step_is_derived_from_the_width(self):
+        """The step is 80-cols except at 32 columns, where it is 24."""
+        text = source("src/bios/screen.zpa")
+        body = text[text.index("_lg_step_for_cols:"):text.index("_enter80:")]
+        self.assertIn("sub (hl)", body)
+        self.assertIn("ld (lg_step), a", body)
+        # 80-32 is 48, but 32 columns need three pages: 0, 24, 48.
+        self.assertIn("ld a, 24", body)
+
     def test_extend_enter_is_the_flip_chord(self):
         kb = source("src/bios/keyboard.zpa")
         body = kb[kb.index(".emit:"):kb.index(".emit_map:")]

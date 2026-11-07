@@ -3169,6 +3169,14 @@ scr_set_cols:
     ld hl, 0x8800               ; 32-col uses the 8px font in bank 6
 .setfont:
     ld (font_ptr), hl
+    ; A new physical width means new page geometry.  scr_init clears LG_BUF,
+    ; so the page must go back to column 0; otherwise text written after the
+    ; change would be stored at an offset that no longer matches the window.
+    ; Both 24x80 entry paths zero lg_off as well, so doing it unconditionally
+    ; costs nothing outside 24x80 and keeps this to 7 bytes.
+    xor a
+    ld (lg_off), a
+    call _lg_step_for_cols
     call scr_init               ; clear screen, reset cursor
     jp _stl_draw                ; markers follow the current page
 
@@ -3182,7 +3190,10 @@ scr_set_cols:
 ; The physical screen shows a window of scr_cols columns starting at
 ; lg_off.  Pages are lg_step apart: 32 columns -> 0, 24, 48 (three
 ; pages); 51 -> 0, 29; 64 -> 0, 16.  The wider the physical font, the
-; fewer pages are needed.
+; fewer pages are needed.  scr_set_cols recomputes the step on every width
+; change (not just on entering 24x80), otherwise a change made while
+; already in 24x80 would leave flips stepping by the old width and could
+; never reach the rightmost columns.
 ;
 ; Every logical buffer access pages bank 5 in (mode 2).  The visible
 ; char_buffer mirrors the current window, so the existing redraw, scroll
@@ -3193,19 +3204,19 @@ scr_set_cols:
 ; is turned on by ESC 5 0 / off by ESC 5 1, as the +3 manual specifies.
 
 ; @proc _lg_step_for_cols
-; @clobbers af,b
+;   Page step from the physical width: 32 -> 24, 51 -> 29, 64 -> 16.
+;   Subtracting from 80 yields 48/29/16, so only the 32-column case needs
+;   correcting.  Kept branch-light: the head has a hard 256-byte margin.
+; @clobbers af,hl
 ; @end
 _lg_step_for_cols:
-    ld a, (scr_cols)
-    ld b, 29
-    cp 51
-    jr z, .lgs_store
-    ld b, 24
-    cp 32
-    jr z, .lgs_store
-    ld b, 16
+    ld a, 80
+    ld hl, scr_cols
+    sub (hl)                   ; 80 - cols = 48, 29 or 16
+    cp 48
+    jr nz, .lgs_store
+    ld a, 24                   ; 32 columns use three pages: 0, 24, 48
 .lgs_store:
-    ld a, b
     ld (lg_step), a
     ret
 
