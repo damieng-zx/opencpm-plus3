@@ -950,6 +950,16 @@ parse_cmd:
 .com_path_ready:
 
     ; --- Apply ORDER: try the configured extensions in sequence ---
+    ; A .SUB hit below rewrites the command to "SUBMIT <name>" and re-enters
+    ; parse_cmd.  SUBMIT.COM must still load even when ORDER=(SUB) excludes
+    ; .COM files, otherwise the feature could never run a submit file.
+    ld a, (ccp_force_com)
+    or a
+    jr z, .com_read_order
+    xor a
+    ld (ccp_force_com), a
+    jp .com_order_c
+.com_read_order:
     ld c, F_GET_ORD
     call BDOS                  ; A = bdos_order
     cp ORDER_SUB_COM
@@ -1091,6 +1101,8 @@ parse_cmd:
     pop af
     ld (cmd_buf + 1), a
     pop hl                     ; discard ORDER-dispatcher return
+    ld a, 1
+    ld (ccp_force_com), a      ; load SUBMIT.COM regardless of ORDER
     jp parse_cmd
 
 ; .com_chain_has_drive — Check whether the original command already starts
@@ -2312,6 +2324,8 @@ profile_fcb:
 ccp_chain_drive:
     db 0
 ccp_chain_skip:
+    db 0
+ccp_force_com:
     db 0
 
 ; First 128 bytes of a PRL file's header — used to spot the 0xC9 prefix
