@@ -137,6 +137,22 @@ fixture: `TYPE PAGE.TXT` must stop at `LINE 24` with the pager prompt shown
 and `LINE 25`..`LINE 30` withheld, RETURN must resume and erase the prompt,
 and `SETDEF [NOPAGE]` must print the whole file with no prompt and no key.
 
+The rest of `SETDEF` is checked on a scratch image with a `TWIN.COM` and a
+`TWIN.SUB` (plus `ONLYCOM.COM`/`ONLYSUB.SUB`).  `[ORDER=(SUB,COM)]` and
+`[ORDER=(COM,SUB)]` choose which extension `TWIN` runs; `[ORDER=(COM)]`
+rejects `ONLYSUB`; `[ORDER=(SUB)]` rejects `ONLYCOM` but still runs
+`ONLYSUB` (`SUBMIT.COM` is loaded even though the order excludes `.COM`).
+That last check is run last, because `SETDEF.COM` itself is a `.COM` and
+cannot restore the order afterwards; the next boot resets the BDOS byte.
+`[NO DISPLAY]`/`[DISPLAY]` are checked through the echo of a submitted
+`DIR` line, `[TEMPORARY=C:]`/`[TEMPORARY=0:]` through the bare `SETDEF`
+summary, and `[TEMPORARY=Q:]`, `[ORDER=(COM,COM)]`, `[ORDER=(SUB,XYZ)]`
+and `[BOGUS]` must all report `SETDEF: syntax error`.  Finally the program
+search path is set to `B:,A:` with a `PATHTEST.COM` that exists only on
+the mounted B: image, then narrowed to `A:` so the same command prints
+`?`; the bare `SETDEF` summary reports `Search path: B:,A:` and `A:`.
+
+
 16-bit block numbers are checked with the PCW DS/DD image built as
 `build/cpm3_720.dsk` (80 cylinders x 2 sides, 2K blocks, DSM=351).  The
 runner mounts it on B: after boot, lists and types `HELLO16.TXT`, then runs

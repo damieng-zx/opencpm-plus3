@@ -264,6 +264,21 @@ class Smoke:
         self.mcp.call("run", {"frames": frames})
         self.record()
 
+    def last_output_line(self) -> str:
+        """The last non-empty line above the prompt.
+
+        Commands echo themselves and then print their result, so after a
+        command returns this is the most recent output line.  Used where the
+        same text (such as "Mode: 51 columns") may still be higher on a
+        screen that has not scrolled.
+        """
+        lines = [l for l in self.screen() if l.strip()]
+        if lines and lines[-1].lstrip().startswith("A>"):
+            lines = lines[:-1]
+        if not lines:
+            raise SmokeError("no output line above the prompt")
+        return lines[-1].strip()
+
     def expect(self, label: str, *needles: str, screen: str | None = None) -> None:
         screen = screen if screen is not None else self.text()
         missing = [n for n in needles if n not in screen]
@@ -1000,6 +1015,176 @@ class Smoke:
             except OSError:
                 pass
 
+    def run_setdef(self) -> None:
+        """SETDEF's options, and the CCP behaviour they control.
+
+        The pagination checks only use [PAGE]/[NOPAGE].  Here the submit
+        echo, the temporary drive, the four-entry program search path and
+        all four [ORDER=...] combinations are set from the command line and
+        then exercised: a search path only finds a program on B:, and a
+        name with both .COM and .SUB runs whichever SETDEF selected.
+        """
+        tools = str(ROOT / "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import mkdsk  # noqa: E402
+
+        screen_com = (ROOT / "build" / "screen.com").read_bytes()
+        if not screen_com:
+            raise SmokeError("build/screen.com is empty")
+
+        scratch = ROOT / "build" / "setdef-test.dsk"
+        shutil.copyfile(self.dsk, scratch)
+        image = mkdsk.DSKImage().load(scratch)
+        # SCREEN.COM is a useful marker program: with no argument it prints
+        # "Mode: N columns".  TWIN has both extensions so the ORDER setting
+        # decides whether the program or the submitted TYPE wins.
+        for name, data in (
+                ("TWIN.COM", screen_com),
+                ("ONLYCOM.COM", screen_com),
+                ("TWIN.SUB", b"TYPE SMOKE.TXT\r\n"),
+                ("ONLYSUB.SUB", b"TYPE SMOKE.TXT\r\n"),
+                ("NODISP.SUB", b"DIR A:NOSUCH.*\r\n")):
+            if not image.add_cpm_file(name, data):
+                raise SmokeError(f"cannot add {name} to {scratch.name}")
+        image.save(scratch)
+
+        bimage = ROOT / "build" / "setdef-b.dsk"
+        shutil.copyfile(ROOT / "build" / "cpm3_720.dsk", bimage)
+        bdisk = mkdsk.DSKImage().load(bimage)
+        if not bdisk.add_cpm_file("PATHTEST.COM", screen_com):
+            raise SmokeError(f"cannot add PATHTEST.COM to {bimage.name}")
+        bdisk.save(bimage)
+
+        def check_setting(label: str, field: str, value: str) -> None:
+            for line in reversed(self.screen()):
+                if field in line:
+                    if value not in line:
+                        raise SmokeError(f"{label}: {line!r} "
+                                         f"missing {value!r}")
+                    return
+            raise SmokeError(f"{label}: no {field!r} line on screen")
+
+        old_dsk = self.dsk
+        self.dsk = scratch
+        try:
+            self.log("SETDEF options and CCP search behaviour")
+            self.boot()
+
+            self.command("SETDEF", 600)
+            check_setting("SETDEF default settings", "Search order:", "(COM,SUB)")
+            self.expect("SETDEF defaults", "Page mode:       ON",
+                        "Display mode:    ON", "Temporary drive: default",
+                        "Search path:     *")
+
+            # --- ORDER: which extension the CCP tries first ---
+            self.command("SETDEF [ORDER=(SUB,COM)]", 600)
+            self.command("TWIN", 900)
+            if self.last_output_line() != "SMOKE OK":
+                raise SmokeError("ORDER=(SUB,COM) did not run TWIN.SUB: "
+                                 + repr(self.last_output_line()))
+            self.command("SETDEF [ORDER=(COM,SUB)]", 600)
+            self.command("TWIN", 900)
+            if "Mode: 51 columns" not in self.last_output_line():
+                raise SmokeError("ORDER=(COM,SUB) did not run TWIN.COM: "
+                                 + repr(self.last_output_line()))
+
+            self.command("SETDEF [ORDER=(COM)]", 600)
+            self.command("ONLYSUB", 700)
+            if self.last_output_line() != "?":
+                raise SmokeError("ORDER=(COM) still ran ONLYSUB.SUB: "
+                                 + repr(self.last_output_line()))
+            self.command("ONLYCOM", 700)
+            if "Mode: 51 columns" not in self.last_output_line():
+                raise SmokeError("ORDER=(COM) did not run ONLYCOM.COM: "
+                                 + repr(self.last_output_line()))
+
+            self.command("SETDEF [ORDER=(COM,SUB)]", 600)
+
+            # --- DISPLAY: whether submit-file lines are echoed ---
+            self.command("SETDEF [NO DISPLAY]", 600)
+            self.command("SETDEF", 600)
+            check_setting("SETDEF display off", "Display mode:", "OFF")
+            self.command("SUBMIT NODISP.SUB", 1200)
+            self.expect("no-display submit ran", "No files")
+            if "DIR A:NOSUCH" in self.text():
+                raise SmokeError("[NO DISPLAY] still echoed the submit line")
+
+            self.command("SETDEF [DISPLAY]", 600)
+            self.command("SUBMIT NODISP.SUB", 1200)
+            if "DIR A:NOSUCH" not in self.text():
+                raise SmokeError("[DISPLAY] did not echo the submit line")
+
+            # --- TEMPORARY drive is stored in the SCB and read back ---
+            self.command("SETDEF [TEMPORARY=C:]", 600)
+            self.command("SETDEF", 600)
+            check_setting("SETDEF temporary drive", "Temporary drive:", "C")
+            self.command("SETDEF [TEMPORARY=0:]", 600)
+            self.command("SETDEF", 600)
+            check_setting("SETDEF temporary default", "Temporary drive:", "default")
+            self.command("SETDEF [TEMPORARY=Q:]", 600)
+            self.expect("SETDEF bad temporary drive", "SETDEF: syntax error")
+
+            # --- syntax errors are refused rather than half-applied ---
+            for bad in ("[ORDER=(COM,COM)]", "[ORDER=(SUB,XYZ)]", "[BOGUS]"):
+                before = len(self.history)
+                self.command("SETDEF " + bad, 500)
+                self.expect("SETDEF " + bad, "SETDEF: syntax error")
+            self.command("SETDEF", 600)
+            check_setting("SETDEF still default order", "Search order:", "(COM,SUB)")
+
+            # --- SEARCH PATH: a program that only exists on B: ---
+            self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            self.mcp.call("load", {"file": str(bimage), "drive": "B"})
+            self.command("SETDEF B:,A:", 600)
+            self.command("SETDEF", 600)
+            check_setting("SETDEF search path", "Search path:", "B:,A:")
+            self.command("PATHTEST", 900)
+            if "Mode: 51 columns" not in self.last_output_line():
+                raise SmokeError("search path did not run B:PATHTEST.COM: "
+                                 + repr(self.last_output_line()))
+
+            self.command("SETDEF A:", 700)
+            self.command("SETDEF", 700)
+            check_setting("SETDEF search path one drive", "Search path:", "A:")
+            self.command("PATHTEST", 700)
+            if self.last_output_line() != "?":
+                raise SmokeError("PATHTEST ran with an A:-only path: "
+                                 + repr(self.last_output_line()))
+
+            # --- put everything back ---
+            self.command("SETDEF [ORDER=(COM,SUB)]", 600)
+            self.command("SETDEF [DISPLAY]", 600)
+            self.command("SETDEF [TEMPORARY=0:]", 600)
+            self.command("SETDEF *", 600)
+            self.command("SETDEF", 600)
+            self.expect("SETDEF restored", "Page mode:       ON",
+                        "Display mode:    ON", "Temporary drive: default",
+                        "Search path:     *", "Search order:    (COM,SUB)")
+
+            # --- ORDER=(SUB) is the lock-in case: it excludes .COM, so the
+            # command that would undo it (SETDEF.COM) cannot run either.  A
+            # .SUB hit still works because the CCP forces SUBMIT.COM for its
+            # own "SUBMIT <name>" rewrite.  Run it last, then leave the
+            # scratch image; the next boot resets the order byte.
+            self.command("SETDEF [ORDER=(SUB)]", 600)
+            self.command("ONLYCOM", 700)
+            if self.last_output_line() != "?":
+                raise SmokeError("ORDER=(SUB) still ran ONLYCOM.COM: "
+                                 + repr(self.last_output_line()))
+            self.command("ONLYSUB", 900)
+            if self.last_output_line() != "SMOKE OK":
+                raise SmokeError("ORDER=(SUB) did not run ONLYSUB.SUB: "
+                                 + repr(self.last_output_line()))
+        finally:
+            self.dsk = old_dsk
+            self.mcp.call("eject", {"target": "disk", "drive": "B"})
+            for path in (scratch, bimage):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+
     def run_diskcopy(self) -> None:
         """DISKCOPY: A:->B:, a same-drive A:->A:, and a 10-sector layout copy.
 
@@ -1505,7 +1690,6 @@ class Smoke:
             raise SmokeError("BDOSTEST F111 did not print its block")
         if not any("F104 SETDATE" in l for l in self.history):
             raise SmokeError("BDOSTEST did not reach F104")
-
     def run_ccp(self) -> None:
         self.command("DIR", 500)
         listing = self.text()
@@ -1887,6 +2071,7 @@ class Smoke:
         self.check_bank6_sentinels()
         self.run_profile()
         self.run_submit_input()
+        self.run_setdef()
         if quick:
             self.log("quick mode: skipping the destructive format test")
         else:
