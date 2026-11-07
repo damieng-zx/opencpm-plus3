@@ -97,7 +97,7 @@ scb_tpa:
 
 
 ; ==========================================================================
-; BIOS Visible Jump Table (33 entries Ã— 3 bytes = 99 bytes)
+; BIOS Visible Jump Table (33 entries × 3 bytes = 99 bytes)
 ; ==========================================================================
 ;
 ; Programs compute BIOS base from the warm boot vector at 0001-0002.
@@ -111,7 +111,7 @@ scb_tpa:
 ; Fn 27 (BNKSEL) lives in common already and fn 30 (USERF) is handled inline,
 ; so their slots are dead entries — cheaper than splitting the block.
 bios_visible:
-    jp warm_boot_stub              ;  0: BOOT (cold â†’ warm from TPA)
+    jp warm_boot_stub              ;  0: BOOT (cold → warm from TPA)
     jp warm_boot_stub              ;  1: WBOOT
     jp bv_tramp + 3*(2 - 2)        ;  2: CONST
     jp bv_tramp + 3*(3 - 2)        ;  3: CONIN
@@ -155,7 +155,7 @@ bios_visible:
 ; shim converts that back into the bank-4 target (BIOS4_BASE + 3*fn).
 bv_tramp:
     dup 31
-        call bv_shim               ; 31 Ã— 3 bytes = 93 bytes total
+        call bv_shim               ; 31 × 3 bytes = 93 bytes total
     edup
     assert $ - bv_tramp == 31 * 3, "bv_tramp must be exactly 93 bytes"
 
@@ -518,7 +518,7 @@ isr_handler:
     ld a, l
     cp 0xA0
     jr nz, .store_min_low
-    ; 1440 reached â†’ reset minutes, increment day counter
+    ; 1440 reached → reset minutes, increment day counter
     ld hl, 0
     ld (scb_minute), hl
     ld hl, (scb_date)
@@ -845,7 +845,7 @@ copy_record_from_tpa:
 ; copy_block_to_tpa — Copy arbitrary-length block from system to TPA
 ;
 ; Used for CCP loading (warm/cold boot). Identical semantics to
-; copy_to_user (systemâ†’stagingâ†’TPA in 32-byte chunks); tail-call into it.
+; copy_to_user (system→staging→TPA in 32-byte chunks); tail-call into it.
 ;
 ; @proc copy_block_to_tpa
 ; @param %src:u16   hl          ; source in system memory (bank 4 or 6)
