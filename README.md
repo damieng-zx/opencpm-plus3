@@ -9,7 +9,7 @@ Locomotive ROM, binary or disassembly was used: everything here was written
 against the published CP/M 3 documentation and the +3's documented hardware
 behaviour.
 
-## Compared with the +3's original CP/M
+## Compared with Locomotive CP/M +3
 
 Both systems speak CP/M 3.1 and the +3's XBIOS, so the same applications run.
 Beyond that, this system offers:
@@ -18,9 +18,9 @@ Beyond that, this system offers:
 |---|---|---|
 | Origin | Locomotive Software, 1987 | clean-room, this project |
 | Text widths | 32 and 51 columns | 32, 51 and **64** columns |
-| Virtual 80-column screen | — | **24x80**, paged (`SET24X80`) |
-| Formatting a disc | `DISCKIT` | our **`FORMAT`** (7 layouts) |
-| Copying a disc | `DISCKIT` | our **`DISKCOPY`** (track level, verified) |
+| Virtual 80-column screen (`SET24X80`) | rendered in 51 columns | rendered in **51 or 64** columns |
+| Formatting a disk | `DISCKIT` | **`FORMAT.COM`** (7 layouts) |
+| Copying a disk | `DISCKIT` | **`DISKCOPY.COM`** (track level, verified) |
 | RAM disk | `RAMDISC.FID` | **`RAMDISK.FID`**, 16K C: |
 | Serial (AUX) device | supported | **not implemented** |
 | Parallel (printer) | supported | **not implemented** |
@@ -38,9 +38,9 @@ Beyond that, this system offers:
   `ESC b`/`ESC c`, wrap control (`ESC v`/`ESC w`), a settable viewport
   (`ESC X`), and the `ESC 3`/`ESC 4` screen-size and page-mode controls from
   the +3 CP/M manual.
-- **XBIOS/TE**: the +3 extended BIOS terminal, disc and keyboard calls through
+- **XBIOS/TE**: the +3 extended BIOS terminal, disk and keyboard calls through
   BIOS function 30 (`USERF`) — `TE_ASK`, `TE_RESET`, `TE_SET_INK`,
-  `TE_SET_BORDER`, `TE_SET_SPEED`, `SCR_RUN_ROUTINE`, the `DD_*` disc calls and
+  `TE_SET_BORDER`, `TE_SET_SPEED`, `SCR_RUN_ROUTINE`, the `DD_*` disk calls and
   the `KM_*` keyboard calls; see
   [XBIOS/TE Interface](docs/cpm-plus-xbios.md).
 - **Keyboard**: the +3 CP/M matrix — BREAK (`Caps Shift`+`Space`) sends ESC,
@@ -114,7 +114,7 @@ emulator.
   overlays and random FCB I/O they use are the interesting part.
 - **DRI utilities** — ED, SET, SETKEYS and SHOW, including GENCOM files with a
   COM header.
-- **Disc formats** — +3/CPC 8-bit blocks, the CP/M 3 16-bit block format (DSM >
+- **Disk formats** — +3/CPC 8-bit blocks, the CP/M 3 16-bit block format (DSM >
   255) and PCW 720K images, with `SHOWXDPB` reporting the probed geometry.
 
 The known gaps are documented rather than hidden: 3CLCK's clock FID needs a
@@ -141,8 +141,8 @@ for the API references.
 - `SUBMIT.COM` — build the `$$$.SUB` file the CCP drains (supports `$1`..`$9`;
   nested submits are rejected; a line beginning with `<` is passed to the
   running program as console input, so a script can drive `PIP`).
-- `FORMAT.COM` — format a disc in A: or B: (`FORMAT A:` / `FORMAT B:`). Asks
-  for the disc to be swapped, then for a layout:
+- `FORMAT.COM` — format a disk in A: or B: (`FORMAT A:` / `FORMAT B:`). Asks
+  for the disk to be swapped, then for a layout:
 
   | # | Layout | Geometry |
   |---|---|---|
@@ -156,8 +156,8 @@ for the API references.
 
   Formats one track and verifies it sector by sector before moving on, with a
   live `percentage / track / side / FORMAT|VERIFY` line. It writes the AMSDOS
-  disc spec into the boot sector of the layouts that reserve one, and the login
-  probe rebuilds the geometry from that spec, so 10-sector and 42-track discs
+  disk spec into the boot sector of the layouts that reserve one, and the login
+  probe rebuilds the geometry from that spec, so 10-sector and 42-track disks
   are detected as themselves. CPC Data is identified by its sector IDs
   instead. No no-verify option or bad-sector mapping yet.
 - `STAT.COM` — `STAT` shows each drive's free space (`A: 59K free of 175K`);
@@ -166,9 +166,9 @@ for the API references.
   Free space comes from BDOS F46, capacity from the DPB, sizes by summing the
   directory extents, attributes from the entry and F30. Wildcards work for
   listing only (F30 matches exact names).
-- `DISKCOPY.COM` — copy one disc to another: `DISKCOPY A: B:`,
+- `DISKCOPY.COM` — copy one disk to another: `DISKCOPY A: B:`,
   `DISKCOPY B: A:`, or the same drive twice (`A: A:` / `B: B:`).  It asks for
-  the source (and target) discs, detects the source layout with the same login
+  the source (and target) disks, detects the source layout with the same login
   probe the BIOS uses, then copies track by track.  With two drives each track
   is read and written straight away; on one drive it reads as many tracks as
   fit in a 48K buffer (up to 10), asks for the target, writes them, and asks
@@ -181,10 +181,10 @@ for the API references.
   rotation of the source's cycle.  Every written track is then read back and
   compared with the data still in the buffer (DD_CHECK_SECTOR), so a write that
   silently failed is caught on the spot.
-- `SYSGEN.COM` — make a formatted disc bootable: `SYSGEN B:` or `SYSGEN A:`.
+- `SYSGEN.COM` — make a formatted disk bootable: `SYSGEN B:` or `SYSGEN A:`.
   The system is read from A: (track 0 — boot sector and stage-2 loader — plus
   `CPM3.SYS`, `CPM3C.SYS` and `CCP.COM`) and buffered in memory, so the target
-  can be the same drive: SYSGEN then asks for the discs to be swapped. The
+  can be the same drive: SYSGEN then asks for the disks to be swapped. The
   target's geometry is checked against the source's first; only the boot track
   and the three system files are written, so other files on the target are
   kept. Every written file is read back and compared with the buffered copy
