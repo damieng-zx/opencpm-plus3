@@ -617,6 +617,14 @@ scr_putchar:
     jp z, .csi_cup
     cp 'f'
     jp z, .csi_cup
+    cp 'A'
+    jp z, .csi_cuu
+    cp 'B'
+    jp z, .csi_cud
+    cp 'C'
+    jp z, .csi_cuf
+    cp 'D'
+    jp z, .csi_cub
     ret                         ; unsupported final — consume silently
 .csi_abort:
     xor a
@@ -689,6 +697,78 @@ scr_putchar:
     or a
     ret nz
     jr .csi_count_one
+
+; CUU - cursor up
+.csi_cuu:
+    call .csi_count
+    call .csi_row_up
+    jp _lg_autoflip
+
+; CUD - cursor down
+.csi_cud:
+    call .csi_count
+    call .csi_row_down
+    jp _lg_autoflip
+
+.csi_row_up:
+    ld b, a
+    ld a, (cursor_row)
+    sub b
+    jr nc, .cru_store
+    xor a
+.cru_store:
+    ld (cursor_row), a
+    ret
+
+.csi_row_down:
+    ld b, a
+    ld a, (cursor_row)
+    add a, b
+    jr c, .crd_clamp
+    ld b, a
+    ld a, (vp_height)
+    cp b
+    jr z, .crd_clamp
+    jr c, .crd_clamp
+    ld a, b
+    jr .crd_store
+.crd_clamp:
+    ld a, (vp_height)
+    dec a
+.crd_store:
+    ld (cursor_row), a
+    ret
+
+; CUF - cursor forward
+.csi_cuf:
+    call .csi_count
+    ld b, a
+    call _lg_width
+    dec a
+    ld c, a                   ; C = last logical column
+    ld a, (cursor_col)
+    add a, b
+    jr c, .cuf_clamp
+    cp c
+    jr z, .cuf_store
+    jr c, .cuf_store
+.cuf_clamp:
+    ld a, c
+.cuf_store:
+    ld (cursor_col), a
+    jp _lg_autoflip
+
+; CUB - cursor back
+.csi_cub:
+    call .csi_count
+    ld b, a
+    ld a, (cursor_col)
+    sub b
+    jr nc, .cub_store
+    xor a
+.cub_store:
+    ld (cursor_col), a
+    jp _lg_autoflip
 
 ; ------- one-parameter sequences (ESC 3 / 4 / b / c) -------
 

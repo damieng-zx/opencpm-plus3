@@ -35,10 +35,15 @@ code grows.
 | `ESC [ row ; col H` | CUP | 1-based; defaults 1,1; 0 means 1; row clamps to the viewport height and column to the logical width (80 in 24x80 mode). |
 | `ESC [ row ; col f` | HVP | Same handler as CUP. |
 | `ESC [ H` | Home | CUP with no parameters. |
+| `ESC [ n A` | CUU | Cursor up; default/0 count is 1; stops at row 0. |
+| `ESC [ n B` | CUD | Cursor down; clamps to the last viewport row. |
+| `ESC [ n C` | CUF | Cursor forward; clamps to the logical width minus 1. |
+| `ESC [ n D` | CUB | Cursor back; stops at column 0. |
 
 ## Test coverage
 
 `tools/zx84_ansi.py` currently checks CUP at an interior cell, HVP, the
-bottom-right clamp (23,50 at 51 columns), home, and `0;0` defaulting to 1,1.
-`tests/test_terminal.py` checks the parser wiring and that the CUP handler
-uses `vp_height` and `_lg_width`.
+bottom-right clamp (23,50 at 51 columns), home, `0;0` defaulting to 1,1,
+and each relative movement including its top/bottom/left/right clamp.
+`tests/test_terminal.py` checks the parser wiring and that the handlers use
+`vp_height` and `_lg_width`.

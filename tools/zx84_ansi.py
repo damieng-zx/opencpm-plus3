@@ -68,8 +68,42 @@ class AnsiTests:
 
         self.s.finish_prompt()
 
+    def phase_move(self) -> None:
+        self.s.log("ANSI: CUU/CUD/CUF/CUB")
+        self.s.esc("E")
+        self.s.esc("[10;10H")
+        lines = self.send("[2A", "U")
+        self.check_at("CUU", lines, 7, 9, "U")
+
+        lines = self.send("[3B", "D")
+        self.check_at("CUD", lines, 10, 10, "D")
+
+        lines = self.send("[4C", "F")
+        self.check_at("CUF", lines, 10, 15, "F")
+
+        lines = self.send("[2D", "B")
+        self.check_at("CUB", lines, 10, 14, "B")
+
+        # Clamp at the top and at the bottom/right/left edges.
+        lines = self.send("[99A", "T")
+        self.check_at("CUU clamp", lines, 0, 15, "T")
+        self.s.esc("[99B")
+        row = self.s.memory(6, 0xA731, 1)[0]
+        self.s.esc("[99C")
+        col = self.s.memory(6, 0xA730, 1)[0]
+        if (row, col) != (23, 50):
+            raise SmokeError(
+                f"movement clamp: cursor at row {row} col {col}, "
+                "expected 23/50")
+        self.s.esc("[99D")
+        if self.s.memory(6, 0xA730, 1)[0] != 0:
+            raise SmokeError("CUB clamp did not stop at column 0")
+
+        self.s.finish_prompt()
+
     def run(self) -> None:
         self.phase_cup()
+        self.phase_move()
 
 
 def main() -> int:

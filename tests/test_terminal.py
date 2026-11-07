@@ -31,9 +31,21 @@ class AnsiCsi(unittest.TestCase):
         self.assertIn("csi_params + 1", body)
         self.assertIn("_lg_autoflip", body)
 
+    def test_movement_handlers_clamp(self):
+        text = source("src/bios/screen.zpa")
+        for name in (".csi_cuu:", ".csi_cud:", ".csi_cuf:", ".csi_cub:",
+                     ".csi_row_up:", ".csi_row_down:"):
+            self.assertIn(name, text)
+        body = text[text.index(".csi_row_down:"):text.index(
+            "; ------- one-parameter sequences")]
+        self.assertIn("vp_height", body)
+        cuf = text[text.index(".csi_cuf:"):text.index(".csi_cub:")]
+        self.assertIn("_lg_width", cuf)
+
     def test_harness_covers_cup_and_hvp(self):
         tool = source("tools/zx84_ansi.py")
-        for seq in ("[5;10H", "[7;20f", "[99;99H", "[H", "[0;0H"):
+        for seq in ("[5;10H", "[7;20f", "[99;99H", "[H", "[0;0H",
+                    "[2A", "[3B", "[4C", "[2D"):
             self.assertIn(seq, tool)
 
 
