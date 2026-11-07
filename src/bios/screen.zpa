@@ -2891,19 +2891,27 @@ _redraw_all_screenpaged:
 ; @clobbers af,bc,de,hl,ix
 ; @end
 scr_set_cols:
-    cp 32
-    jr z, .valid
     cp 51
     jr z, .valid
     cp 64
-    jr nz, .invalid
+    jr z, .check64
+    cp 32
+    jr z, .check32
+    ret                         ; ignore invalid values silently
+.check64:
     ld a, (LF_FLAGS)
     and 0x10                    ; FONT64.BIN found on the boot disk?
     jr z, .invalid
     ld a, 64
     jr .valid
+.check32:
+    ld a, (LF_FLAGS)
+    and 0x02                    ; FONT32.BIN found on the boot disk?
+    jr z, .invalid
+    ld a, 32
+    jr .valid
 .invalid:
-    ret                         ; ignore invalid / unavailable values silently
+    ret                         ; ignore unavailable values silently
 .valid:
     ld (scr_cols), a            ; update runtime column count
     dec a
