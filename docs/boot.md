@@ -107,8 +107,8 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 15,734 | 16,384 (`C000-FFFF`) | 650   |
-| `CPM3C.SYS` common stub | 2,476  | 2,560 (`F600-FFFF`)  | 84    |
+| `CPM3.SYS` head         | 15,776 | 16,384 (`C000-FFFF`) | 608   |
+| `CPM3C.SYS` common stub | 2,407  | 2,560 (`F600-FFFF`)  | 153   |
 | loader                  | 1,221  | 8,704 (17 sectors)   | 7,483 |
 
 Total code capacity is `16,384 + 2,560 = 18,944` bytes, up from 16,058

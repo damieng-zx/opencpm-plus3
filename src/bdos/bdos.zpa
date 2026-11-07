@@ -2112,45 +2112,9 @@ f20_body:
     or l
     jp z, .eof                 ; Block 0 = no more data
 
-    ; Calculate absolute track/sector for this record
-    ; record_in_block = CR & BLM
-    push hl                    ; Save block number
-    ld a, (ix + 32)            ; CR
-    ld b, a
-    ld a, (cached_blm)
-    and b                      ; A = record within block
-    ld c, a                    ; C = record in block
-    pop hl                     ; HL = block number
-
-    ; Absolute record = block * records_per_block + record_in_block
-    ; = block << BSH + record_in_block
-    ld a, (cached_bsh)
-    ld b, a
-    or a
-    jr z, .shl_blk_done
-.shl_blk:
-    add hl, hl
-    djnz .shl_blk              ; HL = block << BSH = block * records_per_block
-.shl_blk_done:
-    ld b, 0
-    add hl, bc                 ; HL = absolute record in data area
-
-    ; Convert to track/sector
-    ld bc, (cached_spt)
-    call div_hl_bc             ; HL = track offset, DE = sector
-    push de
-    ld de, (cached_off)
-    add hl, de                 ; HL = absolute track
-    ld b, h
-    ld c, l
-    call set_trk
-
-    pop bc                     ; BC = sector
-    call set_sec
-
-    ; Set DMA to user's buffer
-    ld bc, (bdos_dma)
-    call set_dma
+    ; Point the BIOS at this record (track, sector and DMA).  F21 and F33
+    ; use the same helper.
+    call map_record
 
     ; Read
     call disk_read
@@ -2360,43 +2324,8 @@ bf_f21_core:
     jp z, .wseq_alloc          ; Zero = unallocated, need a new block
 
 .wseq_have_block:
-    ; HL = block number
-    push hl                    ; Save block number
-    ; record_in_block = CR & BLM
-    ld a, (ix + 32)            ; CR
-    ld b, a
-    ld a, (cached_blm)
-    and b                      ; A = record_in_block
-    ld c, a
-    pop hl                     ; HL = block number
-
-    ; abs_record = (block << BSH) + record_in_block
-    ld a, (cached_bsh)
-    ld b, a
-    or a
-    jr z, .wseq_shl_done
-.wseq_shl:
-    add hl, hl
-    djnz .wseq_shl             ; HL = block << BSH
-.wseq_shl_done:
-    ld b, 0
-    add hl, bc                 ; HL = absolute record in data area
-
-    ; Convert to track and sector
-    ld bc, (cached_spt)
-    call div_hl_bc             ; HL = track_in_data, DE = sector
-    push de
-    ld de, (cached_off)
-    add hl, de
-    ld b, h
-    ld c, l
-    call set_trk
-    pop bc                     ; BC = sector
-    call set_sec
-
-    ; DMA = user's write buffer
-    ld bc, (bdos_dma)
-    call set_dma
+    ; HL = block number; point the BIOS at this record
+    call map_record
 
     ; Write the 128-byte record
     ld c, 0                    ; Write type: normal
@@ -2607,16 +2536,7 @@ zero_fill_block:
 
 .zf_loop:
     ld hl, (f40_rec)
-    ld bc, (cached_spt)
-    call div_hl_bc             ; HL = track in data area, DE = sector
-    push de
-    ld de, (cached_off)
-    add hl, de                 ; HL = absolute track
-    ld b, h
-    ld c, l
-    call set_trk
-    pop bc
-    call set_sec
+    call abs_to_bios           ; track and sector for this record
 
     ld bc, f40_zero
     call set_dma
@@ -3023,36 +2943,7 @@ bf_f33:
     or l
     jp z, .rdrand_unwritten2
 
-    push hl
-    ld a, (ix + 32)
-    ld b, a
-    ld a, (cached_blm)
-    and b
-    ld c, a
-    pop hl
-    ld a, (cached_bsh)
-    ld b, a
-    or a
-    jr z, .rdrand_shl_done
-.rdrand_shl:
-    add hl, hl
-    djnz .rdrand_shl
-.rdrand_shl_done:
-    ld b, 0
-    add hl, bc
-
-    ld bc, (cached_spt)
-    call div_hl_bc
-    push de
-    ld de, (cached_off)
-    add hl, de
-    ld b, h
-    ld c, l
-    call set_trk
-    pop bc
-    call set_sec
-    ld bc, (bdos_dma)
-    call set_dma
+    call map_record
     call disk_read
     pop ix
     or a
@@ -3569,6 +3460,70 @@ bf_f40:
 
 
 ; ==========================================================================
+; --------------------------------------------------------------------------
+; map_record - point the BIOS at an FCB record
+;
+;   F20 (sequential read), F21 (sequential write) and F33 (random read) all
+;   turn "the record at CR in block N" into a BIOS track/sector and point
+;   the DMA at the caller's buffer.  This is that conversion; the callers
+;   only differ in what they do with the block number beforehand (EOF,
+;   allocate a block, unwritten record).
+;
+;   In:  IX = FCB (fcb_buf), HL = the record's block number
+;   Out: BIOS track/sector/DMA set for the record at CR (FCB+32)
+;   Clobbers: AF, BC, DE, HL
+; @proc map_record
+; @param %block:u16 hl
+; @clobbers af,bc,de,hl
+; @end
+map_record:
+    ; record_in_block = CR & BLM
+    push hl
+    ld a, (ix + 32)            ; CR
+    ld b, a
+    ld a, (cached_blm)
+    and b
+    ld c, a
+    pop hl
+    ; absolute record = (block << BSH) + record_in_block
+    ld a, (cached_bsh)
+    ld b, a
+    or a
+    jr z, .shifted
+.shift:
+    add hl, hl
+    djnz .shift
+.shifted:
+    ld b, 0
+    add hl, bc                 ; HL = absolute record in the data area
+    call abs_to_bios
+    ; DMA = the caller's buffer
+    ld bc, (bdos_dma)
+    jp set_dma
+
+; --------------------------------------------------------------------------
+; abs_to_bios - BIOS track/sector for an absolute record
+;   In:  HL = absolute record in the data area
+;   Out: BIOS track and sector selected
+;   Clobbers: AF, BC, DE, HL
+; @proc abs_to_bios
+; @param %record:u16 hl
+; @clobbers af,bc,de,hl
+; @end
+abs_to_bios:
+    ; track = record / SPT + OFF, sector = record % SPT
+    ld bc, (cached_spt)
+    call div_hl_bc             ; HL = track in the data area, DE = sector
+    push de
+    ld de, (cached_off)
+    add hl, de
+    ld b, h
+    ld c, l
+    call set_trk
+    pop bc
+    jp set_sec
+
+
 ; @proc div_hl_bc
 ; @param %dividend:u16 hl
 ; @param %divisor:u16  bc

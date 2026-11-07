@@ -1549,28 +1549,9 @@ xbios_handler:
     ;          +5 command-byte count, +6 command bytes
     ;   Out: HL = dd_results (count + result bytes)
     ; Only CP/M bank 1 (TPA) is supported; other banks return no data.
-    ld (dd_param_ptr), hl
-    ld a, (hl)
-    cp 1
-    jp nz, .ddlr_no_xfer
-    inc hl
-    ld e, (hl)
-    inc hl
-    ld d, (hl)
-    ld (dd_xfer_ptr), de
-    inc hl
-    ld e, (hl)
-    inc hl
-    ld d, (hl)
-    ld (dd_xfer_left), de
-
-    ld hl, (dd_param_ptr)
-    call .dd_send_cmd
-
-    ld hl, (dd_xfer_left)
-    ld a, h
-    or l
-    jr z, .ddlr_results
+    call .dd_l_setup
+    jp c, .dd_l_no_xfer         ; unsupported bank: report no data
+    jr z, .ddlr_results         ; command sent, no data phase (e.g. READ ID)
 .ddlr_loop:
     call fdc_read_byte
     ld de, (dd_xfer_ptr)
@@ -1588,7 +1569,45 @@ xbios_handler:
     call .dd_drain_results
     ld hl, dd_results
     ret
-.ddlr_no_xfer:
+
+; .dd_l_setup - unpack a DD_L_* parameter block and send its command
+;
+;   DD_L_READ and DD_L_WRITE take the same block (bank, buffer, byte count,
+;   command count, command bytes) and both send the command before moving
+;   data, so the unpacking lives here.
+;
+;   In:  HL = parameter block
+;   Out: carry set = unsupported bank, nothing was sent
+;        carry clear + Z set = the command ran and has no data phase
+;        carry clear + Z clear = dd_xfer_ptr/dd_xfer_left describe the data
+;   Clobbers: AF, BC, DE, HL
+.dd_l_setup:
+    ld (dd_param_ptr), hl
+    ld a, (hl)
+    cp 1
+    jr z, .dls_ok
+    scf                         ; unsupported bank: nothing was sent
+    ret
+.dls_ok:
+    inc hl
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    ld (dd_xfer_ptr), de
+    inc hl
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    ld (dd_xfer_left), de
+    ld hl, (dd_param_ptr)
+    call .dd_send_cmd
+    ld hl, (dd_xfer_left)
+    ld a, h
+    or l
+    ret                         ; Z = nothing to move, NZ = move data
+
+.dd_l_no_xfer:
+    ; Both DD_L_* calls report "no data" the same way.
     xor a
     ld (dd_results), a
     ld hl, dd_results
@@ -1670,27 +1689,8 @@ xbios_handler:
     ;          +5 command-byte count, +6 command bytes
     ;   Out: HL = dd_results (count + result bytes)
     ; Only CP/M bank 1 (TPA) is supported.
-    ld (dd_param_ptr), hl
-    ld a, (hl)
-    cp 1
-    jp nz, .ddlw_no_xfer
-    inc hl
-    ld e, (hl)
-    inc hl
-    ld d, (hl)
-    ld (dd_xfer_ptr), de
-    inc hl
-    ld e, (hl)
-    inc hl
-    ld d, (hl)
-    ld (dd_xfer_left), de
-
-    ld hl, (dd_param_ptr)
-    call .dd_send_cmd
-
-    ld hl, (dd_xfer_left)
-    ld a, h
-    or l
+    call .dd_l_setup
+    jp c, .dd_l_no_xfer
     jr z, .ddlw_results
 .ddlw_loop:
     ld de, (dd_xfer_ptr)
@@ -1711,11 +1711,6 @@ xbios_handler:
     ld (deblock_drv), a
     xor a
     ld (deblock_dirty), a
-    ld hl, dd_results
-    ret
-.ddlw_no_xfer:
-    xor a
-    ld (dd_results), a
     ld hl, dd_results
     ret
 
@@ -2022,6 +2017,14 @@ xbios_handler:
     scf
     ret
 
+; .dd_copy_in - copy the caller's 512-byte buffer into system memory
+;   In:  DE = destination, dd_user_ptr = the caller's buffer in the TPA
+;   Clobbers: AF, BC, DE, HL
+.dd_copy_in:
+    ld hl, (dd_user_ptr)
+    ld bc, 512
+    jp copy_from_user
+
 .dd_write:
     ; DD_WRITE (0x0089)
     ;   In:  B = CP/M bank, C = unit, D = logical track,
@@ -2029,10 +2032,8 @@ xbios_handler:
     ;   Out: carry set OK; carry clear + A = error (1 = write protected)
     call .dd_prepare
     ret nz
-    ld hl, (dd_user_ptr)
     ld de, deblock_buf
-    ld bc, 512
-    call copy_from_user
+    call .dd_copy_in
     ld a, (dd_phys_sec)
     call fdc_write_sector
     jp nz, .dd2_write_error     ; lint: ignore - write returns Z/NZ
@@ -2054,10 +2055,10 @@ xbios_handler:
     ld a, (dd_phys_sec)
     call fdc_read_sector
     jp nz, .dd2_data_error
-    ld hl, (dd_user_ptr)
+    ; The caller's buffer arrives in the TPA; copy it beside the sector
+    ; buffer, which holds what was just read.
     ld de, dd_compare_buf
-    ld bc, 512
-    call copy_from_user
+    call .dd_copy_in
     ld hl, deblock_buf
     ld de, dd_compare_buf
     ld bc, 512

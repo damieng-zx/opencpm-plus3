@@ -48,7 +48,9 @@ class ZeroFillWiring(unittest.TestCase):
         self.assertIn("ld b, 128", body)            # one full record
         self.assertIn("cached_blm", body)           # records per block
         self.assertIn("ld (f40_left), a", body)
-        for call in ("set_trk", "set_sec", "set_dma", "disk_write"):
+        # The track/sector conversion is shared with F20/F21/F33.
+        self.assertIn("call abs_to_bios", body)
+        for call in ("set_dma", "disk_write"):
             self.assertIn(f"call {call}", body)
         self.assertIn("ret nz", body)               # BIOS error propagates
 

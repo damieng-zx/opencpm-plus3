@@ -332,12 +332,16 @@ class DiscPhase2(unittest.TestCase):
         self.assertIn("call fdc_read_sector", read)
         self.assertIn("call copy_to_user", read)
 
+        # DD_WRITE and DD_CHECK both pull the caller's 512 bytes in, but to
+        # different places: the sector buffer, or beside it for the compare.
         write = handler_body(".dd_write:", ".dd_check:")
         self.assertIn("call fdc_write_sector", write)
-        self.assertIn("call copy_from_user", write)
+        self.assertIn("ld de, deblock_buf", write)
+        self.assertIn("call .dd_copy_in", write)
 
         check = handler_body(".dd_check:", ".dd_format:")
         self.assertIn("dd_compare_buf", check)
+        self.assertIn("call .dd_copy_in", check)
         self.assertIn("cp (hl)", check)
 
     def test_prepare_maps_geometry(self):
@@ -533,15 +537,20 @@ class DdLRead(unittest.TestCase):
         self.assertIn("jp z, .dd_l_read", dispatch)
 
     def test_handler_parses_and_reads(self):
-        body = handler_body(".dd_l_read:", ".dd_send_cmd:")
-        self.assertIn("dd_param_ptr", body)
-        self.assertIn("dd_xfer_ptr", body)
-        self.assertIn("dd_xfer_left", body)
-        self.assertIn("call .dd_send_cmd", body)
+        # The parameter block is unpacked by .dd_l_setup, which DD_L_WRITE
+        # shares; the read loop only moves bytes.
+        body = handler_body(".dd_l_read:", ".dd_l_setup:")
+        self.assertIn("call .dd_l_setup", body)
+        self.assertIn(".dd_l_no_xfer", body)
         self.assertIn("call fdc_read_byte", body)
         self.assertIn("call write_user_byte", body)
         self.assertIn("call .dd_drain_results", body)
-        self.assertIn(".ddlr_no_xfer", body)
+
+        setup = handler_body(".dd_l_setup:", ".dd_l_no_xfer:")
+        self.assertIn("dd_param_ptr", setup)
+        self.assertIn("dd_xfer_ptr", setup)
+        self.assertIn("dd_xfer_left", setup)
+        self.assertIn("call .dd_send_cmd", setup)
 
     def test_command_and_result_helpers(self):
         body = handler_body(".dd_send_cmd:", ".dd_drain_results:")
@@ -577,15 +586,20 @@ class DdLWrite(unittest.TestCase):
 
     def test_handler_writes_from_user(self):
         body = handler_body(".dd_l_write:", "; --- Phase-2 disc calls ---")
-        self.assertIn("dd_param_ptr", body)
-        self.assertIn("dd_xfer_ptr", body)
-        self.assertIn("dd_xfer_left", body)
-        self.assertIn("call .dd_send_cmd", body)
+        self.assertIn("call .dd_l_setup", body)
+        self.assertIn(".dd_l_no_xfer", body)
         self.assertIn("call read_user_byte", body)
         self.assertIn("call fdc_send_byte", body)
         self.assertIn("call .dd_drain_results", body)
         self.assertIn("deblock_drv", body)      # invalidate cache
-        self.assertIn(".ddlw_no_xfer", body)
+
+        setup = handler_body(".dd_l_setup:", ".dd_l_no_xfer:")
+        self.assertIn("dd_xfer_left", setup)
+        self.assertIn("call .dd_send_cmd", setup)
+        # A zero byte count still drains the command's result bytes (READ ID
+        # has no data phase but does return results), so the unsupported-bank
+        # case is the one that skips the command.
+        self.assertIn("scf", setup)
 
     def test_tester_covers_lwrite(self):
         tester = source("src/test/xtetest.asm")

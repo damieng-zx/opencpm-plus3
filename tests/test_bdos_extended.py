@@ -28,6 +28,51 @@ class ExtendedDispatch(unittest.TestCase):
         self.assertIn("jp z, bf_f98", mid)
 
 
+class RecordMapping(unittest.TestCase):
+    """F20/F21/F33 share the block-to-track/sector conversion (map_record)."""
+
+    def test_helper_exists_and_is_annotated(self):
+        text = source("src/bdos/bdos.zpa")
+        self.assertIn("; @proc map_record", text)
+        body = text[text.index("map_record:"):text.index("abs_to_bios:")]
+        self.assertIn("(ix + 32)", body)      # CR
+        self.assertIn("cached_blm", body)
+        self.assertIn("cached_bsh", body)
+        self.assertIn("call abs_to_bios", body)
+        self.assertIn("set_dma", body)
+
+    def test_abs_to_bios_is_shared(self):
+        text = source("src/bdos/bdos.zpa")
+        self.assertIn("; @proc abs_to_bios", text)
+        body = text[text.index("abs_to_bios:"):text.index("common_image")                      if "common_image" in text else len(text)]
+        self.assertIn("cached_spt", body)
+        self.assertIn("cached_off", body)
+        self.assertIn("call set_trk", body)
+        self.assertIn("set_sec", body)
+        # The F40 zero-fill walker uses it too, instead of repeating the
+        # division and track/sector setup.
+        zero = text[text.index("zero_fill_block:"):text.index("bf_f22:")]
+        self.assertIn("call abs_to_bios", zero)
+
+    def test_each_file_path_calls_it(self):
+        text = source("src/bdos/bdos.zpa")
+
+        read = text[text.index("f20_body:"):text.index("bf_f21:")]
+        self.assertIn("call map_record", read)
+
+        write = text[text.index("bf_f21_core:"):text.index("bf_f22:")]
+        self.assertIn("call map_record", write)
+
+        rand = text[text.index("bf_f33:"):text.index("bf_f34:")]
+        self.assertIn("call map_record", rand)
+
+    def test_the_old_inline_conversion_is_gone(self):
+        # The block->record->track/sector/DMA sequence used to be written out
+        # in each path; only abs_to_bios should carry the division now.
+        text = source("src/bdos/bdos.zpa")
+        self.assertEqual(text.count("call div_hl_bc"), 1)
+
+
 class MultiSectorCount(unittest.TestCase):
     def test_reads_transfer_the_full_count(self):
         # F20 applies F44's count: the loop moves up to ms_left records,
