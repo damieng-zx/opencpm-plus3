@@ -12,6 +12,31 @@ import unittest
 from .layout import source
 
 
+class AnsiCsi(unittest.TestCase):
+    """The VT-100 subset: ESC [ parameter collection and CUP/HVP."""
+
+    def test_csi_introducer_and_state(self):
+        text = source("src/bios/screen.zpa")
+        self.assertIn("ESC_CSI        equ 9", text)
+        self.assertIn("db '['", text)
+        self.assertIn(".csi_start:", text)
+        self.assertIn(".csi_byte:", text)
+
+    def test_cup_clamps_to_the_viewport_and_logical_width(self):
+        text = source("src/bios/screen.zpa")
+        body = text[text.index(".csi_cup:"):text.index(
+            "; ------- one-parameter sequences")]
+        self.assertIn("vp_height", body)
+        self.assertIn("_lg_width", body)
+        self.assertIn("csi_params + 1", body)
+        self.assertIn("_lg_autoflip", body)
+
+    def test_harness_covers_cup_and_hvp(self):
+        tool = source("tools/zx84_ansi.py")
+        for seq in ("[5;10H", "[7;20f", "[99;99H", "[H", "[0;0H"):
+            self.assertIn(seq, tool)
+
+
 class EscapeTableWiring(unittest.TestCase):
     """One-parameter commands dispatch by esc_cmd; v/w have their own slots."""
 

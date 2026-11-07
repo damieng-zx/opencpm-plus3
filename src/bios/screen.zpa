@@ -49,6 +49,7 @@ ESC_WAIT_X_LC  equ 5   ; ESC X: got tr, waiting for left-col (+32)
 ESC_WAIT_X_H   equ 6   ; ESC X: got lc, waiting for height (+32)
 ESC_WAIT_X_W   equ 7   ; ESC X: got h, waiting for width (+32) — last param
 ESC_WAIT_1P    equ 8   ; one-param stub: ESC b/c/2/3/4/5 — consume and ignore
+ESC_CSI        equ 9   ; ESC [ — ANSI/VT-100 CSI parameter collection
 
 ; PORT_1FFD, PORT_ULA, BANK1_1FFD, motor_flag defined in parent/common
 
@@ -78,6 +79,10 @@ esc_p2:     equ 0xA736         ; Second param byte
 esc_p3:     equ 0xA737         ; Third param byte
 saved_row:  equ 0xA738         ; Saved cursor row  (ESC j / ESC k)
 saved_col:  equ 0xA739         ; Saved cursor col  (ESC j / ESC k)
+
+; --- ANSI/VT-100 CSI parser (bank 4; only live while ESC [ is pending) ---
+; csi_params holds up to six numeric parameters, one byte each.  Missing or
+; empty parameters are stored as 0 and the handlers apply the ANSI default.
 
 ; --- Viewport (ESC X) ---
 ; The cursor is stored relative to the viewport; buffer/screen accesses add
@@ -135,6 +140,14 @@ scr_attr:     db DEFAULT_ATTR  ; Computed attribute byte (F B PPP III)
 scr_border_v: db BORDER_COL    ; Current border colour 0-7
 scr_cols:     db 51            ; Runtime column count (32, 51 or 64)
 scr_wrap:     db 1             ; 1 = wrap at the right edge (ESC v/w)
+
+; ANSI/VT-100 CSI parser state.  Kept in the image (not bank-6 scratch)
+; because six parameter bytes do not fit the A730-A73F escape block.
+csi_n:        db 0             ; number of parameters collected
+csi_val:      db 0             ; parameter being accumulated
+csi_have:     db 0             ; 1 = csi_val holds at least one digit
+csi_priv:     db 0             ; 1 = the sequence began with ESC [ ?
+csi_params:   ds 6             ; numeric parameters, 0 for empty/missing
 font_ptr:     dw 0x8000       ; Active font in bank 6 (8000=51col, 8800=32col, 9400=64col)
 
 ; The character buffer and row table are runtime-initialised and are not
@@ -298,6 +311,8 @@ scr_putchar:
     jp z, .esc_x_h
     cp ESC_WAIT_X_W
     jp z, .esc_x_w
+    cp ESC_CSI
+    jp z, .csi_byte
     ; ESC_WAIT_1P — consume the parameter and apply one-param commands
     pop af                     ; A = parameter byte
     ld b, a
@@ -503,6 +518,8 @@ scr_putchar:
     dw _enter80         ; enter 24x80 mode
     db 'y'
     dw _exit80          ; leave 24x80 mode
+    db '['
+    dw .csi_start       ; ANSI/VT-100 CSI introducer
     db 0                ; end of table
 
 ; ------- simple helpers -------
@@ -516,6 +533,158 @@ scr_putchar:
     ld a, ESC_WAIT_1P
     ld (esc_state), a
     ret
+
+; ------- ANSI/VT-100 CSI sequences (ESC [ params final) -------
+; Parameters are decimal, separated by ';', with a leading '?' for private
+; modes.  Empty/missing parameters are stored as 0; the handlers apply the
+; ANSI default (1 for cursor positions, 0 for erase modes).  Unsupported
+; finals are consumed silently, as a terminal would do, rather than being
+; printed as text.
+.csi_start:
+    xor a
+    ld (csi_n), a
+    ld (csi_val), a
+    ld (csi_have), a
+    ld (csi_priv), a
+    ld a, ESC_CSI
+    ld (esc_state), a
+    ret
+
+.csi_byte:
+    pop af                     ; A = byte after ESC [
+    cp '?'
+    jr z, .csi_private
+    cp ';'
+    jr z, .csi_sep
+    cp '0'
+    jr c, .csi_final
+    cp '9' + 1
+    jr nc, .csi_final
+
+    ; Accumulate a decimal parameter: value = value * 10 + digit.
+    sub '0'
+    ld c, a                    ; C = digit
+    ld a, (csi_val)
+    cp 25                      ; >= 25 would overflow a byte once scaled
+    jr nc, .csi_cap
+    ld b, a                    ; B = old value
+    add a, a                   ; 2v
+    ld d, a                    ; D = 2v
+    add a, a                   ; 4v
+    add a, a                   ; 8v
+    add a, d                   ; 10v
+    add a, c                   ; 10v + digit
+    jr .csi_digit_done
+.csi_cap:
+    ld a, 0xFF
+.csi_digit_done:
+    ld (csi_val), a
+    ld a, 1
+    ld (csi_have), a
+    ret
+
+.csi_private:
+    ld a, 1
+    ld (csi_priv), a
+    ret
+
+.csi_sep:
+    call .csi_store_param
+    xor a
+    ld (csi_val), a
+    ld (csi_have), a
+    ret
+
+.csi_final:
+    cp 0x40
+    jr c, .csi_abort
+    cp 0x7F
+    jr nc, .csi_abort
+    ld b, a                    ; B = final byte
+    ld a, (csi_have)
+    or a
+    jr nz, .csi_store_last
+    ld a, (csi_n)
+    or a
+    jr z, .csi_dispatch        ; ESC [ H has no parameters at all
+.csi_store_last:
+    call .csi_store_param
+.csi_dispatch:
+    xor a
+    ld (esc_state), a
+    ld a, b
+    cp 'H'
+    jr z, .csi_cup
+    cp 'f'
+    jr z, .csi_cup
+    ret                         ; unsupported final — consume silently
+.csi_abort:
+    xor a
+    ld (esc_state), a
+    ret
+
+.csi_store_param:
+    ld a, (csi_n)
+    cp 6
+    ret nc
+    ld e, a
+    ld d, 0
+    ld hl, csi_params
+    add hl, de
+    ld a, (csi_val)
+    ld (hl), a
+    ld a, (csi_n)
+    inc a
+    ld (csi_n), a
+    ret
+
+.csi_cup:
+    ; Row = parameter 1 (1-based, default 1), clamped to the viewport.
+    ld a, (csi_n)
+    cp 1
+    jr c, .cup_row_default
+    ld a, (csi_params)
+    or a
+    jr nz, .cup_row_have
+.cup_row_default:
+    ld a, 1
+.cup_row_have:
+    dec a
+    ld b, a
+    ld a, (vp_height)
+    cp b
+    jr z, .cup_row_clamp
+    jr c, .cup_row_clamp
+    ld a, b
+    jr .cup_row_set
+.cup_row_clamp:
+    dec a                      ; height - 1
+.cup_row_set:
+    ld (cursor_row), a
+
+    ; Column = parameter 2 (1-based, default 1), clamped to the logical width.
+    ld a, (csi_n)
+    cp 2
+    jr c, .cup_col_default
+    ld a, (csi_params + 1)
+    or a
+    jr nz, .cup_col_have
+.cup_col_default:
+    ld a, 1
+.cup_col_have:
+    dec a
+    ld b, a
+    call _lg_width
+    cp b
+    jr z, .cup_col_clamp
+    jr c, .cup_col_clamp
+    ld a, b
+    jr .cup_col_set
+.cup_col_clamp:
+    dec a                      ; width - 1
+.cup_col_set:
+    ld (cursor_col), a
+    jp _lg_autoflip
 
 ; ------- one-parameter sequences (ESC 3 / 4 / b / c) -------
 
