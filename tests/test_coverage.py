@@ -32,13 +32,25 @@ BIOS_EXEMPT = {
 }
 
 
+def harnesses() -> list[Path]:
+    """The scripts that drive the emulator (some are local/optional)."""
+    names = ("zx84_smoke.py", "zx84_negative.py", "zx84_regtest.py",
+             "zx84_dri.py", "zx84_pip.py", "zx84_diskit.py",
+             "zx84_realworld.py", "screen_bench.py")
+    return [ROOT / "tools" / name for name in names
+            if (ROOT / "tools" / name).exists()]
+
+
+def harness_corpus() -> str:
+    """Harness text only: a program's own source must not count as a test."""
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace")
+                     for p in harnesses())
+
+
 def runtime_corpus() -> str:
     """Built on-disk tests plus the emulator harnesses (no static tests)."""
     built = [p for p in build_paths("build.cmd") if p.startswith("src/test/")]
-    paths = [ROOT / p for p in built]
-    paths += [ROOT / "tools" / "zx84_smoke.py",
-              ROOT / "tools" / "zx84_negative.py",
-              ROOT / "tools" / "zx84_regtest.py"]
+    paths = [ROOT / p for p in built] + harnesses()
     return "\n".join(p.read_text(encoding="utf-8", errors="replace")
                      for p in paths)
 
@@ -102,7 +114,7 @@ class BiosCoverage(unittest.TestCase):
 
 class ProgramCoverage(unittest.TestCase):
     def test_every_built_tool_is_invoked(self):
-        corpus = runtime_corpus()
+        corpus = harness_corpus()
         missing = []
         for script in ("build.cmd", "build.sh"):
             for path in build_paths(script):
@@ -119,7 +131,7 @@ class ProgramCoverage(unittest.TestCase):
             + ", ".join(sorted(set(missing))))
 
     def test_every_built_test_program_is_run(self):
-        corpus = runtime_corpus()
+        corpus = harness_corpus()
         missing = []
         for script in ("build.cmd", "build.sh"):
             for path in build_paths(script):
