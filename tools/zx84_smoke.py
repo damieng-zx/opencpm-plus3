@@ -756,9 +756,16 @@ class Smoke:
             # The system disc was formatted in place; put the system image
             # back so FORMAT.COM can be loaded again, and mount a scratch
             # copy of the 720K image on B: for the remaining runs.
+            #
+            # The swap needs a cold start: the FDC login freezes a drive's
+            # XDPB after the first successful detect, so a disc put back
+            # with a different layout would keep the formatted disc's
+            # geometry (harmless on a same-format swap, wrong as soon as
+            # the system disc is the 720K test image).
             self.mcp.call("eject", {"target": "disk", "drive": "A"})
             self.mcp.call("load", {"file": str(scratch), "drive": "A"})
-            self.wait_for(["A>"], frames=200, attempts=4)
+            self.boot()
+            self.expect("reboot after the A: format", "A>")
             self.mcp.call("eject", {"target": "disk", "drive": "B"})
             self.mcp.call("load", {"file": str(blank720), "drive": "B"})
 
@@ -1318,7 +1325,10 @@ class Smoke:
         src = ROOT / "build" / "diskcopy-src.dsk"
         dst = ROOT / "build" / "diskcopy-dst.dsk"
         foreign = ROOT / "build" / "diskcopy-720.dsk"
-        shutil.copyfile(self.dsk, src)
+        # The source is the 40-track SS distribution image, not the test
+        # image: the test image is a 720K DS disc now, and this check is
+        # about copying a single-sided 180K layout onto a 720K target.
+        shutil.copyfile(ROOT / "build" / "cpm3.dsk", src)
         shutil.copyfile(ROOT / "build" / "cpm3.dsk", dst)
         shutil.copyfile(ROOT / "build" / "cpm3_720.dsk", foreign)
         old_dsk = self.dsk
@@ -1481,7 +1491,11 @@ class Smoke:
         """
         src = ROOT / "build" / "sysgen-src.dsk"
         dst = ROOT / "build" / "sysgen-dst.dsk"
-        shutil.copyfile(self.dsk, src)
+        # Both discs are the 40-track SS distribution image: SYSGEN requires
+        # the target to be formatted like the disc it reads the system from,
+        # and the test image is a 720K DS disc now.  The B: target is a
+        # second copy, so its own files must still be there afterwards.
+        shutil.copyfile(ROOT / "build" / "cpm3.dsk", src)
         shutil.copyfile(ROOT / "build" / "cpm3.dsk", dst)
         old_dsk = self.dsk
         self.dsk = src
@@ -1809,6 +1823,7 @@ class Smoke:
                        "F107 SERIAL  : PASS", "F112 PRTBLK  : PASS"):
             if not any(marker in l for l in self.history):
                 raise SmokeError("BDOSTEST did not report " + marker)
+
     def run_biostest(self) -> None:
         """BIOSTEST: the BIOS jump table called directly."""
         self.log("BIOSTEST")
@@ -2202,6 +2217,73 @@ class Smoke:
         # the CCP is a real file by looking at its size.
         self.log(f"CCP.COM {len(ccp)} bytes, CPM3.SYS {len(image)} bytes")
 
+    def run_pmautoae(self) -> None:
+        """PMAUTOAE (third-party): self-extract, then a PMARC/PMEXT round trip.
+
+        PMAUTOAE.COM is a self-dissolving PMARC archive by Yoshihiko Mino.
+        It is third-party software and is not committed: tools/
+        fetch_pmautoae.py downloads it into the git-ignored references tree,
+        and build.cmd adds it to the 720K test image when it is there.  A
+        fresh checkout has no copy, so this check skips quietly then.
+
+        The run covers the 720K system disk as well as the tools: the
+        archive extracts ten files (twice as many as the 180K image had
+        room for), PMARC compresses SMOKE.TXT into an archive, and PMEXT
+        extracts the member under a new name, which TYPE then compares.
+        """
+        image_path = self.dsk
+        tools = str(ROOT / "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import mkdsk  # noqa: E402
+
+        image = mkdsk.DSKImage().load(image_path)
+        names = {image._read_dir_entry(i)[1:12]
+                 for i in range(image.dir_entries)
+                 if image._read_dir_entry(i)[0] != 0xE5}
+        if b"PMAUTOAECOM" not in names:
+            self.log("PMAUTOAE not on the test image; skipped")
+            return
+
+        self.log("PMAUTOAE self-extract")
+        self.command("PMAUTOAE", 4000)
+        for _ in range(8):
+            screen = self.text()
+            if "ADDENDUM.DOC Extracting OK" in screen and "A>" in screen:
+                break
+            self.mcp.call("run", {"frames": 600})
+            self.record()
+        self.expect("PMAUTOAE extraction",
+                    "PMsfx Version 2.00 for CP/M",
+                    "PMARC   .COM Extracting OK",
+                    "PMEXT   .COM Extracting OK",
+                    "ADDENDUM.DOC Extracting OK")
+
+        self.command("DIR PMARC.COM", 600)
+        self.expect("extracted PMARC", "PMARC    COM")
+
+        # PMARC: compress the SMOKE.TXT fixture into TEST.PMA.
+        self.log("PMARC compress")
+        self.command("PMARC TEST.PMA SMOKE.TXT", 3000)
+        self.expect("PMARC compress", "Archive file = TEST.PMA",
+                    "Compressing", "Done.")
+        self.command("DIR TEST.PMA", 600)
+        self.expect("archive on disk", "TEST     PMA")
+
+        # PMEXT: extract the member again as COPY.TXT and compare.
+        self.log("PMEXT extract")
+        self.command("PMEXT TEST SMOKE.TXT=COPY.TXT", 2500)
+        self.expect("PMEXT extract", "PMext Version",
+                    "SMOKE   .TXT -> COPY    .TXT", "OK")
+        self.command("TYPE COPY.TXT", 900)
+        self.expect("round trip", "SMOKE OK")
+
+        # Leave the disc as we found it: later checks count *.TXT files.
+        self.command("ERA TEST.PMA", 600)
+        self.command("ERA COPY.TXT", 600)
+        self.command("DIR TEST.PMA", 500)
+        self.expect("PMA cleanup", "No files")
+
     def check_fdc(self) -> None:
         log = self.mcp.call("fdc_log", {})
         bad = [l for l in log.splitlines()
@@ -2237,6 +2319,7 @@ class Smoke:
         self.run_pagination()
         self.run_block16()
         self.run_ccp_external()
+        self.run_pmautoae()
         self.run_stat()
         # Check before the scratch-image format test reboots the machine.
         self.check_bank6_sentinels()
@@ -2263,11 +2346,12 @@ def prepare_test_image(dsk: Path) -> Path:
     CCP's built-in REN covers renaming - but the smoke keeps exercising a real
     third-party F23 caller when references/binaries/ is present.
 
-    DISKTEST writes a 17K multi-extent file, and a developer image that
-    build.cmd populated from references/binaries/ can be too full for that.
-    Any large optional utilities the suite never runs (BBCBASIC.COM,
-    NULU11.COM) are therefore dropped from the scratch copy if present; the
-    scratch copy is disposable anyway.
+    DISKTEST writes a 17K multi-extent file.  On the 180K image that can be
+    too much for a developer image populated from references/binaries/, so
+    the large optional utilities the suite never runs (BBCBASIC.COM,
+    NULU11.COM) are dropped from the scratch copy when this is a 180K image.
+    The 720K test image has plenty of room, so nothing is dropped there.
+    The scratch copy is disposable anyway.
     """
     rename = ROOT / "references" / "binaries" / "RENAME.COM"
     if not rename.exists():
@@ -2278,17 +2362,18 @@ def prepare_test_image(dsk: Path) -> Path:
     import mkdsk  # noqa: E402
 
     image = mkdsk.DSKImage().load(dsk)
-    for i in range(mkdsk.DIR_ENTRIES):
+    for i in range(image.dir_entries):
         if image._read_dir_entry(i)[1:12] == b"RENAME  COM":
             return dsk
 
     out = ROOT / "build" / "smoke.dsk"
     shutil.copyfile(dsk, out)
     image = mkdsk.DSKImage().load(out)
-    for name in ("BBCBASIC.COM", "NULU11.COM"):
-        if image.delete_cpm_file(name):
-            print(f"[smoke] {name} dropped from {out.name} "
-                  "(optional, keeps room for DISKTEST)")
+    if image.block_bits == 8:          # 180K: keep room for DISKTEST
+        for name in ("BBCBASIC.COM", "NULU11.COM"):
+            if image.delete_cpm_file(name):
+                print(f"[smoke] {name} dropped from {out.name} "
+                      "(optional, keeps room for DISKTEST)")
     if image.add_cpm_file("RENAME.COM", rename.read_bytes()) is False:
         return dsk
     image.save(out)

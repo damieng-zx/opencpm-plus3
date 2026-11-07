@@ -47,11 +47,17 @@ if errorlevel 1 goto :fail
 echo   Assembling loader...
 %SJASMPLUS% --raw=build\loader.bin src\boot\loader.asm
 if errorlevel 1 goto :fail
+%SJASMPLUS% --raw=build\loader720.bin -DDS720 src\boot\loader.asm
+if errorlevel 1 goto :fail
 
 echo   Assembling boot sector...
 %SJASMPLUS% --raw=build\bootsect.bin src\boot\bootsect.asm
 if errorlevel 1 goto :fail
 python3 tools\patchsum.py build\bootsect.bin
+if errorlevel 1 goto :fail
+%SJASMPLUS% --raw=build\bootsect720.bin -DDS720 src\boot\bootsect.asm
+if errorlevel 1 goto :fail
+python3 tools\patchsum.py build\bootsect720.bin
 if errorlevel 1 goto :fail
 
 echo   Assembling test programs...
@@ -113,7 +119,8 @@ set REF_BINS=
 :: RENAME.COM: the CCP's built-in REN covers it.  NULU11.COM: not needed.
 :: PROFILE.SUB: Amstrad's start-up script.  It runs here, but auto-running it
 :: would copy ~10K into the 16K C: RAM disk at every cold boot.
-for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" if /I not "%%~nxF"=="NULU11.COM" if /I not "%%~nxF"=="PROFILE.SUB" set REF_BINS=!REF_BINS! %%F
+:: PMAUTOAE.COM: third-party toolkit, test image only (PMAUTOAE_FILE below).
+for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" if /I not "%%~nxF"=="NULU11.COM" if /I not "%%~nxF"=="PROFILE.SUB" if /I not "%%~nxF"=="PMAUTOAE.COM" set REF_BINS=!REF_BINS! %%F
 
 set EXTRA_FILES=
 if /I "%~1"=="--add" shift
@@ -124,14 +131,25 @@ shift
 goto collect_extra_files
 :extra_files_done
 
+:: PMAUTOAE.COM is third-party (Yoshihiko Mino, 1990) and is not committed.
+:: tools\fetch_pmautoae.py downloads it into the git-ignored references
+:: tree; when it is there the test image carries it so the smoke runner can
+:: extract the PMARC/PMEXT toolkit once inside CP/M.
+set PMAUTOAE_FILE=
+if exist references\binaries\PMAUTOAE.COM set PMAUTOAE_FILE=references\binaries\PMAUTOAE.COM
+if defined PMAUTOAE_FILE echo   PMAUTOAE.COM: %PMAUTOAE_FILE% (local copy)
+
 :: Two images share the system and the utilities we build:
 ::   build\cpm3.dsk       distribution - system, built-in utilities and the
 ::                        local reference binaries (BBC BASIC, ED, PIP, ...)
 ::   build\cpm3-test.dsk  the same plus the *TEST.COM programs and fixtures
+:: The test image is a 720K PCW DS/DD disk (boot sector and loader built
+:: with -DDS720), so there is room for third-party toolkits such as
+:: PMAUTOAE.COM on the same disk as the system.
 python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
-python3 tools\mkdsk.py create build\cpm3-test.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com build\biostest.com build\chaintest.com build\screenbm.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3-test.dsk --format 720k --boot build\bootsect720.bin --system build\loader720.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com build\biostest.com build\chaintest.com build\screenbm.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !PMAUTOAE_FILE! !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 python3 tools\mkdsk.py create build\cpm3_720.dsk --format 720k --add src\test\hello16.txt
@@ -144,6 +162,7 @@ for %%A in (build\CPM3C.SYS) do echo   CPM3C.SYS: %%~zA bytes
 for %%A in (build\CCP.COM) do echo   CCP.COM: %%~zA bytes
 echo   Images: build\cpm3.dsk (distribution), build\cpm3-test.dsk (tests)
 if exist references\binaries\BBCBASIC.COM echo   BBC BASIC: on the distribution image (local copy)
+if defined PMAUTOAE_FILE echo   PMAUTOAE: on the test image (local copy)
 
 echo === Done ===
 goto :eof

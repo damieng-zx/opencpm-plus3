@@ -43,7 +43,14 @@ DI not yet asserted.
 
 ### Stage 1 — boot sector (`src/boot/bootsect.asm`)
 
-- `org 0xFE00`. Bytes 0-15 are a header. Entry at `0xFE10`.
+- `org 0xFE00`. Bytes 0-15 are a header: the first ten are the AMSDOS disc
+  spec the BIOS login reads back later, so they must describe the image the
+  sector lives on.  Entry at `0xFE10`.
+- The build assembles it twice: `build/bootsect.bin` declares the 180K
+  single-sided +3 layout (type 0, 40 tracks, 1K blocks) and
+  `build/bootsect720.bin` (`-DDS720`) declares the 720K PCW DS/DD layout
+  (type 3, alternating sides, 80 tracks, 2K blocks).  Both are checksum-
+  patched to sum to 3.
 - `di`; `ld sp, 0xFE00`; turn motor on (`1FFD = 0x0D` = mode 2 + motor).
 - Reads track 0 sectors 2-9 (4KB) into `0x0000` via direct uPD765A I/O.
 - `jp 0x0000`.
@@ -53,22 +60,29 @@ DI not yet asserted.
 - `org 0x0000`. Still in mode 2. Stack moved to `0x0800` (free bank-4 RAM)
   so neither the 16K system image (`C000-FFFF`) nor the bank-6 staging
   (`8000-BFFF`) can trample it.
-- Scans the directory (track 1, sectors 1-4) for each file in turn:
-  `FONT51.BIN` to `8000`, `FONT32.BIN` to `8800`, `FONT64.BIN` to `9400`,
-  `CCP.COM` to `B000` (max 4K) and `RAMDISK.FID`'s first block to `9000`.
-  Missing optional files are skipped.  It also copies the built-in 48-byte
-  screen row-address table to `A890`; that pure data would otherwise cost
-  image space.
+- One source builds both disc layouts; `-DDS720` selects 2K blocks, 16-bit
+  big-endian block numbers, 128 directory entries and alternating sides for
+  `build/loader720.bin`, used by the 720K test image.
+- Scans the directory for each file in turn: `FONT51.BIN` to `8000`,
+  `FONT32.BIN` to `8800`, `FONT64.BIN` to `9400`, `CCP.COM` to `B000`
+  (max 4K) and `RAMDISK.FID`'s first block to `9000`.  Missing optional
+  files are skipped.  It also copies the built-in 48-byte screen
+  row-address table to `A890`; that pure data would otherwise cost image
+  space.
+- Walks further directory extents when a file runs past one extent's block
+  map (a 2K-block disk holds only eight block numbers per entry, so
+  `CPM3.SYS` needs more than one).
 - Stages the common stub, `CPM3C.SYS`, in bank 6 at `9C00` (max 3K).  That
   window is free at boot: `FONT64` ends at `9BFF` and the first runtime
   buffer (`9C00`) only comes into use after `init` has copied the stub out.
-  This file is **required**: a missing `CPM3C.SYS` stops the boot.
+  This file is **required**: a missing `CPM3C.SYS` stops the boot.  The
+  transfer is capped in bytes and truncated down to whole 512-byte sectors,
+  because on a 2K-block disk the stub is smaller than one block.
 - Records what it staged in `LF_FLAGS`/`LF_CCP_LEN` in bank 6 (`A860h`),
   which survive the system-image copy into bank 4.
-- Finally finds `CPM3    SYS`, walks its allocation map (16 block pointers,
-  1K each = 2 physical sectors) to `BIOS_ADDR`, and jumps there.  Because
-  the common stub is no longer inside `CPM3.SYS`, the head can use the whole
-  `C000-FFFF` window (see *Image headroom* below).
+- Finally finds `CPM3    SYS`, walks its allocation map to `BIOS_ADDR`, and
+  jumps there.  Because the common stub is no longer inside `CPM3.SYS`, the
+  head can use the whole `C000-FFFF` window (see *Image headroom* below).
 
 The head lands in **bank 3** at `C000-FFFF` because that's what mode 2 maps
 there; the common stub waits in bank 6.
@@ -107,9 +121,10 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 15,756 | 16,384 (`C000-FFFF`) | 628   |
+| `CPM3.SYS` head         | 15,852 | 16,384 (`C000-FFFF`) | 532   |
 | `CPM3C.SYS` common stub | 2,407  | 2,560 (`F600-FFFF`)  | 153   |
-| loader                  | 1,221  | 8,704 (17 sectors)   | 7,483 |
+| loader (180K)           | 1,377  | 8,704 (17 sectors)   | 7,327 |
+| loader (720K, `-DDS720`)| 1,388  | 8,704 (17 sectors)   | 7,316 |
 
 Total code capacity is `16,384 + 2,560 = 18,944` bytes, up from 16,058
 before the split. The old 326-byte ceiling is gone.

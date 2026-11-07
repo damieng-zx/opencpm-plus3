@@ -644,7 +644,20 @@ test10:
     or l
     jp z, .t10_fail            ; free space must be non-zero
 
-    ; Create TEST.TMP and write eight records (one 1K block).
+    ; Create TEST.TMP and write one data block's worth of records.  The
+    ; block size depends on the format (8 records on a 1K-block +3 disk,
+    ; 16 on a 2K-block 720K disk), so take 1 << BSH from the DPB rather
+    ; than assuming 8.
+    call get_bsh
+    ld hl, 1
+    ld b, a
+.t10_blk:
+    add hl, hl
+    djnz .t10_blk
+    ld a, l
+    ld (t10_recs), a
+    ld (t10_recs + 1), a
+
     ld hl, fn_test
     call set_fcb
     ld de, FCB1
@@ -656,7 +669,8 @@ test10:
     ld de, DMA
     ld c, 26
     call BDOS
-    ld b, 8
+    ld a, (t10_recs)
+    ld b, a
 .t10_wr:
     push bc
     ld hl, DMA
@@ -682,7 +696,9 @@ test10:
     or a
     jp nz, .t10_fail
     ld hl, (t10_before)
-    ld de, 8
+    ld a, (t10_recs)
+    ld e, a
+    ld d, 0
     or a
     sbc hl, de
     ld de, (DMA)
@@ -1895,8 +1911,11 @@ test20:
     ld a, (fill_i)
     inc a
     ld (fill_i), a
-    cp 64
-    jp c, .t20_loop
+    ; 256 names (FILL00..FILLFF) is more than any directory this system
+    ; builds has entries (64 on the 180K layout, 128 on 720K), so the loop
+    ; must have taken the full-directory branch above if it gets here.
+    or a
+    jp nz, .t20_loop
     jp .t20_fail
 
 .t20_full:
@@ -3336,6 +3355,17 @@ test30:
     ret
 
 ; --- shared helpers for T18-T22 ---
+; get_bsh: A = BSH of the currently selected drive, from its XDPB (F31).
+;   Clobbers: AF, BC, DE, HL
+get_bsh:
+    ld e, 0
+    ld c, 31
+    call BDOS                  ; HL = DPB address, A = 0
+    inc hl
+    inc hl                     ; skip SPT
+    ld a, (hl)                 ; BSH
+    ret
+
 ; set_fcb: HL = 11-byte name; clear FCB1 and copy the name to FCB1+1.
 set_fcb:
     push hl
@@ -3433,6 +3463,7 @@ fn_test5: db "TEST5   TMP"
 fn_test6: db "TEST6   TMP"
 fn_b16:   db "B16A    TMP"
 t10_before: dw 0
+t10_recs: dw 0
 t25_cb:   dw t25_text
           dw t25_end - t25_text
 t25_text: db ' [BLOCKIO OK]'

@@ -29,9 +29,18 @@ PORT_ULA    equ 0xFE
 PAGING_M2   equ 0x0D           ; Special mode 2 + motor on
 
 ; --- Header (16 bytes, not executed) ---
+; The first ten bytes are the AMSDOS disc spec the BIOS login reads back
+; from the boot sector to build the XDPB, so it must describe the image
+; the boot sector is written to.  -DDS720 selects the 720K layout.
+    IFDEF DS720
 disk_spec:
-    db 0, 0, 40, 9, 2, 1, 3, 2     ; byte 5 = 1 reserved track
+    db 3, 1, 80, 9, 2, 1, 4, 2     ; type 3, alternating DS, 80T, 2K blocks
     db 0x2A, 0x52, 0, 0, 0, 0, 0, 0
+    ELSE
+disk_spec:
+    db 0, 0, 40, 9, 2, 1, 3, 2     ; type 0, SS, 40T, 1K blocks, 1 reserved
+    db 0x2A, 0x52, 0, 0, 0, 0, 0, 0
+    ENDIF
 
     assert $ == 0xFE10
 

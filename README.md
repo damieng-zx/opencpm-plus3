@@ -119,7 +119,9 @@ emulator.
 - **DRI utilities** — ED, SET, SETKEYS and SHOW, including GENCOM files with a
   COM header.
 - **Disk formats** — +3/CPC 8-bit blocks, the CP/M 3 16-bit block format (DSM >
-  255) and PCW 720K images, with `SHOWXDPB` reporting the probed geometry.
+  255) and PCW 720K images, with `SHOWXDPB` reporting the probed geometry.  A
+  720K disc can be the *boot* disc: the stage-2 loader and boot sector are
+  built for both layouts, and the test image uses the 720K pair.
 
 The known gaps are documented rather than hidden: 3CLCK's clock FID needs a
 generic +3 FID loader, Sargon fails a
@@ -245,8 +247,8 @@ Output: two +3 images and one data image.
 
 | Image | Contents |
 |---|---|
-| `build/cpm3.dsk` | **Distribution.** The system files, the utilities under [Tools](#tools), and — when `references/binaries/` is present — the local third-party utilities, including **BBC BASIC**. |
-| `build/cpm3-test.dsk` | **Test image.** The distribution image plus the on-disk regression suite and its fixtures; the smoke runner boots this image. |
+| `build/cpm3.dsk` | **Distribution.** A 180K single-sided +3 disc: the system files, the utilities under [Tools](#tools), and — when `references/binaries/` is present — the local third-party utilities, including **BBC BASIC**. |
+| `build/cpm3-test.dsk` | **Test image.** A 720K PCW DS/DD disc (80 cylinders, two alternating sides, 2K blocks) carrying everything on the distribution image plus the on-disk regression suite, its fixtures and, when fetched, `PMAUTOAE.COM`. The smoke runner boots this image. |
 | `build/cpm3_720.dsk` | PCW DS/DD 720K data image used by the 16-bit block tests. |
 
 A disk without `CCP.COM` boots to a diagnostic instead of a prompt; a disk
@@ -264,6 +266,12 @@ manager) is left off the image, and so is `PROFILE.SUB`: it is Amstrad's
 start-up script, and running it at every cold boot would copy ~10K into the
 16K `C:` RAM disk before the first prompt.  The file itself works: add it to a
 disk and it runs as it did on the original system.
+
+`PMAUTOAE.COM` (the PMARC toolkit self-extractor by Yoshihiko Mino) is
+handled differently: it is third-party too, so it goes **only on the 720K
+test image**, and only when `tools/fetch_pmautoae.py` has downloaded it into
+`references/binaries/`.  The 720K image has room for the 31K archive *and*
+the ten files it extracts, which the 180K distribution image does not.
 
 ### Testing
 

@@ -69,7 +69,8 @@ class Loader(unittest.TestCase):
         loader = source("src/boot/loader.asm")
         self.assertIn('NAME_64:    db "FONT64  BIN"', loader)
         self.assertIn("dw NAME_64, 0x9400", loader)
-        self.assertIn("db 0x10", loader)
+        # The font table entry carries its byte budget and flag byte.
+        self.assertIn("db 2048 & 0xFF, 2048 >> 8, 0x10", loader)
         # The loader reports what it staged; the OS reads that byte.
         self.assertIn("LF_FLAGS    equ 0xA860", loader)
         os_text = source("src/bios/screen.zpa")

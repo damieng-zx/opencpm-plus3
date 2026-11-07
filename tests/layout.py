@@ -31,17 +31,22 @@ def labels() -> dict:
 
 
 def dsk_sectors(path: Path | None = None) -> list[list[bytes]]:
-    """Return a built DSK as [track][sector] (512-byte bytes objects)."""
+    """Return a built DSK as [track][sector] (512-byte bytes objects).
+
+    Tracks are logical (a double-sided image alternates sides within a
+    cylinder), which is the order the DSK container and CP/M use.
+    """
     import struct
 
     dsk = path or (ROOT / "build" / "cpm3.dsk")
     data = dsk.read_bytes()
-    tracks = data[0x30]
+    cylinders = data[0x30]
+    sides = data[0x31] or 1
     sectors = 9  # +3 geometry is fixed here
     track_total = 0x100 + sectors * 512
     out = []
     off = 0x100
-    for _ in range(tracks):
+    for _ in range(cylinders * sides):
         track = []
         base = off + 0x100
         for s in range(sectors):
@@ -52,7 +57,19 @@ def dsk_sectors(path: Path | None = None) -> list[list[bytes]]:
 
 
 def dsk_directory(path: Path | None = None) -> list[bytes]:
-    """Return the 64 raw 32-byte directory entries from a built DSK."""
-    tracks = dsk_sectors(path)
-    blob = b"".join(tracks[1][s] for s in range(4))
-    return [blob[i * 32:(i + 1) * 32] for i in range(64)]
+    """Return the raw 32-byte directory entries from a built DSK.
+
+    The directory starts on the first data track and is two blocks long:
+    four sectors (64 entries) with 1K blocks, eight (128 entries) with 2K
+    blocks.
+    """
+    import struct
+
+    dsk = path or (ROOT / "build" / "cpm3.dsk")
+    raw = dsk.read_bytes()
+    tracks = dsk_sectors(dsk)
+    block_size = 2048 if raw[0x31] == 2 else 1024
+    dir_sectors = (2 * block_size) // 512
+    blob = b"".join(tracks[1][s] for s in range(dir_sectors))
+    count = (2 * block_size) // 32
+    return [blob[i * 32:(i + 1) * 32] for i in range(count)]

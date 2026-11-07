@@ -7,6 +7,14 @@ Manual pre-commit smoke test for the built **test** image
 needs the distribution image (BBC BASIC) boots a scratch copy of it at the
 end.
 
+The test image is a **720K PCW DS/DD disc** (80 cylinders, two alternating
+sides, 9 sectors, 2K blocks, 128 directory entries) built from its own
+`-DDS720` boot sector and stage-2 loader.  The distribution image stays a
+180K single-sided +3 disc.  The extra room is what lets third-party toolkits
+such as `PMAUTOAE.COM` sit on the same disc as the system: the archive alone
+is 31K and it extracts ten more files (~51K), which does not fit in the 57K
+a 180K image has free.
+
 ## Automated runner
 
 `tools/zx84_smoke.py` boots the built image through the zx84 MCP server,
@@ -44,9 +52,11 @@ It then formats a disc for every `FORMAT` layout.  A 180K SS/40-track disc
 on A: is formatted from a scratch copy of the test image with the target
 hot-swapped in at the "put the disc in" prompt, which exercises both
 disc-change prompts; `FORMAT`, `FORMAT C:` and ESC-cancel are checked first.
-The rest run on B: with a scratch copy of `build/cpm3_720.dsk` mounted
-there: 720K DS/80, CPC System, CPC Data, HiForm 203 (42 tracks, 10
-sectors), SuperMat 192 and CPC IBM.
+The disc swap reboots the machine, because the FDC login freezes a drive's
+XDPB after the first detect and the 720K system disc must not keep the
+formatted disc's geometry.  The rest run on B: with a scratch copy of
+`build/cpm3_720.dsk` mounted there: 720K DS/80, CPC System, CPC Data, HiForm
+203 (42 tracks, 10 sectors), SuperMat 192 and CPC IBM.
 
 The checks require the `percentage / Track / Side / FORMAT|VERIFY` progress
 line, the layout-named summary, `E5` on the last track, the boot-sector
@@ -234,6 +244,15 @@ distribution image deliberately leaves them out.
 The smoke runner exercises all of these except `REGTEST`: `REGTEST`
 has its own harness, `tools/zx84_regtest.py`.  `INPTEST` is driven by the
 profile and submit-file checks rather than directly.
+
+When `references/binaries/PMAUTOAE.COM` is present (see
+`tools/fetch_pmautoae.py` and `docs/third-party-tests.md`), the runner also
+self-extracts the PMARC toolkit on the test image and does a compression
+round trip: `PMAUTOAE` must report `Extracting OK` for all ten members,
+`PMARC TEST.PMA SMOKE.TXT` must build the archive and
+`PMEXT TEST SMOKE.TXT=COPY.TXT` followed by `TYPE COPY.TXT` must print
+`SMOKE OK`.  The check removes what it wrote, because a later `STAT *.TXT`
+counts files.  Without the local copy it is skipped.
 
 ## Setup
 

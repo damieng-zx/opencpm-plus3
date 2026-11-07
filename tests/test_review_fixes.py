@@ -216,7 +216,7 @@ class Issue10LoaderScan(unittest.TestCase):
 
     def test_counter_is_in_memory_not_d(self):
         text = source("src/boot/loader.asm")
-        body = text[text.index("find_file:"):text.index("; load_file")]
+        body = text[text.index("find_extent:"):text.index("; load_file")]
         self.assertIn("ld (entry_count), a", body)
         self.assertNotIn("dec d", body)
         self.assertIn("entry_count:  db 0", text)

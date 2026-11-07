@@ -39,10 +39,13 @@ python3 tools/split_sys.py
 
 echo "  Assembling loader..."
 "$SJASMPLUS" --raw=build/loader.bin src/boot/loader.asm
+"$SJASMPLUS" --raw=build/loader720.bin -DDS720 src/boot/loader.asm
 
 echo "  Assembling boot sector..."
 "$SJASMPLUS" --raw=build/bootsect.bin src/boot/bootsect.asm
 python3 tools/patchsum.py build/bootsect.bin
+"$SJASMPLUS" --raw=build/bootsect720.bin -DDS720 src/boot/bootsect.asm
+python3 tools/patchsum.py build/bootsect720.bin
 
 echo "  Assembling test programs..."
 "$SJASMPLUS" --raw=build/bdostest.com src/test/bdostest.asm
@@ -93,7 +96,8 @@ for ref in references/binaries/*.COM references/binaries/*.SUB; do
     case "$ref" in
         */SUBMIT.COM|*/submit.com|*/RENAME.COM|*/rename.com|\
         */NULU11.COM|*/nulu11.com|\
-        */PROFILE.SUB|*/profile.sub) continue ;;
+        */PROFILE.SUB|*/profile.sub|\
+        */PMAUTOAE.COM|*/pmautoae.com) continue ;;
     esac
     if [ -f "$ref" ]; then
         REF_FILES+=("$ref")
@@ -115,12 +119,25 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     "${REF_FILES[@]}" \
     $EXTRAFILES
 
+# PMAUTOAE.COM is third-party (Yoshihiko Mino, 1990) and is not committed.
+# tools/fetch_pmautoae.py downloads it into the git-ignored references tree;
+# when it is there the 720K test image carries it so the smoke runner can
+# extract the PMARC/PMEXT toolkit once inside CP/M.
+PMAUTOAE_FILE=""
+if [ -f references/binaries/PMAUTOAE.COM ]; then
+    PMAUTOAE_FILE="references/binaries/PMAUTOAE.COM"
+    echo "  PMAUTOAE.COM: $PMAUTOAE_FILE (local copy)"
+fi
+
 # The test image is the distribution image plus the on-disk test programs
-# and their fixtures.  Keep the two lists in step: distribution files never
-# include a *TEST.COM, and everything the smoke runs is on cpm3-test.dsk.
+# and their fixtures, on a 720K PCW DS/DD disk (boot sector and loader built
+# with -DDS720) so third-party toolkits fit alongside the system.  Keep the
+# two lists in step: distribution files never include a *TEST.COM, and
+# everything the smoke runs is on cpm3-test.dsk.
 python3 tools/mkdsk.py create build/cpm3-test.dsk \
-    --boot build/bootsect.bin \
-    --system build/loader.bin \
+    --format 720k \
+    --boot build/bootsect720.bin \
+    --system build/loader720.bin \
     --add build/CPM3.SYS build/CPM3C.SYS build/CCP.COM \
     src/bios/font51.bin src/bios/font32.bin src/bios/font64.bin \
     build/RAMDISK.FID \
@@ -136,6 +153,7 @@ python3 tools/mkdsk.py create build/cpm3-test.dsk \
     build/screenbm.com \
     src/test/smoke.txt src/test/page.txt src/test/smoke.sub \
     src/test/param.sub \
+    $PMAUTOAE_FILE \
     "${REF_FILES[@]}" \
     $EXTRAFILES
 
@@ -147,9 +165,12 @@ echo "  BIOS blob: $(wc -c < build/bios.bin) bytes"
 echo "  CPM3.SYS: $(wc -c < build/CPM3.SYS) bytes"
 echo "  CPM3C.SYS: $(wc -c < build/CPM3C.SYS) bytes"
 echo "  CCP.COM: $(wc -c < build/CCP.COM) bytes"
-echo "  Images: build/cpm3.dsk (distribution), build/cpm3-test.dsk (tests)"
+echo "  Images: build/cpm3.dsk (distribution), build/cpm3-test.dsk (tests, 720K)"
 if [ -f references/binaries/BBCBASIC.COM ]; then
     echo "  BBC BASIC: on the distribution image (local copy)"
+fi
+if [ -n "$PMAUTOAE_FILE" ]; then
+    echo "  PMAUTOAE: on the test image (local copy)"
 fi
 
 echo "=== Done ==="

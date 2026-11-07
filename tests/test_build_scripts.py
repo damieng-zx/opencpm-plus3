@@ -99,8 +99,12 @@ class BuildScripts(unittest.TestCase):
                 self.assertIn(shared, dist, name)
 
     def test_test_image_adds_the_test_programs(self):
+        # The two images carry the same CP/M files; the boot sector and
+        # stage-2 loader differ because the test image is a 720K disk with
+        # its own -DDS720 build of both.
+        boot_chain = {"build/bootsect.bin", "build/loader.bin"}
         for name, text in (("build.cmd", self.cmd), ("build.sh", self.sh)):
-            dist = disk_files(text)
+            dist = disk_files(text) - boot_chain
             test = disk_files(text, "cpm3-test.dsk", "cpm3_720.dsk")
             self.assertTrue(dist <= test, name)
             self.assertTrue(TEST_PROGRAMS <= test, name)

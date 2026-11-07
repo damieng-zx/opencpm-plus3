@@ -505,21 +505,72 @@ start:
     ld ix, 0xD200
     call userf_trampoline
     jp nc, .t9_fail_restore
+    ; A = disc type.  Both layouts this system builds must log in:
+    ;   0 = +3 180K SS (8-bit blocks, 64 directory entries)
+    ;   3 = 720K PCW DS/DD (16-bit blocks, 128 directory entries)
+    ; The ALV (DE) and hash (HL) sizes must agree with the DSM/DRM that
+    ; DD_LOGIN copied into the XDPB, so derive them here rather than
+    ; hardcoding one layout's numbers.
+    cp 3
+    jr z, .t9_type3
     cp 0
     jp nz, .t9_fail_restore
-    ld a, d
-    cp 0
+    ld a, (0xD207)              ; DRM = 63
+    cp 63
     jp nz, .t9_fail_restore
-    ld a, e
-    cp 45                       ; floor(174/4)+2
+    ld a, (0xD208)
+    or a
     jp nz, .t9_fail_restore
-    ld a, h
-    cp 1                        ; 4*(63+1) = 256
+    jr .t9_derived
+
+.t9_type3:
+    ld a, (0xD207)              ; DRM = 127
+    cp 127
     jp nz, .t9_fail_restore
-    ld a, l
-    cp 0
+    ld a, (0xD208)
+    or a
     jp nz, .t9_fail_restore
 
+.t9_derived:
+    ; DD_LOGIN returns DE = floor(DSM / 4) + 2 and HL = 4 * (DRM + 1),
+    ; computed from the XDPB it just filled in.  Recompute both here from
+    ; the same XDPB and compare, so the check is layout-independent.
+    ld (0xD240), de             ; save the BIOS's DE
+    ld (0xD242), hl             ; save the BIOS's HL
+    ld a, (0xD205)
+    ld l, a
+    ld a, (0xD206)
+    ld h, a                     ; HL = DSM
+    srl h
+    rr l
+    srl h
+    rr l                        ; HL = floor(DSM / 4)
+    inc hl
+    inc hl                      ; + 2
+    ld a, (0xD241)
+    or a
+    jp nz, .t9_fail_restore
+    ld a, (0xD240)
+    cp l
+    jp nz, .t9_fail_restore
+    ld a, h
+    or a
+    jp nz, .t9_fail_restore
+
+    ld a, (0xD207)
+    ld l, a
+    ld a, (0xD208)
+    ld h, a                     ; HL = DRM
+    inc hl
+    add hl, hl
+    add hl, hl                  ; HL = 4 * (DRM + 1)
+    ld a, (0xD243)
+    cp h
+    jp nz, .t9_fail_restore
+    ld a, (0xD242)
+    cp l
+    jp nz, .t9_fail_restore
+.t9_spec:
     ; DD_READ_SECTOR: logical track 0, sector 0 into D300h
     ld hl, DD_READ_SECTOR
     ld (userf_dw), hl
@@ -530,36 +581,8 @@ start:
     call userf_trampoline
     jp nc, .t9_fail_restore
 
-    ; Boot-sector disc spec: 00 00 28 09 02 01 03 02 2A 52
-    ld a, (0xD300)
-    or a
-    jp nz, .t9_fail_restore
-    ld a, (0xD301)
-    or a
-    jp nz, .t9_fail_restore
-    ld a, (0xD302)
-    cp 0x28
-    jp nz, .t9_fail_restore
-    ld a, (0xD303)
-    cp 9
-    jp nz, .t9_fail_restore
-    ld a, (0xD304)
-    cp 2
-    jp nz, .t9_fail_restore
-    ld a, (0xD305)
-    cp 1
-    jp nz, .t9_fail_restore
-    ld a, (0xD306)
-    cp 3
-    jp nz, .t9_fail_restore
-    ld a, (0xD307)
-    cp 2
-    jp nz, .t9_fail_restore
-    ld a, (0xD308)
-    cp 0x2A
-    jp nz, .t9_fail_restore
-    ld a, (0xD309)
-    cp 0x52
+    ; The boot sector must carry the AMSDOS disc spec for the layout.
+    call check_boot_spec
     jp nz, .t9_fail_restore
 
     ; DD_WRITE: write the same sector back unchanged
@@ -637,14 +660,24 @@ start:
     ld c, 9
     call BDOS
 
-    ; Header table at D500h: track 39, head 0, sectors 1-9, N=2.
+    ; Header table at D500h: logical track 39, sectors 1-9, N=2.
+    ; The CHRN written into the sector IDs must be the physical cylinder
+    ; and head, which depend on the disc's sidedness (logical track 39 is
+    ; cylinder 39 on a single-sided disk, cylinder 19 head 1 on an
+    ; alternating double-sided one).
+    ld a, 39
+    call logical_geom           ; A = cylinder, B = head
+    ld (t10_cyl), a
+    ld a, b
+    ld (t10_head), a
+
     ld hl, 0xD500
     ld b, 1
 .t10_hdr:
-    ld a, 39
+    ld a, (t10_cyl)
     ld (hl), a
     inc hl
-    xor a
+    ld a, (t10_head)
     ld (hl), a
     inc hl
     ld a, b
@@ -709,14 +742,29 @@ start:
     ld a, 8
     ld (0xD220 + 19), a
 
-    ; Header table at D520h: track 38, head 0, sectors 1-8.
+    ; Header table at D520h: logical track 38, sectors 1-8.
+    ld a, 38
+    call logical_geom           ; A = cylinder, B = head
+    ld (t10_cyl), a
+    ld a, b
+    ld (t10_head), a
+
+    ; The raw FDC parameter blocks below name a cylinder and head
+    ; directly, so point them at the physical geometry of logical track 38.
+    ld hl, fmtwrite_multi_pb
+    call patch_pb
+    ld hl, fmtread1_pb
+    call patch_pb
+    ld hl, fmtread2_pb
+    call patch_pb
+
     ld hl, 0xD520
     ld b, 1
 .t10_hdr8:
-    ld a, 38
+    ld a, (t10_cyl)
     ld (hl), a
     inc hl
-    xor a
+    ld a, (t10_head)
     ld (hl), a
     inc hl
     ld a, b
@@ -1126,27 +1174,8 @@ start:
     and 0x3B
     jp nz, .t14_motor_off
 
-    ; Boot-sector disc spec: 00 00 28 09 02 01 03 02 2A 52
-    ld a, (0xD300)
-    or a
-    jp nz, .t14_motor_off
-    ld a, (0xD301)
-    or a
-    jp nz, .t14_motor_off
-    ld a, (0xD302)
-    cp 0x28
-    jp nz, .t14_motor_off
-    ld a, (0xD303)
-    cp 9
-    jp nz, .t14_motor_off
-    ld a, (0xD304)
-    cp 2
-    jp nz, .t14_motor_off
-    ld a, (0xD308)
-    cp 0x2A
-    jp nz, .t14_motor_off
-    ld a, (0xD309)
-    cp 0x52
+    ; Boot sector must carry the AMSDOS spec of the layout it is on.
+    call check_boot_spec
     jp nz, .t14_motor_off
 
     ld a, 1
@@ -1231,20 +1260,7 @@ start:
     ld a, (hl)
     cp 7
     jp nz, .t15_motor_off
-    ld a, (0xD300)
-    or a
-    jp nz, .t15_motor_off
-    ld a, (0xD302)
-    cp 0x28
-    jp nz, .t15_motor_off
-    ld a, (0xD303)
-    cp 9
-    jp nz, .t15_motor_off
-    ld a, (0xD308)
-    cp 0x2A
-    jp nz, .t15_motor_off
-    ld a, (0xD309)
-    cp 0x52
+    call check_boot_spec
     jp nz, .t15_motor_off
 
     ld a, 1
@@ -2270,6 +2286,125 @@ userf_dw:
 
 
 ; ============================================================
+; logical_geom — physical cylinder and head for a logical track
+;   In:  A = logical track, XDPB in D200h
+;   Out: A = cylinder, B = head
+;   Clobbers: AF, B
+;
+; XDPB sidedness byte at +17: 0 = single sided, 1 = alternating sides
+; (head = track & 1, cylinder = track / 2).
+; ============================================================
+logical_geom:
+    ld b, 0                     ; head 0 for a single-sided disk
+    ld c, a                     ; keep the logical track
+    ld a, (0xD200 + 17)
+    or a
+    ld a, c
+    ret z
+    ld b, a
+    and 1
+    ld b, a                     ; head = track & 1
+    ld a, c
+    srl a                       ; cylinder = track / 2
+    ret
+
+
+; ============================================================
+; patch_pb — point a DD_L_READ/DD_L_WRITE parameter block at the
+; physical geometry in t10_cyl / t10_head.
+;   In:  HL = parameter block (1 count, 2 buffer, 2 length, 1 cmdlen,
+;        then the FDC command bytes: opcode, unit/head, C, H, R, ...)
+;   Out: nothing
+;   Clobbers: AF, DE, HL
+; ============================================================
+patch_pb:
+    ld de, 7
+    add hl, de                  ; -> unit/head byte (count, buf, len, cmdlen, opcode)
+    ld a, (t10_head)
+    rlca
+    rlca
+    and 0x04                    ; HD in bit 2
+    ld (hl), a
+    inc hl
+    ld a, (t10_cyl)
+    ld (hl), a                  ; C
+    inc hl
+    ld a, (t10_head)
+    ld (hl), a                  ; H
+    ret
+
+
+; ============================================================
+; check_boot_spec — verify the AMSDOS disc spec in the D300h boot
+; sector for one of the layouts this system builds.
+;   In:  D300h = boot sector image
+;   Out: Z = recognised layout, NZ = not
+;   Clobbers: AF, HL
+;
+;   180K +3 SS:     00 00 28 09 02 01 03 02 2A 52
+;   720K PCW DS/DD: 03 01 50 09 02 01 04 02 2A 52
+; ============================================================
+check_boot_spec:
+    ld hl, 0xD303
+    ld a, (hl)                  ; sectors per track
+    cp 9
+    jr nz, .cbs_bad
+    inc hl
+    ld a, (hl)                  ; sector size code (2 = 512)
+    cp 2
+    jr nz, .cbs_bad
+    inc hl
+    ld a, (hl)                  ; reserved tracks
+    cp 1
+    jr nz, .cbs_bad
+    inc hl
+    inc hl                      ; skip the block-size code
+    ld a, (hl)                  ; directory blocks
+    cp 2
+    jr nz, .cbs_bad
+    inc hl
+    ld a, (hl)                  ; gap 2Ah
+    cp 0x2A
+    jr nz, .cbs_bad
+    inc hl
+    ld a, (hl)                  ; gap 52h
+    cp 0x52
+    jr nz, .cbs_bad
+    ; The layouts differ in disc type, arrangement, tracks and block size.
+    ld a, (0xD300)
+    cp 0
+    jr z, .cbs_type0
+    cp 3
+    jr nz, .cbs_bad
+    ld a, (0xD301)
+    cp 1                        ; alternating sides
+    jr nz, .cbs_bad
+    ld a, (0xD302)
+    cp 80
+    jr nz, .cbs_bad
+    ld a, (0xD306)
+    cp 4                        ; 2K blocks
+    jr nz, .cbs_bad
+    xor a                       ; Z = recognised
+    ret
+.cbs_type0:
+    ld a, (0xD301)
+    or a                        ; single sided
+    jr nz, .cbs_bad
+    ld a, (0xD302)
+    cp 40
+    jr nz, .cbs_bad
+    ld a, (0xD306)
+    cp 3                        ; 1K blocks
+    jr nz, .cbs_bad
+    xor a                       ; Z = recognised
+    ret
+.cbs_bad:
+    or 1                        ; NZ
+    ret
+
+
+; ============================================================
 ; srr_code — copied to D000h and run by SCR_RUN_ROUTINE
 ;   In:  DE=1111h, HL=2222h, IX=3333h, IY=4444h
 ;   Out: DE=1234h, HL=5678h, IX=9ABCh, IY=DEF0h
@@ -2386,6 +2521,8 @@ t8_ok: db 0
 t9_ok: db 0
 t14_ok: db 0
 t15_ok: db 0
+t10_cyl:  db 0
+t10_head: db 0
 t28_ok: db 0
 dd_setup_defaults: db 10, 50, 175, 30, 12, 15, 3
 dd_l_spec: db 0, 0, 40, 9, 2, 1, 3, 2, 42, 82

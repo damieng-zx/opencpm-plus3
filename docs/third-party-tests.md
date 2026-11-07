@@ -100,6 +100,40 @@ The three failures this harness originally found are fixed:
 Without the binaries the tool prints the notice and exits 0, so CI never
 needs them.
 
+## PMAUTOAE / PMARC / PMEXT
+
+`PMAUTOAE.COM` is a self-dissolving PMARC archive by Yoshihiko Mino
+(PMsfx 2.00, 1990).  It is third-party software, so it is not committed:
+fetch it into the git-ignored `references/` tree with
+
+```text
+python tools/fetch_pmautoae.py
+```
+
+The tool checks the size and CRC-32 of the downloaded copy and writes
+
+```text
+references/binaries/PMAUTOAE.COM
+```
+
+`build.cmd`/`build.sh` then add it to the **720K test image** only (never the
+distribution image).  The smoke runner extracts it once inside CP/M and
+checks the whole toolkit:
+
+* `PMAUTOAE` prints its banner and reports `Extracting OK` for all ten
+  members (`PMARC`, `PMEXE2`, `PMSFX2`, `PMCAT`, `PMSET`, `READ.ME`,
+  `PMARCEXT.DOC`, `PMCHGMX.MAC`, `PMEXT`, `ADDENDUM.DOC`).
+* `PMARC TEST.PMA SMOKE.TXT` compresses the fixture into an archive.
+* `PMEXT TEST SMOKE.TXT=COPY.TXT` extracts it under a new name and
+  `TYPE COPY.TXT` prints `SMOKE OK`.
+
+Without a local copy the extraction check prints a notice and is skipped, so
+CI never needs the binary.
+
+This is why the test image is a 720K disk: the 180K distribution image has
+roughly 57K free, and the archive plus its ten extracted files need about
+82K.
+
 ## Other local utilities
 
 `references/binaries/` may also contain tools with different provenance

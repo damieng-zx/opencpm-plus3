@@ -55,7 +55,7 @@ class LoaderStaging(unittest.TestCase):
     def test_loader_recognises_ccp(self):
         loader = source("src/boot/loader.asm")
         self.assertIn('NAME_CCP:   db "CCP     COM"', loader)
-        self.assertIn("find_file", loader)
+        self.assertIn("find_extent", loader)
         self.assertIn("load_file", loader)
 
     def test_loader_stages_ccp_and_records_length(self):
@@ -63,7 +63,7 @@ class LoaderStaging(unittest.TestCase):
         body = loader[loader.index("    ld hl, NAME_CCP"):
                       loader.index(".no_ccp:")]
         self.assertIn("ld de, 0xB000", body)
-        self.assertIn("ld b, 4", body)
+        self.assertIn("ld bc, 4096", body)
         self.assertIn("call load_file", body)
         self.assertIn("ld (LF_CCP_LEN), hl", body)
         self.assertIn("or 0x08", body)

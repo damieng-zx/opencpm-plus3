@@ -1,7 +1,6 @@
 ; ==========================================================================
 ; CP/M 3.1 Stage 2 Loader — File-based system loader
 ; ==========================================================================
-;
 ; Loaded by boot sector to 0x0000 (bank 4) in mode 2 (4,5,6,3).
 ; Reads the CP/M directory from disk, finds CPM3.SYS, and loads
 ; it to C000h (common memory, bank 3).
@@ -10,11 +9,16 @@
 ; the complete BIOS+BDOS+CCP. This removes the system track size
 ; limit — the OS can be as large as needed.
 ;
-; Disk geometry (standard +3 SS):
-;   OFF=1 (1 reserved track), 9 sectors/track, 512 bytes/sector
-;   Directory at track 1, 1K blocks, sector IDs 1-9
-;   Directory entries: 64 (uses blocks 0-1 = 4 sectors)
+; Two disc layouts are supported from this one source.  Both keep the
+; +3 sector IDs 1-9 and one reserved track, so only the block map, the
+; directory size and the head selection differ:
 ;
+;   +3 180K (default)  40 tracks, 1 side, 9 sectors, 1K blocks,
+;                      8-bit block numbers, 64 directory entries.
+;   720K PCW DS/DD     80 tracks, 2 sides, 9 sectors, 2K blocks,
+;                      16-bit block numbers, 128 directory entries.
+;
+; Assemble with -DDS720 for the 720K variant.
 ; ==========================================================================
 
     device zxspectrum128
@@ -27,13 +31,23 @@ PORT_ULA    equ 0xFE
 
 PAGING_M2   equ 0x0D          ; Special mode 2 + motor on
 
-; DPB values (standard +3 format)
+; DPB values
 DPB_OFF     equ 1             ; 1 reserved track
-DPB_SPT     equ 36            ; 36 records/track (9 sectors × 4 records)
-DPB_BSH     equ 3             ; Block shift (1K blocks)
-DPB_DRM     equ 63            ; 63 = 64 directory entries - 1
+DPB_SPT     equ 9             ; physical sectors per track
 
 BIOS_ADDR   equ 0xC000        ; Where to load the system file
+
+    IFDEF DS720
+BLK_SECTORS equ 4             ; 512-byte sectors per 2K block
+DIR_SECTORS equ 8             ; 128 directory entries
+BLK16       equ 1             ; 16-bit big-endian block numbers
+SIDED       equ 1             ; alternating sides
+    ELSE
+BLK_SECTORS equ 2             ; 512-byte sectors per 1K block
+DIR_SECTORS equ 4             ; 64 directory entries
+BLK16       equ 0             ; 8-bit block numbers
+SIDED       equ 0             ; single sided
+    ENDIF
 
 ; ==========================================================================
 ; Entry point
@@ -64,6 +78,7 @@ BIOS_ADDR   equ 0xC000        ; Where to load the system file
     ld (LF_FLAGS), a
     ld (LF_CCP_LEN), a
     ld (LF_CCP_LEN + 1), a
+    ld (cur_head), a
 
     ; --- Screen row-address table → bank 6 at A890 ---
     ; Pure data, so it lives here instead of in the 16K CPM3.SYS window.
@@ -82,15 +97,16 @@ BIOS_ADDR   equ 0xC000        ; Where to load the system file
     ld h, (ix + 1)
     ld e, (ix + 2)
     ld d, (ix + 3)
-    ld b, 2                    ; at most 2 × 1K blocks
+    ld c, (ix + 4)
+    ld b, (ix + 5)             ; BC = byte budget (font size)
     call load_file
     pop ix
     jr nz, .font_next
     ld a, (LF_FLAGS)
-    or (ix + 4)
+    or (ix + 6)
     ld (LF_FLAGS), a
 .font_next:
-    ld bc, 5
+    ld bc, 7
     add ix, bc
     pop bc
     djnz .font_loop
@@ -98,7 +114,7 @@ BIOS_ADDR   equ 0xC000        ; Where to load the system file
     ; --- CCP.COM → bank 6 at B000 ---
     ld hl, NAME_CCP
     ld de, 0xB000
-    ld b, 4
+    ld bc, 4096
     call load_file
     jr nz, .no_ccp
     ; DE = first byte past the staged image
@@ -114,16 +130,17 @@ BIOS_ADDR   equ 0xC000        ; Where to load the system file
     ; --- CPM3C.SYS → bank 6 at 9C00 ---
     ; The common stub is a separate file so CPM3.SYS (loaded at C000) can
     ; use the whole bank-3 window instead of carrying the stub inside it.
+    ; The budget is the gap below the loader's hand-off flags at A860.
     ld hl, NAME_SYS2
     ld de, SYS2_STAGE
-    ld b, SYS2_BLOCKS
+    ld bc, SYS2_BYTES
     call load_file
     jp nz, load_error
 
     ; --- RAMDISK.FID first block → bank 6 at 9000 ---
     ld hl, NAME_FID
     ld de, 0x9000
-    ld b, 1
+    ld bc, 1024
     call load_file
     jr nz, .no_fid
     ld a, (LF_FLAGS)
@@ -137,7 +154,7 @@ BIOS_ADDR   equ 0xC000        ; Where to load the system file
     out (PORT_ULA), a
     ld hl, NAME_SYS
     ld de, BIOS_ADDR
-    ld b, 16
+    ld bc, 0x4000
     call load_file
     jp nz, load_error
 
@@ -148,106 +165,184 @@ BIOS_ADDR   equ 0xC000        ; Where to load the system file
 
 
 ; ==========================================================================
-; find_file — find a directory entry by name
-;   In:  HL = 11-byte name
-;   Out: HL = 32-byte entry in dir_buffer, Z = found; NZ = not found
+; find_extent — find the directory entry for one extent of a file
+;   In:  (name_ptr) = 11-byte name, (want_ext) / (want_s2) = extent
+;   Out: HL = 32-byte entry in dir_buffer, Z = found; NZ = no more
 ;   Clobbers: AF, BC, DE, HL
+;
+; A file bigger than one extent's block map (16 slots on the 180K
+; layout, 8 on the 720K one) continues in further directory entries with
+; EX/S2 incremented, so the loader walks them in turn.
 ; ==========================================================================
-find_file:
-    ld (name_ptr), hl
+find_extent:
     ld a, DPB_OFF
-    call fdc_seek
-    ld b, 4                    ; 4 directory sectors
-    ld c, 1
-.ff_sector:
-    push bc                    ; preserve sector counter across the read
-    ld a, c
+    call seek_logical          ; the directory starts on the first data track
+    ld a, DIR_SECTORS
+    ld (dir_left), a
+    ld a, 1
+    ld (dir_sector), a
+.fe_sector:
+    ld a, (dir_sector)
     call fdc_read_single       ; clobbers BC
     jp nz, load_error
     ld hl, dir_buffer
     ld a, 16
     ld (entry_count), a
-.ff_entry:
+.fe_entry:
+    ld (entry_ptr), hl
     ld a, (hl)
     cp 0xE5
-    jr z, .ff_next
+    jr z, .fe_next
     or a                       ; user 0 only
-    jr nz, .ff_next
-    push hl
+    jr nz, .fe_next
+    ; name match
     inc hl
     ld de, (name_ptr)
     ld b, 11
-.ff_cmp:
+.fe_cmp:
     ld a, (de)
     ld c, a
     ld a, (hl)
     and 0x7F
     cp c
-    jr nz, .ff_mismatch
+    jr nz, .fe_next
     inc hl
     inc de
-    djnz .ff_cmp
-    pop hl
-    pop bc                     ; discard the saved sector counter
+    djnz .fe_cmp
+    ; extent match: EX holds the low five bits of the logical extent and
+    ; S2 the rest (mkdsk writes extent & 0x1F / extent >> 5).
+    ld a, (want_ext)
+    and 0x1F
+    cp (hl)
+    jr nz, .fe_next
+    inc hl
+    inc hl
+    ld a, (hl)                 ; S2
+    and 0x3F
+    ld c, a
+    ld a, (want_ext)
+    rrca
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x3F
+    cp c
+    jr nz, .fe_next
+    ld hl, (entry_ptr)
     xor a                      ; Z = found
     ret
-.ff_mismatch:
-    pop hl
-.ff_next:
+.fe_next:
+    ld hl, (entry_ptr)
     ld de, 32
     add hl, de
     ld a, (entry_count)
     dec a
     ld (entry_count), a
-    jr nz, .ff_entry
-    pop bc                     ; restore the sector counter
-    inc c
-    djnz .ff_sector
-    or 1                       ; NZ = not found
+    jr nz, .fe_entry
+    ld a, (dir_sector)
+    inc a
+    ld (dir_sector), a
+    ld a, (dir_left)
+    dec a
+    ld (dir_left), a
+    jr nz, .fe_sector
+    or 1                       ; NZ = no more extents
     ret
 
 
 ; ==========================================================================
-; load_file — find a file and load its 1K blocks
-;   In:  HL = 11-byte name, DE = destination, B = max blocks
+; load_file — find a file and load up to BC bytes of it
+;   In:  HL = 11-byte name, DE = destination, BC = byte budget
 ;   Out: Z + DE = first byte past the loaded data; NZ = not found
 ;   Clobbers: AF, BC, DE, HL, IX
+;
+; The block map ends at the first zero slot and the file ends after its
+; last extent, so a short file stops early.  The budget caps the transfer
+; where a staging area in bank 6 is smaller than a whole block (the
+; common stub); it is truncated down to whole 512-byte sectors so a
+; partial sector is never read past the target.
 ; ==========================================================================
 load_file:
     ld (name_ptr), hl
     ld (load_dest), de
-    push bc
-    call find_file
-    pop bc
+    ; Byte budget, rounded down to whole 512-byte sectors: clearing the low
+    ; byte and bit 0 of the high byte drops the low nine bits of BC, so a
+    ; partial sector is never read past the staging area it was given.
+    ld a, b
+    and 0xFE
+    ld b, a
+    ld c, 0
+    ld (budget), bc
+    xor a
+    ld (want_ext), a
+
+    call find_extent
     jr nz, .lf_missing
     push hl
     pop ix                     ; IX = directory entry
-    ld a, b
-    ld (block_count), a
 
 .lf_block:
-    ld a, (ix + 16)            ; allocation map entry
-    or a
-    jr z, .lf_done             ; block 0 = end of file
-    ld l, a
-    ld h, 0
-    add hl, hl                 ; block * 2 = first absolute sector
-    ld a, l
-    call read_one_sector
-    jp nz, load_error
-    ld a, (ix + 16)
-    ld l, a
-    ld h, 0
+    ld hl, (budget)
+    ld a, h
+    or l
+    jr z, .lf_done             ; budget exhausted
+    call block_number          ; DE = block number (0 = end of file)
+    ld a, d
+    or e
+    jr z, .lf_next_extent      ; end of this extent's map
+    ; DE * BLK_SECTORS = first absolute data-area sector of the block
+    ex de, hl
     add hl, hl
-    inc hl                     ; second sector of the block
-    ld a, l
+    IF BLK_SECTORS == 4
+    add hl, hl
+    ENDIF
+    ld (sector_num), hl
+    ld a, BLK_SECTORS
+    ld (sect_left), a
+
+.lf_sector:
+    ld hl, (sector_num)
     call read_one_sector
     jp nz, load_error
-    inc ix
-    ld a, (block_count)
+    ld hl, (sector_num)
+    inc hl
+    ld (sector_num), hl
+
+    ; 512 bytes of the budget used up
+    ld hl, (budget)
+    ld de, 0 - 512
+    add hl, de
+    ld (budget), hl
+    ld a, h
+    or l
+    jr z, .lf_done
+
+    ld a, (sect_left)
     dec a
-    ld (block_count), a
-    jr nz, .lf_block
+    ld (sect_left), a
+    jr nz, .lf_sector
+
+    ; advance to the next block-number slot
+    IF BLK16
+    ld bc, 2
+    ELSE
+    ld bc, 1
+    ENDIF
+    add ix, bc
+    jr .lf_block
+
+.lf_next_extent:
+    ; The map ran out of blocks: the file continues in the next extent,
+    ; unless that entry does not exist (then the file simply ended here).
+    ld a, (want_ext)
+    inc a
+    ld (want_ext), a
+    call find_extent
+    jr nz, .lf_done
+    push hl
+    pop ix
+    jr .lf_block
 
 .lf_done:
     ld de, (load_dest)
@@ -255,6 +350,23 @@ load_file:
     ret
 .lf_missing:
     or 1                       ; NZ = not found
+    ret
+
+
+; ==========================================================================
+; block_number — read the block number in the current directory slot
+;   In:  IX = directory entry with the slot pointer in +16
+;   Out: DE = block number (0 = end of file)
+;   Clobbers: AF, DE
+; ==========================================================================
+block_number:
+    IF BLK16
+    ld d, (ix + 16)
+    ld e, (ix + 17)            ; 16-bit block numbers are high byte first
+    ELSE
+    ld e, (ix + 16)
+    ld d, 0
+    ENDIF
     ret
 
 
@@ -275,31 +387,80 @@ row_scr_tbl_data:
 FONT_COUNT  equ 3
 font_table:
     dw NAME_51, 0x8000
-    db 0x01
+    db 2048 & 0xFF, 2048 >> 8, 0x01
     dw NAME_32, 0x8800
-    db 0x02
+    db 2048 & 0xFF, 2048 >> 8, 0x02
     dw NAME_64, 0x9400
-    db 0x10
+    db 2048 & 0xFF, 2048 >> 8, 0x10
 
 ; Hand-off block for the OS: bank 6, outside the image.
 LF_FLAGS    equ 0xA860         ; bit 0=font51, 1=font32, 2=fid, 3=ccp, 4=font64
 LF_CCP_LEN  equ 0xA861         ; word: bytes staged at B000 (0 = no CCP)
 ; Bank-6 staging for the common stub (CPM3C.SYS).  Must match SYS2_STAGE in
-; bios.zpa: the first runtime buffer starts at 9C00, and 3 blocks end at
-; A7FF, before the loader's own flags at A860 and the row table at A890.
+; bios.zpa: the first runtime buffer starts at 9C00, and SYS2_BYTES end
+; before the loader's own flags at A860 and the row table at A890.
 SYS2_STAGE  equ 0x9C00
-SYS2_BLOCKS equ 3
+SYS2_BLOCKS equ 3              ; 1K blocks staged by the +3 180K image
+SYS2_BYTES  equ 0xA860 - SYS2_STAGE
+
+
+; ==========================================================================
+; seek_logical — seek to a logical track, selecting the head
+;   In:  A = logical track
+;   Out: nothing
+;   Clobbers: AF, BC
+; ==========================================================================
+seek_logical:
+    IF SIDED
+    ld b, a
+    and 1
+    ld (cur_head), a           ; alternating sides: head = track & 1
+    ld a, b
+    srl a                      ; cylinder = track / 2
+    ENDIF
+    jp fdc_seek
+
+
+; ==========================================================================
+; div_hl_c — divide HL by C
+;   In:  HL = dividend, C = divisor
+;   Out: A = quotient, C = remainder
+;   Clobbers: AF, B, HL
+; ==========================================================================
+div_hl_c:
+    ld b, 0
+.dh_loop:
+    ld a, h
+    or a
+    jr nz, .dh_sub             ; more than 255 left: definitely >= C
+    ld a, l
+    cp c
+    jr c, .dh_done
+.dh_sub:
+    ld a, l
+    sub c
+    ld l, a
+    jr nc, .dh_no_borrow
+    dec h
+.dh_no_borrow:
+    inc b
+    jr .dh_loop
+.dh_done:
+    ld c, l                    ; C = remainder
+    ld a, b                    ; A = quotient
+    ret
+
 
 ; Helper: read one 512-byte sector to (load_dest), advance load_dest
-;   In: A = absolute sector number in data area
+;   In: HL = absolute sector number in the data area
 ;   Out: Z = success
 ;   Clobbers: AF, BC, DE, HL
 read_one_sector:
-    ld c, 9
-    call div_a_c               ; A = track offset, C = sector within track
-    add a, DPB_OFF             ; A = physical track
+    ld c, DPB_SPT
+    call div_hl_c              ; A = track offset, C = sector within track
+    add a, DPB_OFF             ; A = logical track
     push bc                    ; Save C (sector) — fdc_seek clobbers BC  ; lint: ignore
-    call fdc_seek
+    call seek_logical
     pop bc
     ld a, c
     inc a                      ; Sector ID (1-based)
@@ -315,9 +476,16 @@ read_one_sector:
     ret
 
 load_dest:    dw 0
+budget:       dw 0
+sector_num:   dw 0
 name_ptr:     dw 0
-block_count:  db 0
+entry_ptr:    dw 0
+sect_left:    db 0
 entry_count:  db 0
+dir_sector:   db 0
+dir_left:     db 0
+want_ext:     db 0
+cur_head:     db 0
 
 load_error:
     ld a, 2                    ; Red border
@@ -326,41 +494,23 @@ load_error:
 
 
 ; ==========================================================================
-; div_a_c — Divide A by C
-;   In:  A = dividend, C = divisor
-;   Out: A = quotient, C = remainder
-;   Clobbers: B
-; ==========================================================================
-div_a_c:
-    ld b, 0
-.div_loop:
-    cp c
-    jr c, .div_done
-    sub c
-    inc b
-    jr .div_loop
-.div_done:
-    ld c, a                    ; C = remainder
-    ld a, b                    ; A = quotient
-    ret
-
-
-; ==========================================================================
 ; FDC routines (minimal, for loader use only)
 ; ==========================================================================
 
-; fdc_seek — Seek to track A
-;   In: A = track
+; fdc_seek — Seek to cylinder A, keeping the selected head
+;   In: A = cylinder
 ;   Clobbers: AF, BC
 fdc_seek:
-    ld (current_track), a      ; Cache track for READ commands
+    ld (cur_track), a          ; Cache cylinder for READ commands
     push af
     ld a, 0x0F                 ; SEEK
     call fdc_send
-    xor a                      ; HD=0, US=0
+    ld a, (cur_head)
+    rlca
+    rlca                       ; HD in bit 2, US=0
     call fdc_send
     pop af
-    call fdc_send              ; NCN = track
+    call fdc_send              ; NCN = cylinder
     ; Wait for seek complete
 .sense:
     ld a, 0x08                 ; SENSE INTERRUPT STATUS
@@ -396,12 +546,14 @@ fdc_read_common:
 
     ld a, 0x46                 ; READ DATA (MFM)
     call fdc_send
-    xor a                      ; HD=0, US=0
+    ld a, (cur_head)
+    rlca
+    rlca                       ; HD in bit 2, US=0
     call fdc_send
-    ld a, (current_track)
-    call fdc_send              ; C = current track
-    xor a
-    call fdc_send              ; H = 0
+    ld a, (cur_track)
+    call fdc_send              ; C = cylinder
+    ld a, (cur_head)
+    call fdc_send              ; H = head
     pop af                     ; Sector ID
     push af
     call fdc_send              ; R = sector ID
@@ -486,7 +638,7 @@ fdc_recv:
 
 
 ; Variables
-current_track: db 0xFF         ; Cached track position
+cur_track: db 0xFF             ; Cached cylinder position
 
 ; 512-byte buffer for directory sector reads
 dir_buffer: ds 512
