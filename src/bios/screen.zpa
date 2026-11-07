@@ -1602,6 +1602,23 @@ _render_char:
 
     ; Stamp the 8x8 attribute cell with the current colours (ESC b/c).
     call _put_attr
+    jr _render_char_body
+
+; @proc _render_char_noattr
+;   As _render_char, but the caller has already painted this row's
+;   attributes.  The 24x80 page flip stamps the whole attribute row in one
+;   pass and then draws the exposed cells, so paying _put_attr again for
+;   every cell only rewrites the same byte.
+; @param %ch:u8  b
+; @param %col:u8 c
+; @param %row:u8 d
+; @clobbers af,bc,de,hl,ix
+; @end
+_render_char_noattr:
+    ld a, d
+    ld (_rnd_row), a
+
+_render_char_body:
 
     ; --- Font data pointer → IX ---
     ; B = char code. HL and DE are free to use.
@@ -3626,6 +3643,15 @@ _lg_delete_char:
 ; bit) and 64 the 4px font (byte-aligned).
 
 ; @proc _lg_line_left
+;   Shift a scan line left for the 24x80 page flip.
+;
+;   Only the columns that stay on screen are moved: the B bytes exposed at
+;   the right edge are re-rendered from LG_BUF straight afterwards, so they
+;   are neither cleared nor rotated here.  That matters at 51 columns,
+;   where a page step is 29 columns = 18 bytes: the old code rotated (and
+;   zeroed) the whole 32-byte line, i.e. more than half the work was spent
+;   on bytes the render pass overwrote.
+;
 ;   In: HL = 32-byte scan line, B = whole bytes, C = bits (0/1)
 ;   Clobbers: AF, BC, DE, HL
 ; @end
@@ -3638,43 +3664,36 @@ _lg_line_left:
     ld a, (lg_bytes)
     or a
     jr z, .ll_bits
-    ld hl, (lg_ptr)
-    ld a, (lg_bytes)
+    ; Move the survivors: dst[0..31-B] = src[B..31]
     ld e, a
     ld d, 0
-    push hl
+    ld hl, (lg_ptr)
+    push hl                    ; dest
     add hl, de                 ; HL = source
-    pop de                     ; DE = dest
     ld a, 32
-    ld b, a
-    ld a, (lg_bytes)
-    ld c, a
-    ld a, b
-    sub c                      ; 32 - bytes
+    sub e                      ; 32 - bytes
     ld c, a
     ld b, 0
+    pop de                     ; DE = dest
     ldir
-    ex de, hl                  ; HL = one past the moved bytes
-    ld a, (lg_bytes)
-    ld b, a
-    ld (hl), 0
-    dec b
-    jr z, .ll_bits
-.ll_zero:
-    inc hl
-    ld (hl), 0
-    djnz .ll_zero
 .ll_bits:
     ld a, (lg_bits)
     or a
     ret z
     ; Left shift in pixel space: bit 7 is the leftmost pixel, so the
-    ; carry chain runs from the high byte down and the carry out of byte 0
-    ; is discarded.
+    ; carry chain runs from the high byte down and the carry out of the
+    ; last survivor is discarded.  Bytes past it are re-rendered.
+    ld a, (lg_bytes)
+    ld e, a
+    ld d, 0
+    ld a, 32
+    sub e                      ; 32 - bytes
+    ld b, a
     ld hl, (lg_ptr)
-    ld de, 31
-    add hl, de
-    ld b, 32
+    ld e, a
+    ld d, 0
+    add hl, de                 ; HL = one past the last survivor
+    dec hl                     ; last survivor
     xor a                      ; carry = 0
 .ll_roll:
     rl (hl)
@@ -3684,6 +3703,12 @@ _lg_line_left:
 
 
 ; @proc _lg_line_right
+;   Shift a scan line right for the 24x80 page flip.
+;
+;   The B bytes exposed at the left edge are re-rendered from LG_BUF, so
+;   the move and the bit rotation only cover the surviving bytes (see
+;   _lg_line_left for why that is worth doing).
+;
 ;   In: HL = 32-byte scan line, B = whole bytes, C = bits (0/1)
 ;   Clobbers: AF, BC, DE, HL
 ; @end
@@ -3693,31 +3718,20 @@ _lg_line_right:
     ld (lg_bytes), a
     ld a, c
     ld (lg_bits), a
-    ld a, (lg_bits)
-    or a
-    jr z, .lr_move
-    ld hl, (lg_ptr)
-    ld b, 32
-    xor a                      ; carry = 0
-.lr_roll:
-    rr (hl)
-    inc hl
-    djnz .lr_roll
-.lr_move:
     ld a, (lg_bytes)
     or a
-    ret z
+    jr z, .lr_bits
+    ; Move the survivors: dst[B..31] = src[0..31-B]
+    ld c, a                    ; C = bytes
+    ld b, 0
     ld hl, (lg_ptr)
-    ld a, (lg_bytes)
-    ld c, a
     ld a, 31
     sub c
     ld e, a
     ld d, 0
     add hl, de                 ; HL = source end (ptr + 31 - bytes)
     push hl
-    ld a, (lg_bytes)
-    ld e, a
+    ld e, c
     ld d, 0
     add hl, de                 ; HL = dest end (ptr + 31)
     ex de, hl                  ; DE = dest end
@@ -3727,16 +3741,26 @@ _lg_line_right:
     ld c, a
     ld b, 0
     lddr
-    ld hl, (lg_ptr)
-    ld a, (lg_bytes)
-    ld b, a
-    ld (hl), 0
-    dec b
+.lr_bits:
+    ld a, (lg_bits)
+    or a
     ret z
-.lr_zero:
+    ; Right shift in pixel space: bit 0 is the rightmost pixel, so the
+    ; carry chain runs from the low byte up.  Only the survivors rotate;
+    ; the bytes below them are re-rendered from LG_BUF.
+    ld a, (lg_bytes)
+    ld e, a
+    ld d, 0
+    ld hl, (lg_ptr)
+    add hl, de                 ; HL = first survivor
+    ld a, 32
+    sub e                      ; 32 - bytes
+    ld b, a
+    xor a                      ; carry = 0
+.lr_roll:
+    rr (hl)
     inc hl
-    ld (hl), 0
-    djnz .lr_zero
+    djnz .lr_roll
     ret
 
 
@@ -3920,7 +3944,7 @@ _lg_flip_shift:
     ld c, a
     ld a, (lg_loop)
     ld d, a
-    call _render_char
+    call _render_char_noattr    ; the whole row's attributes are already set
     ld a, (lg_vis)
     inc a
     ld (lg_vis), a

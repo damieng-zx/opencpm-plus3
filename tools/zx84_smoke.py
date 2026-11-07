@@ -1328,21 +1328,7 @@ class Smoke:
                     line[p >> 3] |= 0x80 >> (p & 7)
         return bytes(line)
 
-    def run_m80bit(self) -> None:
-        """24x80: the fast page flip leaves the right bitmap.
-
-        M80BIT puts 'W' at logical column 29, moves to column 51 (which flips
-        to page 29) and writes 'Q' there.  The visible bitmap is compared with
-        a reference render of the logical buffer, so a wrong shift direction
-        or a bad re-render source is caught.
-        """
-        self.log("M80BIT")
-        self.command("M80BIT", 2000)
-        self.wait_for(["M80BIT..OK"], frames=300, attempts=10)
-        cols = self.memory(4, label_address("scr_cols"), 1)[0]
-        off = self.memory(6, 0xA8C2, 1)[0]
-        if (cols, off) != (51, 29):
-            raise SmokeError(f"M80BIT: cols={cols}, off={off}, expected 51/29")
+    def _m80_check_bitmap(self, label: str, off: int, cols: int) -> None:
         buf = self.memory(5, 0x5B00, 80 * 24)
         for row in range(3):
             for scan in range(8):
@@ -1353,8 +1339,39 @@ class Smoke:
                 want = self._m80_row_ref(buf, off, row, scan, cols)
                 if got != want:
                     raise SmokeError(
-                        f"M80BIT: bitmap mismatch at row {row} scan {scan}: "
+                        f"{label}: bitmap mismatch at row {row} scan {scan}: "
                         f"{got.hex()} != {want.hex()}")
+
+    def run_m80bit(self) -> None:
+        """24x80: both fast page-flip directions leave the right bitmap.
+
+        M80BIT puts 'W' at logical column 29, moves to column 51 (which flips
+        to page 29) and writes 'Q' there.  The visible bitmap is compared with
+        a reference render of the logical buffer, so a wrong shift direction
+        or a bad re-render source is caught.  The chord then flips back to
+        page 0, which exercises the right-hand shift as well.
+        """
+        self.log("M80BIT")
+        self.command("M80BIT", 2000)
+        self.wait_for(["M80BIT..OK"], frames=300, attempts=10)
+        cols = self.memory(4, label_address("scr_cols"), 1)[0]
+        off = self.memory(6, 0xA8C2, 1)[0]
+        if (cols, off) != (51, 29):
+            raise SmokeError(f"M80BIT: cols={cols}, off={off}, expected 51/29")
+        self._m80_check_bitmap("M80BIT left", off, cols)
+
+        # Flip back to page 0 with EXTEND+Enter.  The program is blocked in
+        # con_in, so the chord is handled there and it stays blocked.
+        self.key("shift+sym+enter")
+        for _ in range(20):
+            if self.memory(6, 0xA8C2, 1)[0] == 0:
+                break
+            self.mcp.call("run", {"frames": 100})
+        off = self.memory(6, 0xA8C2, 1)[0]
+        if off != 0:
+            raise SmokeError(f"M80BIT: flip back left off={off}, expected 0")
+        self._m80_check_bitmap("M80BIT right", off, cols)
+
         # The program waits for a key, then leaves 24x80 itself.
         self.key("z")
         for _ in range(10):

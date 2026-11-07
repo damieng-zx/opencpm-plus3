@@ -228,6 +228,35 @@ class Wide80(unittest.TestCase):
         text = source("src/bios/screen.zpa")
         self.assertIn("res 0, (hl)", text)
 
+    def test_flip_only_shifts_the_surviving_columns(self):
+        """The exposed edge is re-rendered, so the shift must not waste time
+        clearing and rotating it (that was most of a 29-column flip)."""
+        text = source("src/bios/screen.zpa")
+        left = text[text.index("_lg_line_left:"):text.index("_lg_line_right:")]
+        right = text[text.index("_lg_line_right:"):text.index("_lg_flip_left:")]
+        for body in (left, right):
+            # The bytes at the exposed edge are neither cleared...
+            self.assertNotIn(".ll_zero", body)
+            self.assertNotIn(".lr_zero", body)
+            # ...nor rotated: both carry chains cover only 32 - bytes.
+            self.assertIn("32 - bytes", body)
+            self.assertIn("sub e", body)
+        # The move must happen before the rotate: rotating the source and
+        # then overwriting the destination with an unrotated copy loses the
+        # bit shift (the 51-column right flip regressed exactly that way).
+        self.assertLess(left.index("ldir"), left.index(".ll_roll:"))
+        self.assertLess(right.index("lddr"), right.index(".lr_bits:"))
+
+    def test_flip_skips_the_per_cell_attribute_stamp(self):
+        text = source("src/bios/screen.zpa")
+        flip = text[text.index("_lg_flip_shift:"):text.index("_stl_draw:")]
+        self.assertIn("call _render_char_noattr", flip)
+        # _render_char still stamps the cell for the normal output path...
+        self.assertIn("call _put_attr", text[text.index("_render_char:"):
+                                             text.index("_render_char_noattr:")])
+        # ...but the flip path enters after that call.
+        self.assertIn("_render_char_body:", text)
+
 
 class PromptEscapeEcho(unittest.TestCase):
     """F10 must pass ESC to the screen: BREAK 3 0 works at the A> prompt."""

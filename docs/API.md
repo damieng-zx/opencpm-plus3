@@ -784,7 +784,12 @@ A page change does not redraw the whole screen.  The two pages show the
 same text shifted horizontally, so the BIOS shifts each 32-byte scan line
 by `delta × font pitch` bits, stamps the row's attribute plane, and
 re-renders only the newly exposed columns from `LG_BUF`.  Both the manual
-chord and auto-flip use this path.  If the viewport is not the full
+chord and auto-flip use this path.  Only the columns that stay visible are
+shifted and rotated: the exposed edge is re-rendered anyway, so touching
+it in the shift pass is wasted work (at 51 columns the step is 29
+columns = 18 bytes, i.e. more than half of the line).  The per-cell
+attribute write is skipped on this path too, because the whole attribute
+row was stamped in one pass first.  If the viewport is not the full
 window (`ESC X` moved it or narrowed it), it falls back to a full redraw.
 At 51 columns the 256th screen pixel lies outside the 51×5 = 255-pixel
 text area, so it is cleared after the shift.
