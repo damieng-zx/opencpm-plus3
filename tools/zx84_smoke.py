@@ -652,6 +652,10 @@ class Smoke:
             self.wait_for(["31.SLOWX.."], frames=100, attempts=40)
             self.key("b", frames=60)
             self.wait_for(["DONE"], frames=500, attempts=10)
+            # Test 10 deliberately reads the absent ninth sector of its
+            # 8-sector scratch track.  Drop that expected error from the FDC
+            # log so the final check still treats any real retry as a bug.
+            self.mcp.call("fdc_log", {"clear": True})
         finally:
             self.dsk = old_dsk
             try:

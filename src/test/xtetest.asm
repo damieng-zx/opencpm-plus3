@@ -753,6 +753,19 @@ start:
     cp 9
     jp nc, .t10_fail
 
+    ; The ninth physical sector was deliberately left out of the 8-sector
+    ; track.  Record 32 (its first 128-byte record) must fail instead of
+    ; wrapping round onto sector 1.  This stays on the formatted track, so no
+    ; head movement or read beyond the disc geometry is involved.
+    ld hl, DD_READ_SECTOR
+    ld (userf_dw), hl
+    ld bc, 0x0100
+    ld de, 0x2620               ; track 38, record 32 = physical sector 9
+    ld hl, 0xD300
+    ld ix, 0xD220
+    call userf_trampoline
+    jp c, .t10_fail
+
     ; Logical sector 7 (the eighth physical sector) is present and filled.
     ld hl, DD_READ_SECTOR
     ld (userf_dw), hl

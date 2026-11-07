@@ -388,7 +388,12 @@ sets the `DC00h` magic byte.  It builds a standard 9-sector header table at
 `D500h`, formats track 39 with filler `E5h`, reads the track back and
 checks the data area, then reads the sector ID.  It then copies the XDPB,
 sets 8 sectors/track, formats track 38 with an 8-entry header at `D520h`,
-checks `READ ID` never reports sector 9 and reads the eighth sector back.
+checks `READ ID` never reports sector 9, probes record 32 (the missing ninth
+physical sector's first record) and requires that read to fail instead of
+wrapping onto sector 1, then reads the eighth sector back.  The probe stays
+on the freshly formatted track inside the normal 42/80-track geometry; it
+never seeks past the disc.  The smoke runner clears the FDC log after this
+scratch test so the deliberate error is not mistaken for a real retry.
 It then fills a 1K buffer at `C000h` (`AAh` then `55h`) and writes sectors
 1-2 of track 38 with one `DD_L_WRITE` WRITE DATA MULTIPLE command (EOT=2),
 then reads each sector back with `DD_L_READ` and compares the halves.  The
