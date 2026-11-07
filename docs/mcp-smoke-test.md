@@ -77,6 +77,11 @@ it back) followed by a `<` line and then `STAT`: the program must print
 `GOT: HELLO FROM PROFILE`, and `STAT` must still run afterwards, which covers
 program input from a submit file and the return to the CCP.
 
+`INPTEST EDIT` checks the F10 line editor directly: `ABC` + BACKSPACE + `D`
+must echo and return `GOT1: ABD`, a five-character buffer fed `ABCDEFGH`
+must stop at `GOT2: ABCDE`, and a second run must return to the `A>` prompt
+when Caps+Sym+C (Ctrl-C) is pressed, with `^C` on the screen.
+
 `SYSGEN` is checked twice.  With the distribution image in B:, `SYSGEN B:`
 must copy track 0 (every sector is compared byte for byte through
 `sector_read`) and the three system files, report `Checking ... ok` for
@@ -216,7 +221,7 @@ distribution image deliberately leaves them out.
 | `REGTEST` | BDOS register preservation: B/D (the high bytes of BC/DE), IX and IY across F12, F2, F25, F13 and F15 |
 | `XTETEST` | The XBIOS terminal, disc and keyboard calls through `USERF`, including ink/border/speed, `SCR_RUN_ROUTINE`, `DD_*` and `KM_*` |
 | `TERMTEST` | All screen modes and terminal escapes: cursor/erase/edit sequences, 32/51-column glyph rendering, status line and the 24x80 page flip (self-checked; the bitmaps are checked by the runner) |
-| `INPTEST` | Reads a line with F10 and prints it back; used to prove a submit file can drive a program |
+| `INPTEST` | Reads a line with F10 and prints it back (proves a submit file can drive a program); `INPTEST EDIT` checks backspace, buffer-full truncation and Ctrl-C |
 
 The smoke runner exercises all of these except `REGTEST`: `REGTEST`
 has its own harness, `tools/zx84_regtest.py`.  `INPTEST` is driven by the

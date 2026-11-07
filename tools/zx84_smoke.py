@@ -1051,6 +1051,33 @@ class Smoke:
         self.command("SCREEN 51", 700)
         self.expect("DUMP width restored", "A>")
 
+    def run_inptest_edit(self) -> None:
+        """INPTEST EDIT: F10 backspace, buffer-full and Ctrl-C handling."""
+        self.log("INPTEST line editing")
+        self.command("INPTEST EDIT", 700)
+        self.wait_for(["EDIT1?"], frames=200, attempts=10)
+        self.mcp.call("type", {"text": "ABC"})
+        self.key("backspace", 100)
+        self.mcp.call("type", {"text": "D"})
+        self.key("enter", 300)
+        self.wait_for(["GOT1: ABD"], frames=300, attempts=10)
+
+        self.wait_for(["EDIT2?"], frames=300, attempts=10)
+        self.mcp.call("type", {"text": "ABCDEFGH"})
+        self.key("enter", 300)
+        self.wait_for(["GOT2: ABCDE"], frames=300, attempts=10)
+        self.wait_for(["EDIT DONE"], frames=300, attempts=10)
+        self.wait_for(["A>"], frames=300, attempts=10)
+
+        # Ctrl-C is Caps+Sym+C (Extend+C): F10 prints "^C" and warm boots.
+        # Use a different argument so the new command echo proves this run
+        # started (the first run's "EDIT1?" is still on the screen).
+        self.command("INPTEST EDIT2", 700)
+        self.expect("second edit run started", "INPTEST EDIT2")
+        self.key("shift+sym+c", 400)
+        self.wait_for(["A>"], frames=300, attempts=10)
+        self.expect("Ctrl-C warm boot", "^C")
+
     def run_setdef(self) -> None:
         """SETDEF's options, and the CCP behaviour they control.
 
@@ -2099,6 +2126,7 @@ class Smoke:
         self.run_bdostest()
         self.run_ccp()
         self.run_dump()
+        self.run_inptest_edit()
         self.run_era()
         self.run_ren()
         self.run_user()
