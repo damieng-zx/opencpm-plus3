@@ -58,7 +58,7 @@ class TeAsk(unittest.TestCase):
         self.assertIn("vp_tmp_col", body)
         height = text[text.index(".esc_x_h:"):text.index(".esc_x_w:")]
         self.assertIn("ld (vp_height), a", height)
-        body = text[text.index(".esc_x_w:"):text.index("; _decode_colour")]
+        body = text[text.index(".esc_x_w:"):text.index("; _cancel_paging")]
         self.assertIn("ld (vp_width), a", body)
         self.assertIn("ld (vp_top), a", body)
         self.assertIn("ld (vp_left), a", body)
@@ -120,15 +120,15 @@ class TeSetInk(unittest.TestCase):
         self.assertIn("out (PORT_ULA), a", body)  # ink 0 updates border
 
     def test_flash_only_when_both_inks_flash(self):
-        text = source("src/bios/screen.zpa")
-        body = text[text.index("_set_attr:"):text.index("_cancel_paging:")]
+        text = source("src/bios/common.zpa")
+        body = text[text.index("_set_attr:"):text.index("_mul80:")]
         self.assertIn("ld a, (scr_ink_fl)", body)
         self.assertIn("ld a, (scr_paper_fl)", body)
         self.assertIn("ld a, 0x80", body)
         self.assertIn("ld (scr_flash), a", body)
 
     def test_palette_decode_treats_1_and_2_as_on(self):
-        text = source("src/bios/screen.zpa")
+        text = source("src/bios/common.zpa")
         body = text[text.index("_decode_te_colour:"):
                     text.index("_set_attr:")]
         self.assertIn("and 0x03", body)

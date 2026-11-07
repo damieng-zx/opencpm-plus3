@@ -614,9 +614,9 @@ scr_putchar:
     ld (esc_state), a
     ld a, b
     cp 'H'
-    jr z, .csi_cup
+    jp z, .csi_cup
     cp 'f'
-    jr z, .csi_cup
+    jp z, .csi_cup
     ret                         ; unsupported final — consume silently
 .csi_abort:
     xor a
@@ -640,51 +640,55 @@ scr_putchar:
 
 .csi_cup:
     ; Row = parameter 1 (1-based, default 1), clamped to the viewport.
-    ld a, (csi_n)
-    cp 1
-    jr c, .cup_row_default
-    ld a, (csi_params)
-    or a
-    jr nz, .cup_row_have
-.cup_row_default:
-    ld a, 1
-.cup_row_have:
+    call .csi_count
     dec a
-    ld b, a
+    ld c, a
     ld a, (vp_height)
-    cp b
-    jr z, .cup_row_clamp
-    jr c, .cup_row_clamp
-    ld a, b
-    jr .cup_row_set
-.cup_row_clamp:
-    dec a                      ; height - 1
-.cup_row_set:
+    dec a
+    call .csi_min
     ld (cursor_row), a
 
     ; Column = parameter 2 (1-based, default 1), clamped to the logical width.
-    ld a, (csi_n)
-    cp 2
-    jr c, .cup_col_default
-    ld a, (csi_params + 1)
-    or a
-    jr nz, .cup_col_have
-.cup_col_default:
-    ld a, 1
-.cup_col_have:
+    call .csi_count2
     dec a
-    ld b, a
+    ld c, a
     call _lg_width
-    cp b
-    jr z, .cup_col_clamp
-    jr c, .cup_col_clamp
-    ld a, b
-    jr .cup_col_set
-.cup_col_clamp:
-    dec a                      ; width - 1
-.cup_col_set:
+    dec a
+    call .csi_min
     ld (cursor_col), a
     jp _lg_autoflip
+
+; A = min(A, C)
+.csi_min:
+    cp c
+    ret c
+    ret z
+    ld a, c
+    ret
+
+; First CSI parameter as a count: default 1, and 0 also means 1.
+;   Out: A = count
+;   Clobbers: AF
+.csi_count:
+    ld a, (csi_n)
+    or a
+    jr z, .csi_count_one
+    ld a, (csi_params)
+    or a
+    ret nz
+.csi_count_one:
+    ld a, 1
+    ret
+
+; Second CSI parameter as a count: default 1, and 0 also means 1.
+.csi_count2:
+    ld a, (csi_n)
+    cp 2
+    jr c, .csi_count_one
+    ld a, (csi_params + 1)
+    or a
+    ret nz
+    jr .csi_count_one
 
 ; ------- one-parameter sequences (ESC 3 / 4 / b / c) -------
 
@@ -1234,123 +1238,6 @@ scr_putchar:
 
     xor a
     ld (esc_state), a
-    ret
-
-
-; ==========================================================================
-; _decode_colour - Decode an ESC b/c colour parameter
-;   In:  A = parameter byte (32..95, per the +3 CP/M manual)
-;   Out: B = Spectrum colour 0-7 (bit0 blue, bit1 red, bit2 green)
-;        C = bright flag 0 or 1
-;   Clobbers: AF, DE
-; ==========================================================================
-; @proc _decode_colour
-; @param %param:u8 a
-; @out   bc
-; @clobbers af,de
-; @end
-_decode_colour:
-    sub 32
-    and 0x3F
-    ; fall through
-
-; _decode_te_colour — Decode a +3 palette byte (0..3F)
-;   Each pair of bits is one gun: 00 off, 01/10 on normal, 11 on high.
-;   The Spectrum colour index takes the gun on/off state; the bright flag
-;   is set only when every enabled gun is high.
-; @proc _decode_te_colour
-; @param %colour:u8 a
-; @out   bc
-; @clobbers af,de
-; @end
-_decode_te_colour:
-    ld e, a
-
-    ; Colour index: bit0 blue, bit1 red, bit2 green.  A gun is on for
-    ; pair values 1, 2 or 3, so test the whole pair, not just one bit.
-    xor a
-    ld b, a
-    ld a, e
-    and 0x03
-    jr z, .dtc_red
-    set 0, b                   ; blue
-.dtc_red:
-    ld a, e
-    and 0x0C
-    jr z, .dtc_green
-    set 1, b                   ; red
-.dtc_green:
-    ld a, e
-    and 0x30
-    jr z, .dtc_bright
-    set 2, b                   ; green
-.dtc_bright:
-    ; Bright only when no gun is 01 or 10: XOR each pair's two bits.
-    ld a, e
-    ld d, a
-    srl a
-    xor d
-    and 0x15                   ; blue bit0, red bit2, green bit4
-    jr nz, .dtc_normal
-    ld a, e
-    and 0x15                   ; all guns off (black) is not bright
-    jr z, .dtc_normal
-    ld c, 1
-    ret
-.dtc_normal:
-    ld c, 0
-    ret
-
-
-; ==========================================================================
-; _set_attr - Recompute scr_attr from the ink/paper/bright state
-;   Both colours must be bright for the BRIGHT attribute to be set,
-;   matching the +3's "mix normal with bright and both stay normal".
-;   Clobbers: AF, B
-; ==========================================================================
-; @proc _set_attr
-; @clobbers af,b
-; @end
-_set_attr:
-    ld a, (scr_ink_br)
-    and a
-    jr z, .sa_nobr
-    ld a, (scr_paper_br)
-    and a
-    jr z, .sa_nobr
-    ld a, 0x40
-    jr .sa_have
-.sa_nobr:
-    xor a
-.sa_have:
-    ld b, a
-
-    ; FLASH only when both inks have a different flash colour.  Hardware
-    ; then alternates the whole cell between ink and paper.
-    xor a
-    ld (scr_flash), a
-    ld a, (scr_ink_fl)
-    and a
-    jr z, .sa_noflash
-    ld a, (scr_paper_fl)
-    and a
-    jr z, .sa_noflash
-    ld a, 0x80
-    ld (scr_flash), a
-    or b
-    ld b, a
-.sa_noflash:
-    ld a, (scr_paper)
-    and 0x07
-    add a, a
-    add a, a
-    add a, a
-    or b
-    ld b, a
-    ld a, (scr_ink)
-    and 0x07
-    or b
-    ld (scr_attr), a
     ret
 
 
@@ -3200,41 +3087,6 @@ scr_set_cols:
 ; The manual flip chord is EXTEND+Enter (CAPS+SYMB+Enter, since EXTEND is
 ; CAPS+SYMB).  Auto-flip follows the cursor when it leaves the window, and
 ; is turned on by ESC 5 0 / off by ESC 5 1, as the +3 manual specifies.
-
-; @proc _mul80
-; @param %n:u8 a
-; @out   hl
-; @clobbers af,de,hl
-; @end
-_mul80:
-    ld l, a
-    ld h, 0
-    add hl, hl                 ; *2
-    add hl, hl                 ; *4
-    add hl, hl                 ; *8
-    add hl, hl                 ; *16
-    ld d, h
-    ld e, l
-    add hl, hl                 ; *32
-    add hl, hl                 ; *64
-    add hl, de                 ; *80
-    ret
-
-
-; @proc _lg_width
-; @out   a
-; @clobbers af
-; @end
-_lg_width:
-    ld a, (mode80)
-    or a
-    jr nz, .lw80
-    ld a, (vp_width)
-    ret
-.lw80:
-    ld a, 80
-    ret
-
 
 ; @proc _lg_step_for_cols
 ; @clobbers af,b

@@ -22,6 +22,12 @@ The runtime checks live in `tools/zx84_ansi.py`; they type the sequences at
 the CCP prompt (whose line editor echoes through the normal console output
 path) and inspect the character buffer or cursor state.
 
+The screen colour/maths helpers (`_decode_colour`, `_decode_te_colour`,
+`_set_attr`, `_mul80`, `_lg_width`) live in the common stub.  Common memory
+is mapped in both system and screen mode, so this costs no call-site changes
+and keeps the bank-4 head above its 256-byte growth margin while the CSI
+code grows.
+
 ## Implemented
 
 | Sequence | Meaning | Notes |

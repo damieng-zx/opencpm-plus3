@@ -1823,3 +1823,164 @@ close_dir_update:
 
 .cl_done:
     ret
+
+
+; ==========================================================================
+; Screen helpers relocated from the bank-4 head to keep its 256-byte
+; growth margin.  Common memory is mapped in both system and screen mode,
+; and these routines only touch bank-4 variables or computed values.
+; ==========================================================================
+
+; ==========================================================================
+; _decode_colour - Decode an ESC b/c colour parameter
+;   In:  A = parameter byte (32..95, per the +3 CP/M manual)
+;   Out: B = Spectrum colour 0-7 (bit0 blue, bit1 red, bit2 green)
+;        C = bright flag 0 or 1
+;   Clobbers: AF, DE
+; ==========================================================================
+; @proc _decode_colour
+; @param %param:u8 a
+; @out   bc
+; @clobbers af,de
+; @end
+_decode_colour:
+    sub 32
+    and 0x3F
+    ; fall through
+
+; _decode_te_colour — Decode a +3 palette byte (0..3F)
+;   Each pair of bits is one gun: 00 off, 01/10 on normal, 11 on high.
+;   The Spectrum colour index takes the gun on/off state; the bright flag
+;   is set only when every enabled gun is high.
+; @proc _decode_te_colour
+; @param %colour:u8 a
+; @out   bc
+; @clobbers af,de
+; @end
+_decode_te_colour:
+    ld e, a
+
+    ; Colour index: bit0 blue, bit1 red, bit2 green.  A gun is on for
+    ; pair values 1, 2 or 3, so test the whole pair, not just one bit.
+    xor a
+    ld b, a
+    ld a, e
+    and 0x03
+    jr z, .dtc_red
+    set 0, b                   ; blue
+.dtc_red:
+    ld a, e
+    and 0x0C
+    jr z, .dtc_green
+    set 1, b                   ; red
+.dtc_green:
+    ld a, e
+    and 0x30
+    jr z, .dtc_bright
+    set 2, b                   ; green
+.dtc_bright:
+    ; Bright only when no gun is 01 or 10: XOR each pair's two bits.
+    ld a, e
+    ld d, a
+    srl a
+    xor d
+    and 0x15                   ; blue bit0, red bit2, green bit4
+    jr nz, .dtc_normal
+    ld a, e
+    and 0x15                   ; all guns off (black) is not bright
+    jr z, .dtc_normal
+    ld c, 1
+    ret
+.dtc_normal:
+    ld c, 0
+    ret
+
+
+; ==========================================================================
+; _set_attr - Recompute scr_attr from the ink/paper/bright state
+;   Both colours must be bright for the BRIGHT attribute to be set,
+;   matching the +3's "mix normal with bright and both stay normal".
+;   Clobbers: AF, B
+; ==========================================================================
+; @proc _set_attr
+; @clobbers af,b
+; @end
+_set_attr:
+    ld a, (scr_ink_br)
+    and a
+    jr z, .sa_nobr
+    ld a, (scr_paper_br)
+    and a
+    jr z, .sa_nobr
+    ld a, 0x40
+    jr .sa_have
+.sa_nobr:
+    xor a
+.sa_have:
+    ld b, a
+
+    ; FLASH only when both inks have a different flash colour.  Hardware
+    ; then alternates the whole cell between ink and paper.
+    xor a
+    ld (scr_flash), a
+    ld a, (scr_ink_fl)
+    and a
+    jr z, .sa_noflash
+    ld a, (scr_paper_fl)
+    and a
+    jr z, .sa_noflash
+    ld a, 0x80
+    ld (scr_flash), a
+    or b
+    ld b, a
+.sa_noflash:
+    ld a, (scr_paper)
+    and 0x07
+    add a, a
+    add a, a
+    add a, a
+    or b
+    ld b, a
+    ld a, (scr_ink)
+    and 0x07
+    or b
+    ld (scr_attr), a
+    ret
+
+
+
+; @proc _mul80
+; @param %n:u8 a
+; @out   hl
+; @clobbers af,de,hl
+; @end
+_mul80:
+    ld l, a
+    ld h, 0
+    add hl, hl                 ; *2
+    add hl, hl                 ; *4
+    add hl, hl                 ; *8
+    add hl, hl                 ; *16
+    ld d, h
+    ld e, l
+    add hl, hl                 ; *32
+    add hl, hl                 ; *64
+    add hl, de                 ; *80
+    ret
+
+
+; @proc _lg_width
+; @out   a
+; @clobbers af
+; @end
+_lg_width:
+    ld a, (mode80)
+    or a
+    jr nz, .lw80
+    ld a, (vp_width)
+    ret
+.lw80:
+    ld a, 80
+    ret
+
+

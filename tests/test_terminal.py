@@ -95,7 +95,7 @@ class PageMode(unittest.TestCase):
 
 class Colours(unittest.TestCase):
     def test_decode_uses_palette_bits(self):
-        text = source("src/bios/screen.zpa")
+        text = source("src/bios/common.zpa")
         body = text[text.index("_decode_colour:"):text.index("_set_attr:")]
         self.assertIn("sub 32", body)
         self.assertIn("and 0x3F", body)
@@ -106,14 +106,15 @@ class Colours(unittest.TestCase):
         self.assertIn("and 0x15", body)     # one low bit per gun
 
     def test_attribute_recomputed_and_stamped(self):
-        text = source("src/bios/screen.zpa")
-        body = text[text.index("_set_attr:"):text.index("_cancel_paging:")]
+        text = source("src/bios/common.zpa")
+        body = text[text.index("_set_attr:"):text.index("_mul80:")]
         self.assertIn("ld a, 0x40", body)   # BRIGHT
         self.assertIn("add a, a", body)     # paper << 3
         self.assertIn("ld (scr_attr), a", body)
 
-        start = text.index("\n_render_char:\n")
-        render = text[start:start + 400]
+        screen = source("src/bios/screen.zpa")
+        start = screen.index("\n_render_char:\n")
+        render = screen[start:start + 400]
         self.assertIn("call _put_attr", render)
 
     def test_default_is_white_on_blue(self):
