@@ -210,7 +210,7 @@ distribution image deliberately leaves them out.
 
 | Program | Covers |
 |---|---|
-| `BDOSTEST` | BDOS functions F1-F35 plus F104/F105, one line of output per call; blocking console calls are skipped unless input is pending |
+| `BDOSTEST` | BDOS functions F1-F37, F98, F104/F105, F107, F111/F112, one line of output per call; blocking console calls are skipped unless input is pending |
 | `SYSTEST` | Stack balance, `MOVE`, the clock, page zero, TAB stops and F110 delimiters |
 | `DISKTEST` | File, directory, extent and SCB behaviour, T1-T30; T30 is the 16-bit block test and only runs on a 2K-block disk |
 | `REGTEST` | BDOS register preservation: B/D (the high bytes of BC/DE), IX and IY across F12, F2, F25, F13 and F15 |
@@ -541,6 +541,14 @@ T23/T27/T28 cover the F44 multi-sector path: T23 reads four records of
 `CPM3.SYS` in one `F20` (EOT-style count 4, H=4) and compares them with four
 single-record reads; T27/T28 write four records in one `F21` to A: and C:
 and read each marker back.
+
+`BDOSTEST` also reports the four calls that previously had only source-level
+coverage: `F37 RESETDRV : PASS` checks that resetting A: clears its login bit
+and that a subsequent F31 logs it in again, `F98 CLEANUP : PASS` checks the
+no-op clean-up contract, `F107 SERIAL : PASS` compares the six bytes written
+to the TPA buffer with `OPNCP3`, and `F112 PRTBLK : PASS` checks that the
+printer control block is accepted and discarded (the printer is not fitted).
+The smoke runner requires all four `PASS` lines.
 
 `fdc_log` must stay retry-free.  A `FAIL` on T4 usually means the directory
 cache key/sector was corrupted; a `FAIL` on T11 means an extent's RC/alloc

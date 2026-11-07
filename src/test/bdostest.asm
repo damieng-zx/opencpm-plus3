@@ -54,6 +54,10 @@ start:
     call tst_f33        ; F33 RDRAND   — read random
     call tst_f34        ; F34 WRRAND   — write random
     call tst_f35        ; F35 FILSIZ   — compute file size
+    call tst_f37        ; F37 RESETDRV - reset drive vector
+    call tst_f98        ; F98 CLEANUP  - clean up disc
+    call tst_f107       ; F107 SERIAL   - get serial number
+    call tst_f112       ; F112 PRTBLK   - print block to printer
     call tst_f59        ; F59 LOADOVL - load an overlay file
     call tst_f111       ; F111 PRINTBLK - print a block
     call tst_f104       ; F104 SETDATE — set date/time + F105 round-trip
@@ -1832,6 +1836,114 @@ print_hex_a:
     jp BDOS
 
 ; ============================================================
+; F37: Reset Drive
+;   DE = drive vector (bit 0 = A:).  A = 0, and the current drive survives.
+; ============================================================
+tst_f37:
+    ld de, lbl_f37
+    call print_label
+    ld de, 1                   ; reset A:
+    ld c, 37
+    call BDOS
+    ; F37 has no defined A result; its effect is that A: is logged out.
+    ld c, 24                   ; F24: login vector
+    call BDOS
+    ld a, l
+    and 1
+    jr nz, .fail
+    ld c, 31                   ; F31: select the current drive, logging it in
+    call BDOS
+    ld c, 24
+    call BDOS
+    ld a, l
+    and 1
+    jr z, .fail
+    ld de, msg_pass_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+.fail:
+    ld de, msg_fail_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+
+; ============================================================
+; F98: Clean Up Disc
+;   A = 0; our buffers are per-call, so there is nothing to purge.
+; ============================================================
+tst_f98:
+    ld de, lbl_f98
+    call print_label
+    ld c, 98
+    call BDOS
+    or a
+    jr nz, .fail
+    ld de, msg_pass_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+.fail:
+    ld de, msg_fail_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+
+; ============================================================
+; F107: Get Serial Number
+;   DE = 6-byte TPA buffer; A = 0 and the buffer gets "OPNCP3".
+; ============================================================
+tst_f107:
+    ld de, lbl_f107
+    call print_label
+    ld de, f107_buf
+    ld c, 107
+    call BDOS
+    or a
+    jr nz, .fail
+    ld hl, f107_buf
+    ld de, serial_expect
+    ld b, 6
+.cmp:
+    ld a, (de)
+    cp (hl)
+    jr nz, .fail
+    inc hl
+    inc de
+    djnz .cmp
+    ld de, msg_pass_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+.fail:
+    ld de, msg_fail_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+
+; ============================================================
+; F112: Print Block to Printer
+;   No printer is fitted, so a valid control block is discarded and A = 0.
+; ============================================================
+tst_f112:
+    ld de, lbl_f112
+    call print_label
+    ld de, f112_cb
+    ld c, 112
+    call BDOS
+    or a
+    jr nz, .fail
+    ld de, msg_pass_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+.fail:
+    ld de, msg_fail_short
+    ld c, 9
+    call BDOS
+    jp print_crlf
+
+; ============================================================
 ; Strings
 ; ============================================================
 
@@ -1913,3 +2025,13 @@ msg_done:
     DB '$'
 
 crlf:   DB 0Dh, 0Ah, '$'
+
+lbl_f37:    DB "F37 RESETDRV : $"
+lbl_f98:    DB "F98 CLEANUP  : $"
+lbl_f107:   DB "F107 SERIAL  : $"
+lbl_f112:   DB "F112 PRTBLK  : $"
+f107_buf:   DS 6
+serial_expect: DB "OPNCP3"
+f112_cb:    DW f112_text
+            DW 6
+f112_text:  DB "PRNTOK"

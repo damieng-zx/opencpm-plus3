@@ -1726,6 +1726,10 @@ class Smoke:
             raise SmokeError("BDOSTEST F111 did not print its block")
         if not any("F104 SETDATE" in l for l in self.history):
             raise SmokeError("BDOSTEST did not reach F104")
+        for marker in ("F37 RESETDRV : PASS", "F98 CLEANUP  : PASS",
+                       "F107 SERIAL  : PASS", "F112 PRTBLK  : PASS"):
+            if not any(marker in l for l in self.history):
+                raise SmokeError("BDOSTEST did not report " + marker)
     def run_ccp(self) -> None:
         self.command("DIR", 500)
         listing = self.text()
