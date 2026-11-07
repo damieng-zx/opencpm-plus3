@@ -155,12 +155,20 @@ if errorlevel 1 goto :fail
 python3 tools\mkdsk.py create build\cpm3_720.dsk --format 720k --add src\test\hello16.txt
 if errorlevel 1 goto :fail
 
+:: The 720K distribution: the same CP/M files as build\cpm3.dsk, on a 720K
+:: PCW DS/DD disc with the -DDS720 boot pair.  It carries nothing extra yet;
+:: the point is the room (about 570K free vs 57K on the 180K disc) for a
+:: later larger tool set.  Still no *TEST.COM programs and no PMAUTOAE.COM.
+python3 tools\mkdsk.py create build\cpm3-dist720.dsk --format 720k --boot build\bootsect720.bin --system build\loader720.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com !REF_BINS! !EXTRA_FILES!
+if errorlevel 1 goto :fail
+
 for %%A in (build\loader.bin) do echo   Loader: %%~zA bytes
 for %%A in (build\bios.bin) do echo   BIOS blob: %%~zA bytes
 for %%A in (build\CPM3.SYS) do echo   CPM3.SYS:  %%~zA bytes
 for %%A in (build\CPM3C.SYS) do echo   CPM3C.SYS: %%~zA bytes
 for %%A in (build\CCP.COM) do echo   CCP.COM: %%~zA bytes
 echo   Images: build\cpm3.dsk (distribution), build\cpm3-test.dsk (tests)
+echo           build\cpm3-dist720.dsk (720K distribution), build\cpm3_720.dsk (data)
 if exist references\binaries\BBCBASIC.COM echo   BBC BASIC: on the distribution image (local copy)
 if defined PMAUTOAE_FILE echo   PMAUTOAE: on the test image (local copy)
 

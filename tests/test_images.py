@@ -7,6 +7,7 @@ import unittest
 from .layout import ROOT, dsk_directory, dsk_sectors
 
 DIST = ROOT / "build" / "cpm3.dsk"
+DIST720 = ROOT / "build" / "cpm3-dist720.dsk"
 TEST = ROOT / "build" / "cpm3-test.dsk"
 BBC = ROOT / "references" / "binaries" / "BBCBASIC.COM"
 
@@ -14,6 +15,17 @@ BBC = ROOT / "references" / "binaries" / "BBCBASIC.COM"
 def names(path) -> set[bytes]:
     return {entry[1:12] for entry in dsk_directory(path)
             if entry[0] != 0xE5}
+
+
+def free_blocks(path) -> int:
+    """Free 1K-or-2K blocks, the same count STAT F46 derives at run time."""
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    import mkdsk  # noqa: E402
+
+    image = mkdsk.DSKImage().load(path)
+    used = image._get_used_blocks()
+    return image.dsm + 1 - len(used) - image.dir_blocks
 
 
 @unittest.skipUnless(DIST.exists(), "build/cpm3.dsk is missing (run build.cmd)")
@@ -46,6 +58,45 @@ class DistributionImage(unittest.TestCase):
     def test_nulu11_is_not_shipped(self):
         # NULU11.COM is a local LBR manager the project does not distribute.
         self.assertNotIn(b"NULU11  COM", names(DIST))
+
+
+@unittest.skipUnless(DIST720.exists(),
+                     "build/cpm3-dist720.dsk is missing (run build.cmd)")
+class Distribution720Image(unittest.TestCase):
+    """A 720K distribution disc: the same files as the 180K one, more room."""
+
+    def test_is_a_720k_double_sided_image(self):
+        raw = DIST720.read_bytes()
+        self.assertEqual(raw[0x30], 80)          # cylinders
+        self.assertEqual(raw[0x31], 2)           # sides
+
+    def test_uses_the_720k_boot_chain(self):
+        boot = dsk_sectors(DIST720)[0][0]
+        self.assertEqual(boot[0], 3)             # disc type
+        self.assertEqual(boot[1], 1)             # alternating sides
+        self.assertEqual(boot[2], 80)            # tracks per side
+        self.assertEqual(boot[3], 9)             # sectors per track
+        self.assertEqual(boot[6], 4)             # 2K blocks
+        self.assertEqual(sum(boot) & 0xFF, 3)    # boot checksum
+
+    def test_carries_the_same_files_as_the_180k_distribution(self):
+        self.assertEqual(names(DIST720), names(DIST))
+
+    def test_carries_no_test_programs_or_third_party_toolkit(self):
+        names11 = names(DIST720)
+        for stripped in (b"BDOSTESTCOM", b"XTETEST COM", b"DISKTESTCOM",
+                         b"TERMTESTCOM", b"SYSTEST COM", b"REGTEST COM",
+                         b"BIOSTESTCOM", b"CHAINTESCOM", b"SCREENBMCOM",
+                         b"SMOKE   TXT", b"PAGE    TXT",
+                         b"SMOKE   SUB", b"PARAM   SUB",
+                         b"PMAUTOAECOM"):
+            self.assertNotIn(stripped, names11)
+
+    def test_has_room_for_a_larger_tool_set(self):
+        # The point of the 720K distribution: far more free space than the
+        # 180K one, which is limited to at most 57 free 1K blocks.
+        self.assertGreaterEqual(free_blocks(DIST720), 250)
+        self.assertLessEqual(free_blocks(DIST), 57)
 
 
 @unittest.skipUnless(TEST.exists(),

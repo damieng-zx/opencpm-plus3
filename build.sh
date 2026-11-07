@@ -160,12 +160,33 @@ python3 tools/mkdsk.py create build/cpm3-test.dsk \
 python3 tools/mkdsk.py create build/cpm3_720.dsk --format 720k \
     --add src/test/hello16.txt
 
+# The 720K distribution: the same CP/M files as build/cpm3.dsk, on a 720K
+# PCW DS/DD disc with the -DDS720 boot pair.  It carries nothing extra yet;
+# the point is the room (about 570K free vs 57K on the 180K disc) for a later
+# larger tool set.  Still no *TEST.COM programs and no PMAUTOAE.COM.
+python3 tools/mkdsk.py create build/cpm3-dist720.dsk \
+    --format 720k \
+    --boot build/bootsect720.bin \
+    --system build/loader720.bin \
+    --add build/CPM3.SYS build/CPM3C.SYS build/CCP.COM \
+    src/bios/font51.bin src/bios/font32.bin src/bios/font64.bin \
+    build/RAMDISK.FID \
+    build/date.com build/showxdpb.com build/dump.com build/setdef.com \
+    build/submit.com build/screen.com build/set24x80.com \
+    build/format.com \
+    build/diskcopy.com \
+    build/stat.com \
+    build/sysgen.com \
+    "${REF_FILES[@]}" \
+    $EXTRAFILES
+
 echo "  Loader: $(wc -c < build/loader.bin) bytes"
 echo "  BIOS blob: $(wc -c < build/bios.bin) bytes"
 echo "  CPM3.SYS: $(wc -c < build/CPM3.SYS) bytes"
 echo "  CPM3C.SYS: $(wc -c < build/CPM3C.SYS) bytes"
 echo "  CCP.COM: $(wc -c < build/CCP.COM) bytes"
 echo "  Images: build/cpm3.dsk (distribution), build/cpm3-test.dsk (tests, 720K)"
+echo "          build/cpm3-dist720.dsk (720K distribution), build/cpm3_720.dsk (data)"
 if [ -f references/binaries/BBCBASIC.COM ]; then
     echo "  BBC BASIC: on the distribution image (local copy)"
 fi

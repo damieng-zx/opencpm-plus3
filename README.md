@@ -243,22 +243,27 @@ build.cmd
 build.cmd --add FILE ...
 ```
 
-Output: two +3 images and one data image.
+Output: three +3 images and one data image.
 
 | Image | Contents |
 |---|---|
 | `build/cpm3.dsk` | **Distribution.** A 180K single-sided +3 disc: the system files, the utilities under [Tools](#tools), and — when `references/binaries/` is present — the local third-party utilities, including **BBC BASIC**. |
-| `build/cpm3-test.dsk` | **Test image.** A 720K PCW DS/DD disc (80 cylinders, two alternating sides, 2K blocks) carrying everything on the distribution image plus the on-disk regression suite, its fixtures and, when fetched, `PMAUTOAE.COM`. The smoke runner boots this image. |
+| `build/cpm3-dist720.dsk` | **720K distribution.** The same CP/M files as `cpm3.dsk`, on a 720K PCW DS/DD disc (80 cylinders, two alternating sides, 2K blocks) booted by the `-DDS720` pair. Nothing extra on it yet: it exists for the ~570K free it gives a larger tool set later. |
+| `build/cpm3-test.dsk` | **Test image.** A 720K PCW DS/DD disc carrying everything on the distribution image plus the on-disk regression suite, its fixtures and, when fetched, `PMAUTOAE.COM`. The smoke runner boots this image. |
 | `build/cpm3_720.dsk` | PCW DS/DD 720K data image used by the 16-bit block tests. |
+
+A 720K disc is not readable by an unmodified +3 (its drive is single-sided
+180K), so `cpm3.dsk` remains the image for real hardware; the 720K pair suits
+emulators, PCW drives and the larger third-party toolkits.
 
 A disk without `CCP.COM` boots to a diagnostic instead of a prompt; a disk
 without `CPM3C.SYS` does not boot.
 
 The third-party binaries under `references/binaries/` are untracked and
-optional. When present they are added to **both** images automatically, so the
-distribution disk carries BBC BASIC and your other tools; a fresh clone (and
-CI) builds a source-only disk, and the smoke runner skips the checks that need
-them.  Those files are copyrighted: they are not part of the repository and
+optional. When present they are added to **every** +3 image automatically, so
+each distribution disk carries BBC BASIC and your other tools; a fresh clone
+(and CI) builds a source-only disk, and the smoke runner skips the checks that
+need them.  Those files are copyrighted: they are not part of the repository and
 are never shipped with a release.  `RENAME.COM` is deliberately excluded (the
 CCP's built-in `REN` covers it); the smoke runner adds it to a scratch copy so
 a real third-party F23 caller is still covered.  `NULU11.COM` (an LBR library
@@ -271,7 +276,8 @@ disk and it runs as it did on the original system.
 handled differently: it is third-party too, so it goes **only on the 720K
 test image**, and only when `tools/fetch_pmautoae.py` has downloaded it into
 `references/binaries/`.  The 720K image has room for the 31K archive *and*
-the ten files it extracts, which the 180K distribution image does not.
+the ten files it extracts, which the 180K distribution image does not.  The
+720K distribution image deliberately carries neither.
 
 ### Testing
 

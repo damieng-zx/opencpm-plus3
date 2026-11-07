@@ -9,20 +9,28 @@ Clean-room CP/M 3.1 for the ZX Spectrum +3. All code is original Z80 assembly �
 ## Build
 
 ```bash
-build.cmd                    # Build the distribution and test images
-build.cmd --add FILE ...     # Build with extra CP/M files on both images
+build.cmd                    # Build all four images
+build.cmd --add FILE ...     # Build with extra CP/M files on every +3 image
 ```
 
-Two 180K images are produced from the same system files:
+Three +3 images are produced from the same system files, plus a data image:
 
-- `build/cpm3.dsk` — **distribution**: system, the utilities we build
+- `build/cpm3.dsk` — **distribution** (180K single-sided): system, the
+  utilities we build
   (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`,
   `FORMAT`, `DISKCOPY`) and
   the local `references/binaries/` utilities (BBC BASIC, ED, PIP, ...).  No
   test programs.
+- `build/cpm3-dist720.dsk` — the same CP/M files on a **720K** PCW DS/DD
+  disc, booted by the `-DDS720` boot sector and loader.  Nothing extra yet;
+  it exists for the ~570K free it leaves a larger tool set.  No test
+  programs and no `PMAUTOAE.COM`.
 - `build/cpm3-test.dsk` — the distribution files **plus** the `*TEST.COM`
-  programs and their fixtures; the smoke and the other on-disk test runners
-  boot this one.
+  programs, their fixtures and (when fetched) `PMAUTOAE.COM`, on the same
+  720K layout; the smoke and the other on-disk test runners boot this one.
+
+A 720K disc is not readable by an unmodified +3, so `cpm3.dsk` stays the
+image for real hardware.
 
 `build/cpm3_720.dsk` is a PCW 720K data image for the 16-bit block tests.
 
@@ -35,8 +43,8 @@ Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) →
 lists every region. Before adding a large feature, read `docs/boot.md`
 § *Image headroom and the growth plan*.
 
-`references/binaries/` is optional third-party software added to both images
-(that is how BBC BASIC gets onto the distribution disk); `SUBMIT.COM`,
+`references/binaries/` is optional third-party software added to all three +3
+images (that is how BBC BASIC gets onto the distribution disks); `SUBMIT.COM`,
 `RENAME.COM`, `NULU11.COM` (an LBR library manager) and `PROFILE.SUB`
 (Amstrad's start-up script: it works, but auto-running it copies ~10K into
 the 16K C: RAM disk at every cold boot) are excluded.  The

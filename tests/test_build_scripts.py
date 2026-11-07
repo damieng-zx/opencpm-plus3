@@ -34,16 +34,24 @@ def assembled_programs(text: str) -> dict[str, str]:
     return out
 
 
-def disk_block(text: str, image: str, end_image: str) -> str:
+def disk_block(text: str, image: str, end_image: str | None) -> str:
     """The mkdsk arguments between two image builds, lower-cased."""
     flat = _norm(text)
     start = flat.index(f"mkdsk.py create build/{image}")
-    end = flat.index(f"mkdsk.py create build/{end_image}", start)
+    if end_image is None:
+        # The last image in the script; stop where the build summary starts.
+        ends = [flat.find(marker, start) for marker in
+                ("if errorlevel 1 goto :fail", "for %%a in (build/loader",
+                 'echo "  loader:')]
+        ends = [e for e in ends if e != -1]
+        end = min(ends) if ends else len(flat)
+    else:
+        end = flat.index(f"mkdsk.py create build/{end_image}", start)
     return flat[start:end]
 
 
 def disk_files(text: str, image: str = "cpm3.dsk",
-               end_image: str = "cpm3-test.dsk") -> set[str]:
+               end_image: str | None = "cpm3-test.dsk") -> set[str]:
     """The build/*.SYS, build/*.COM and src/* assets passed to mkdsk."""
     block = disk_block(text, image, end_image)
     return set(re.findall(
@@ -116,6 +124,30 @@ class BuildScripts(unittest.TestCase):
             self.assertTrue(BENCHMARK <= disk_files(
                 text, "cpm3-test.dsk", "cpm3_720.dsk"), name)
             self.assertIn("build/screenbm.com", assembled_programs(text), name)
+
+    def test_the_720k_distribution_mirrors_the_180k_one(self):
+        """A second distribution disc, 720K, with nothing extra on it yet."""
+        boot_chain = {"build/bootsect.bin", "build/loader.bin",
+                      "build/bootsect720.bin", "build/loader720.bin",
+                      "build/bios.bin"}
+        for name, text in (("build.cmd", self.cmd), ("build.sh", self.sh)):
+            block = disk_block(text, "cpm3-dist720.dsk", None)
+            files = set(re.findall(
+                r"(?:build|src)/[a-z0-9_./-]+\.(?:com|sys|fid|bin|txt|sub)",
+                block)) - boot_chain
+            # Same CP/M files as the 180K distribution...
+            self.assertEqual(files, disk_files(text) - boot_chain, name)
+            # ...and none of the test-only content.
+            self.assertFalse(files & TEST_PROGRAMS, name)
+            self.assertFalse(files & TEST_FIXTURES, name)
+            self.assertFalse(files & BENCHMARK, name)
+            self.assertNotIn("pmautoae", block, name)
+            # It is a 720K disc booted by the -DDS720 pair.
+            self.assertIn("--format 720k", block, name)
+            self.assertIn("bootsect720.bin", block, name)
+            self.assertIn("loader720.bin", block, name)
+            self.assertNotIn("bootsect.bin", block, name)
+            self.assertNotIn("loader.bin", block, name)
 
     def test_both_split_the_system_image(self):
         for name, text in (("build.cmd", self.cmd), ("build.sh", self.sh)):

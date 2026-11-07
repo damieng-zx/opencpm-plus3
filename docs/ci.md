@@ -45,7 +45,8 @@ smoke runner always exercises `SMOKE.TXT` (from `src/test/smoke.txt`),
 `DISKTEST` (including the 16-bit block test), and the built-in
 `ERA`/`REN` commands; only the external
 `RENAME.COM` (added to a scratch copy of the image) and `PIP` checks depend
-on the reference programs.  The build also produces `build/cpm3_720.dsk`
+on the reference programs.  The build also produces `build/cpm3-dist720.dsk`
+(the 720K distribution) and `build/cpm3_720.dsk`
 with `mkdsk.py --format 720k` for the 16-bit block test.
 
 The zx84 checkout uses the current repository name,
