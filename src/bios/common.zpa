@@ -926,7 +926,7 @@ _ibm_byte:     db 0
 ; Drive pointer table — 16 DPH pointers (BIOS fn 22 DRVTBL returns this)
 drive_table:
     dw xdph_a                      ; A: — +3 floppy
-    dw xdph_b                      ; B: — +3 floppy (alias of A:, same physical drive)
+    dw xdph_b                      ; B: — +3 floppy (second physical drive, US=1)
 drive_table_c_slot:
     dw 0                           ; C: — patched to xdph_c by load_fid (or stays 0)
     dw 0                           ; D:
@@ -1168,14 +1168,10 @@ xbios_ret_iy: dw 0                 ; XBIOS IY result (caller IY by default)
 xbios_tmp_hl: dw 0                 ; scratch for SCR_RUN_ROUTINE's call
 dd_results: db 0                   ; DD_READ_ID result count
     ds 7                           ; ST0 ST1 ST2 C H R N
-; Reserved: DD_FORMAT used to stage its CHRN table here (36 bytes = 9
-; sectors).  It now stages it in the FDC deblock buffer, which holds up to
-; 32 entries.  The space is kept as a cushion so a small addition here does
-; not immediately shift the pinned addresses below (see the asserts at
-; ccp_fcb/ccp_run_prog: the separately built CCP.COM and RAMDISK.FID
-; hard-code them, so the build fails loudly if they move).
-dd_reserved: ds 36
-    assert dd_reserved + 36 <= 0x10000, "USERF/disc save area must fit in common memory"
+; dd_reserved used to hold the DD_FORMAT CHRN table (36 bytes).  DD_FORMAT
+; now stages that table in the FDC deblock buffer, which holds up to 32
+; entries, so this space is unused.  It was kept as a cushion, but the
+; cushion is better placed after the pinned code below than before it.
 
 ; CD_INFO buffer-descriptor table: empty (single 0xFF terminator).  The
 ; manual requires HL to point into common memory so a TPA caller can read it.
@@ -1224,7 +1220,7 @@ ccp_run_prog:
     push hl                        ; RET from the program returns to warm boot
     jp 0x0100
 
-    assert ccp_run_prog == 0xFCCA, "miniccp.zpa CCP_RUN_PROG must match ccp_run_prog"
+    assert ccp_run_prog == 0xFCA6, "miniccp.zpa CCP_RUN_PROG must match ccp_run_prog"
 
 ; ==========================================================================
 ; BDOS directory and FCB helpers (relocated from bank 4)
@@ -1996,5 +1992,36 @@ _cancel_paging:
     and 0xFE
     ld (con_mode), a
     ret
+
+
+; ==========================================================================
+; Character device table (CP/M 3 BIOS function 20, DEVTBL)
+; ==========================================================================
+; Format is the DRI one: 6-byte space-padded name, mode byte, baud code,
+; repeating, terminated by a zero byte in the name position (CP/M 3 System
+; Guide, Listing 3-2/3-3).
+;
+; This MUST be in common memory: a TPA program calls DEVTBL through page
+; zero and then reads the returned pointer while mode 0 is selected, where
+; bank 4 (0x0000-0x3FFF) is not mapped.
+;
+; Mode bits: 0x01 input, 0x02 output, 0x04 software baud, 0x08 serial,
+; 0x10 XON/XOFF.
+char_dev_table:
+    db 'CON   '                    ; console: keyboard in, screen out
+    db 0x03                        ; input + output
+    db 0                           ; baud$none (not a serial port)
+    db 'CONO  '                    ; console output only (PIP CONO:=FILE)
+    db 0x02                        ; output
+    db 0                           ; baud$none
+    db 'LST   '                    ; printer: declared, no hardware fitted
+    db 0x02                        ; output
+    db 0                           ; baud$none
+    db 'AUX   '                    ; serial: declared, no hardware fitted
+    db 0x03                        ; input + output
+    db 0                           ; baud$none
+    db 0                           ; table terminator
+
+    assert char_dev_table + 33 <= 0x10000, "Device table must fit in common memory"
 
 

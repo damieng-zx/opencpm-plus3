@@ -457,12 +457,6 @@ aux_out_status:
     xor a                          ; Not ready
     ret
 
-; @proc dev_init
-; @clobbers
-; @end
-dev_init:
-    ret
-
 
 ; ==========================================================================
 ; Device and Drive Tables
@@ -476,11 +470,23 @@ dev_tbl:
     ld hl, char_dev_table
     ret
 
-char_dev_table:
-    db 'CON   '                    ; Device name (6 chars)
-    db 0x03                        ; Mode: input + output
-    db 0                           ; Baud: N/A
-    db 0                           ; Table terminator
+; char_dev_table lives in common memory (common.zpa): CP/M 3 requires the
+; table in common in a banked system, because a TPA program reads it after
+; calling DEVTBL and bank 4 is not mapped in mode 0.
+
+; @proc dev_init
+; @param %dev:u8   c               ; device number, 0-15
+; @clobbers
+; @end
+; dev_init - BIOS function 21, DEVINI.
+;
+; The CP/M 3 System Guide makes this optional: "It need only be supplied if
+; I/O redirection has been implemented".  We have no software-selectable
+; baud rate and no device-name redirection yet, so there is nothing to
+; program.  When redirection lands this should walk char_dev_table to the
+; %dev'th entry and apply its baud code.
+dev_init:
+    ret
 
 ; @proc drv_tbl
 ; @out hl                          ; pointer to drive_table

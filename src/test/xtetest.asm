@@ -2261,6 +2261,75 @@ start:
     ld c, 9
     call BDOS
 
+    ; ------------------------------------------------------------------
+    ; Test 34: DEVTBL returns a table a TPA program can actually READ.
+    ; The table must live in common memory: bank 4 is not mapped in mode 0,
+    ; so a bank-4 table would read as garbage here.
+    ; ------------------------------------------------------------------
+    ld de, msg_t34
+    ld c, 9
+    call BDOS
+
+    ; BIOS function 20 = DEVTBL, at bios_base + 20*3.
+    ld hl, (0x0001)             ; page zero WBOOT vector = bios_visible + 3
+    dec hl
+    dec hl
+    dec hl                      ; HL = bios_visible (BIOS base)
+    ld de, 20 * 3
+    add hl, de                  ; HL = DEVTBL entry
+    ld (t34_call + 1), hl
+t34_call:
+    call 0                      ; target written above
+    ld a, h
+    or l
+    jr z, t34_fail             ; null table
+
+    ; HL now points at the table in common memory.  Check it is real data
+    ; and not a bank-4 address we cannot see.  Common memory is F600-FFFF,
+    ; so reject anything below F600 (a 16-bit compare, not just the high
+    ; byte: the table at FFD3 has high byte FF).
+    push hl
+    ld de, 0xF600
+    or a
+    sbc hl, de
+    pop hl
+    jr c, t34_fail              ; below F600: not common memory
+    ld a, (hl)
+    cp 'C'                      ; first entry name starts "CON"
+    jr nz, t34_fail
+    inc hl
+    ld a, (hl)
+    cp 'O'
+    jr nz, t34_fail
+    inc hl
+    ld a, (hl)
+    cp 'N'
+    jr nz, t34_fail
+    dec hl
+    dec hl                      ; back to the entry start for the walk
+
+    ; Walk to the terminator to prove the table parses: 6 name + 1 mode +
+    ; 1 baud = 8 bytes per entry.
+t34_walk:
+    ld a, (hl)
+    or a
+    jr z, t34_ok               ; found the zero terminator
+    ld de, 8
+    add hl, de
+    ; Bail out if we run past the top of memory.
+    ld a, h
+    or a
+    jr nz, t34_walk
+    jr t34_fail
+t34_ok:
+    ld de, msg_ok
+    jr t34_print
+t34_fail:
+    ld de, msg_fail
+t34_print:
+    ld c, 9
+    call BDOS
+
     ; === Done ===
     ld de, msg_done
     ld c, 9
@@ -2646,6 +2715,7 @@ msg_t31b:   db 0x0D, 0x0A, "31.SLOWX..", '$'
 msg_t31ok:  db "31.KREPEAT..OK", 0x0D, 0x0A, '$'
 msg_t32:    db 0x0D, 0x0A, "32.FMTBAD..", '$'
 msg_t33:    db 0x0D, 0x0A, "33.VIEWPORT..", '$'
+msg_t34:    db 0x0D, 0x0A, "34.DEVTBL..", '$'
 exp_string: db "HELLO"
 exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'
