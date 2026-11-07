@@ -184,10 +184,14 @@ python3 tools/zx84_negative.py
 Cases: missing/deleted `CPM3.SYS`, truncated allocation map, block number
 past the end of the disk, deleted `CPM3C.SYS` (common stub), corrupted
 boot-sector checksum, deleted `CCP.COM` (boots, prints `CCP.COM missing`,
-no prompt), and no disk in drive A:.
+no prompt), an empty `CCP.COM` allocation map (same diagnostic), and no
+disk in drive A:.  A `CCP.COM` or `CPM3C.SYS` that keeps only its first 1K
+block, or whose first allocation block is past the end of the disk, may
+print the signon but must not reach `A>`.
 
 Optional-file cases (the boot must still reach `A>`): deleted `FONT64.BIN`
-(and `SCREEN 64` is refused, width stays 51), deleted `FONT51.BIN`, deleted
+(and `SCREEN 64` is refused, width stays 51), deleted `FONT32.BIN` (and
+`SCREEN 32` is refused, width stays 51), deleted `FONT51.BIN`, deleted
 `RAMDISK.FID`, and a corrupted `OCFID` magic.  The two FID cases also check
 that `drive_table_c_slot` stays zero, i.e. C: is not registered.
 

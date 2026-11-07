@@ -10,6 +10,12 @@ reach the CP/M prompt:
   nosys2     CPM3C.SYS (common stub) directory entry marked deleted
   badsum     boot-sector checksum corrupted
   noccp      CCP.COM directory entry marked deleted (signon + diagnostic)
+  emptyccp   CCP.COM allocation map empty (diagnostic, no prompt)
+  shortccp   CCP.COM keeps only its first 1K block
+  shortsys2  CPM3C.SYS keeps only its first 1K block
+  badccpblock CCP.COM points at a block past the end of the disk
+  badsys2block CPM3C.SYS points at a block past the end of the disk
+  nofont32   FONT32.BIN deleted (boots, SCREEN 32 refused)
   nodisk     drive A ejected before disk_boot
 
 The loader's expected failure mode is a red border/tight loop (or the ROM
@@ -119,6 +125,40 @@ def make_images(src: Path, outdir: Path) -> dict[str, Path]:
     badfid[block_sector_offset(badfid, badfid[off + 16])] ^= 0xFF
     images["badfid"] = write("badfid", badfid)
 
+    # FONT32 is optional like FONT51/FONT64: without it the system boots but
+    # SCREEN 32 must be refused.
+    nofont32 = bytearray(base)
+    nofont32[find_entry(nofont32, b"FONT32  BIN")] = 0xE5
+    images["nofont32"] = write("nofont32", nofont32)
+
+    # The stage-2 loader follows the allocation map, not RC.  Keeping only
+    # the first 1K block of a staged file exercises a short read/write:
+    # CCP.COM gets a partial image (LF_CCP_LEN = 1024) and CPM3C.SYS leaves
+    # most of the common-stub staging area uninitialised.
+    shortccp = bytearray(base)
+    shortccp[find_entry(shortccp, b"CCP     COM") + 17] = 0
+    images["shortccp"] = write("shortccp", shortccp)
+
+    shortsys2 = bytearray(base)
+    shortsys2[find_entry(shortsys2, b"CPM3C   SYS") + 17] = 0
+    images["shortsys2"] = write("shortsys2", shortsys2)
+
+    # A zero-length CCP.COM stages nothing; LF_CCP_LEN = 0 must trigger the
+    # "CCP.COM missing" diagnostic rather than a jump into an empty TPA.
+    emptyccp = bytearray(base)
+    emptyccp[find_entry(emptyccp, b"CCP     COM") + 16] = 0
+    images["emptyccp"] = write("emptyccp", emptyccp)
+
+    # Directory entries that point past DSM must fail in the loader instead
+    # of reading a sector from beyond the disk.
+    badccp = bytearray(base)
+    badccp[find_entry(badccp, b"CCP     COM") + 16] = 200
+    images["badccpblock"] = write("badccpblock", badccp)
+
+    badsys2 = bytearray(base)
+    badsys2[find_entry(badsys2, b"CPM3C   SYS") + 16] = 200
+    images["badsys2block"] = write("badsys2block", badsys2)
+
     return images
 
 
@@ -207,6 +247,42 @@ class Negative:
                 f"nofont64: SCREEN 64 changed width to {cols}, expected 51")
         print("[negative] nofont64: SCREEN 64 refused (ok)")
 
+    def no_prompt(self, name: str, path: Path) -> None:
+        """A partially staged boot file may print the signon, but no prompt."""
+        self.reset()
+        self.mcp.call("load", {"file": str(path)})
+        self.mcp.call("disk_boot", {})
+        self.mcp.call("run", {"frames": 2500})
+        screen = self.screen()
+        if "A>" in screen:
+            raise SmokeError(f"{name}: unexpectedly reached a prompt:\n{screen}")
+        print(f"[negative] {name}: no prompt (ok)")
+
+    def ccp_empty(self, path: Path) -> None:
+        """Zero-length CCP.COM: the BIOS must report it and halt."""
+        self.reset()
+        self.mcp.call("load", {"file": str(path)})
+        self.mcp.call("disk_boot", {})
+        self.mcp.call("run", {"frames": 1500})
+        screen = self.screen()
+        if "A>" in screen:
+            raise SmokeError(f"emptyccp: reached a prompt with no CCP image:\n{screen}")
+        if "CCP.COM missing" not in screen:
+            raise SmokeError(f"emptyccp: no diagnostic on screen:\n{screen}")
+        print("[negative] emptyccp: reports missing CCP.COM, no prompt (ok)")
+
+    def font32_missing(self, path: Path) -> None:
+        """Without FONT32.BIN, SCREEN 32 must be refused."""
+        self.boots("nofont32", path)
+        self.mcp.call("type", {"text": "SCREEN 32"})
+        self.mcp.call("key", {"name": "enter"})
+        self.mcp.call("run", {"frames": 800})
+        cols = self.memory(4, label_address("scr_cols"), 1)[0]
+        if cols != 51:
+            raise SmokeError(
+                f"nofont32: SCREEN 32 changed width to {cols}, expected 51")
+        print("[negative] nofont32: SCREEN 32 refused (ok)")
+
     def nodisk(self) -> None:
         self.reset()
         self.mcp.call("load", {"file": str(ROOT / "build" / "cpm3.dsk")})
@@ -247,12 +323,19 @@ def main() -> int:
             for name, path in images.items():
                 if name == "noccp":
                     neg.no_ccp(path)
+                elif name == "emptyccp":
+                    neg.ccp_empty(path)
                 elif name == "nofont64":
                     neg.font64_missing(path)
+                elif name == "nofont32":
+                    neg.font32_missing(path)
                 elif name == "nofont51":
                     neg.boots(name, path)
                 elif name in ("nofid", "badfid"):
                     neg.c_absent(name, path)
+                elif name in ("shortccp", "shortsys2",
+                              "badccpblock", "badsys2block"):
+                    neg.no_prompt(name, path)
                 else:
                     neg.no_boot(name, path)
             neg.nodisk()
