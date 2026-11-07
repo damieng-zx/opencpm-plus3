@@ -160,11 +160,12 @@ the mounted B: image, then narrowed to `A:` so the same command prints
 
 `DUMP.COM` is checked next: `DUMP` without an argument prints
 `Usage: DUMP filename.ext`, `DUMP NOSUCH.TXT` prints `File not found`, and
-`DUMP SMOKE.TXT` dumps the nine-byte fixture plus its 1Ah record padding at
-10, 6 and 14 bytes per line for the 51-, 32- and 64-column modes.  The
-checks look for the first `0000:` line (`SMOKE OK..` with the padding byte
-included), the line boundary at `0006:`/`007E:` or `0078:`, and the
-all-1Ah record tail, then restore 51 columns.
+`DUMP SMOKE.TXT` dumps the fixture (9 bytes with LF, 10 with CRLF,
+depending on the checkout) plus its 1Ah record padding at 10, 6 and 14
+bytes per line for the 51-, 32- and 64-column modes.  The checks look for
+the first `0000:` line up to the line terminator, the `SMOKE OK..` ASCII
+gutter, the line boundary at `0006:`/`007E:` or `0078:`, and the all-1Ah
+record tail, then restore 51 columns.
 
 16-bit block numbers are checked with the PCW DS/DD image built as
 `build/cpm3_720.dsk` (80 cylinders x 2 sides, 2K blocks, DSM=351).  The

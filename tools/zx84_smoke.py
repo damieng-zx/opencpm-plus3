@@ -1076,25 +1076,28 @@ class Smoke:
         self.command("DUMP NOSUCH.TXT", 500)
         self.expect("DUMP missing file", "File not found")
 
-        # 51 columns: (51 - 8) / 4 = 10 bytes per line.
+        # 51 columns: (51 - 8) / 4 = 10 bytes per line.  SMOKE.TXT is LF in
+        # this checkout and CRLF in a fresh one, so stop before the line
+        # terminator and check the ASCII gutter separately.
         self.command("DUMP SMOKE.TXT", 900)
         self.expect("DUMP 51 first line",
-                    "0000: 53 4D 4F 4B 45 20 4F 4B 0A 1A  SMOKE OK..")
+                    "0000: 53 4D 4F 4B 45 20 4F 4B", "SMOKE OK..")
         self.expect("DUMP 51 record tail",
                     "0078: 1A 1A 1A 1A 1A 1A 1A 1A")
 
-        # 32 columns: six bytes per line; the ninth byte starts line 6.
+        # 32 columns: six bytes per line; the first two bytes of line 6 are
+        # the same under either line ending.
         self.command("SCREEN 32", 700)
         self.command("DUMP SMOKE.TXT", 900)
         self.expect("DUMP 32 first line", "0000: 53 4D 4F 4B 45 20")
-        self.expect("DUMP 32 second line", "0006: 4F 4B 0A")
+        self.expect("DUMP 32 second line", "0006: 4F 4B")
         self.expect("DUMP 32 record tail", "007E: 1A 1A")
 
         # 64 columns: fourteen bytes per line, so the record ends at 7Eh.
         self.command("SCREEN 64", 800)
         self.command("DUMP SMOKE.TXT", 900)
         self.expect("DUMP 64 first line",
-                    "0000: 53 4D 4F 4B 45 20 4F 4B 0A")
+                    "0000: 53 4D 4F 4B 45 20 4F 4B")
         self.expect("DUMP 64 record tail", "007E: 1A 1A")
 
         self.command("SCREEN 51", 700)
