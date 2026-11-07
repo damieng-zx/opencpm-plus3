@@ -42,6 +42,16 @@ class AnsiCsi(unittest.TestCase):
         cuf = text[text.index(".csi_cuf:"):text.index(".csi_cub:")]
         self.assertIn("_lg_width", cuf)
 
+    def test_erase_and_cursor_save_reuse_the_vt52_handlers(self):
+        text = source("src/bios/screen.zpa")
+        self.assertIn("jp z, .csi_ed", text)
+        self.assertIn("jp z, .csi_el", text)
+        self.assertIn("jp z, .esc_j", text)
+        self.assertIn("jp z, .esc_k", text)
+        for target in (".esc_J", ".esc_d", ".esc_E",
+                       ".esc_K", ".esc_o", ".esc_l"):
+            self.assertIn(target, text)
+
     def test_harness_covers_cup_and_hvp(self):
         tool = source("tools/zx84_ansi.py")
         for seq in ("[5;10H", "[7;20f", "[99;99H", "[H", "[0;0H",

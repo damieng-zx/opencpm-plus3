@@ -1984,3 +1984,17 @@ _lg_width:
     ret
 
 
+; ==========================================================================
+; _cancel_paging - Clear the BDOS page-mode bit (ESC 3 resets paging)
+;   Clobbers: AF
+; ==========================================================================
+; @proc _cancel_paging
+; @clobbers af
+; @end
+_cancel_paging:
+    ld a, (con_mode)
+    and 0xFE
+    ld (con_mode), a
+    ret
+
+

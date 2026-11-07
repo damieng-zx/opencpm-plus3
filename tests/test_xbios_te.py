@@ -58,7 +58,7 @@ class TeAsk(unittest.TestCase):
         self.assertIn("vp_tmp_col", body)
         height = text[text.index(".esc_x_h:"):text.index(".esc_x_w:")]
         self.assertIn("ld (vp_height), a", height)
-        body = text[text.index(".esc_x_w:"):text.index("; _cancel_paging")]
+        body = text[text.index(".esc_x_w:"):text.index("; _adv_col")]
         self.assertIn("ld (vp_width), a", body)
         self.assertIn("ld (vp_top), a", body)
         self.assertIn("ld (vp_left), a", body)

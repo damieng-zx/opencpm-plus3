@@ -146,7 +146,6 @@ scr_wrap:     db 1             ; 1 = wrap at the right edge (ESC v/w)
 csi_n:        db 0             ; number of parameters collected
 csi_val:      db 0             ; parameter being accumulated
 csi_have:     db 0             ; 1 = csi_val holds at least one digit
-csi_priv:     db 0             ; 1 = the sequence began with ESC [ ?
 csi_params:   ds 6             ; numeric parameters, 0 for empty/missing
 font_ptr:     dw 0x8000       ; Active font in bank 6 (8000=51col, 8800=32col, 9400=64col)
 
@@ -545,7 +544,6 @@ scr_putchar:
     ld (csi_n), a
     ld (csi_val), a
     ld (csi_have), a
-    ld (csi_priv), a
     ld a, ESC_CSI
     ld (esc_state), a
     ret
@@ -584,8 +582,8 @@ scr_putchar:
     ret
 
 .csi_private:
-    ld a, 1
-    ld (csi_priv), a
+    ; A leading '?' marks a private mode.  It is accepted and ignored for
+    ; now; the parameter is parsed normally, so ESC[?3h is consumed silently.
     ret
 
 .csi_sep:
@@ -625,6 +623,14 @@ scr_putchar:
     jp z, .csi_cuf
     cp 'D'
     jp z, .csi_cub
+    cp 'J'
+    jp z, .csi_ed
+    cp 'K'
+    jp z, .csi_el
+    cp 's'
+    jp z, .esc_j
+    cp 'u'
+    jp z, .esc_k
     ret                         ; unsupported final — consume silently
 .csi_abort:
     xor a
@@ -769,6 +775,38 @@ scr_putchar:
 .cub_store:
     ld (cursor_col), a
     jp _lg_autoflip
+
+; ED/EL - erase in display/line.  Mode 0 (default) = cursor to end,
+; 1 = start to cursor, 2 = whole viewport/line.  Reuse the VT-52 handlers
+; through a three-entry table; modes above 2 are ignored.
+.csi_ed:
+    ld hl, .ed_table
+    jr .csi_erase
+.csi_el:
+    ld hl, .el_table
+.csi_erase:
+    ld a, (csi_n)
+    or a
+    jr z, .ce_zero
+    ld a, (csi_params)
+    cp 3
+    ret nc
+    jr .ce_index
+.ce_zero:
+    xor a
+.ce_index:
+    add a, a
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, (hl)
+    inc hl
+    ld h, (hl)
+    ld l, a
+    jp (hl)
+
+.ed_table:  dw .esc_J, .esc_d, .esc_E
+.el_table:  dw .esc_K, .esc_o, .esc_l
 
 ; ------- one-parameter sequences (ESC 3 / 4 / b / c) -------
 
@@ -1318,20 +1356,6 @@ scr_putchar:
 
     xor a
     ld (esc_state), a
-    ret
-
-
-; ==========================================================================
-; _cancel_paging - Clear the BDOS page-mode bit (ESC 3 resets paging)
-;   Clobbers: AF
-; ==========================================================================
-; @proc _cancel_paging
-; @clobbers af
-; @end
-_cancel_paging:
-    ld a, (con_mode)
-    and 0xFE
-    ld (con_mode), a
     ret
 
 

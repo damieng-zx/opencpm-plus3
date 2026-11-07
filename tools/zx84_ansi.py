@@ -101,9 +101,71 @@ class AnsiTests:
 
         self.s.finish_prompt()
 
+    def phase_erase(self) -> None:
+        self.s.log("ANSI: ED/EL")
+        self.s.esc("E")
+        self.s.esc("[1;1H")
+        self.s.mcp.call("type", {"text": "ABCDE"})
+        self.s.esc("[1;3H")
+        self.s.esc("[0K")
+        lines = self.s.screen()
+        if lines[0].rstrip() != "AB":
+            raise SmokeError("EL 0 left " + repr(lines[0]))
+
+        self.s.esc("E")
+        self.s.esc("[1;1H")
+        self.s.mcp.call("type", {"text": "AB"})
+        self.s.esc("[1;2H")
+        self.s.esc("[1K")
+        if self.s.screen()[0].strip():
+            raise SmokeError("EL 1 did not erase to the start of the line")
+
+        self.s.esc("E")
+        self.s.esc("[1;1H")
+        self.s.mcp.call("type", {"text": "XYZ"})
+        self.s.esc("[1;2H")
+        self.s.esc("[2K")
+        if self.s.screen()[0].strip():
+            raise SmokeError("EL 2 did not erase the whole line")
+
+        self.s.esc("[5;5H")
+        self.s.mcp.call("type", {"text": "MID"})
+        self.s.esc("[2J")
+        if any(line.strip() for line in self.s.screen()):
+            raise SmokeError("ED 2 did not clear the viewport")
+
+        self.s.esc("[1;1H")
+        self.s.mcp.call("type", {"text": "TOP"})
+        self.s.esc("[10;1H")
+        self.s.mcp.call("type", {"text": "HERE"})
+        self.s.esc("[10;1H")
+        self.s.esc("[0J")
+        lines = self.s.screen()
+        if lines[0].rstrip() != "TOP":
+            raise SmokeError("ED 0 disturbed the rows above the cursor")
+        if any(line.strip() for line in lines[9:]):
+            raise SmokeError("ED 0 did not erase from the cursor to the end")
+
+        self.s.finish_prompt()
+
+    def phase_save(self) -> None:
+        self.s.log("ANSI: DECSC/DECRC")
+        self.s.esc("E")
+        self.s.esc("[5;10H")
+        self.s.esc("[s")
+        self.s.esc("[1;1H")
+        self.s.esc("[u")
+        self.s.mcp.call("type", {"text": "SAV"})
+        self.s.mcp.call("run", {"frames": 100})
+        self.s.record()
+        self.check_at("DECRC", self.s.screen(), 4, 9, "SAV")
+        self.s.finish_prompt()
+
     def run(self) -> None:
         self.phase_cup()
         self.phase_move()
+        self.phase_erase()
+        self.phase_save()
 
 
 def main() -> int:

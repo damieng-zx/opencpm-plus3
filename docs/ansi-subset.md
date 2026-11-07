@@ -22,11 +22,7 @@ The runtime checks live in `tools/zx84_ansi.py`; they type the sequences at
 the CCP prompt (whose line editor echoes through the normal console output
 path) and inspect the character buffer or cursor state.
 
-The screen colour/maths helpers (`_decode_colour`, `_decode_te_colour`,
-`_set_attr`, `_mul80`, `_lg_width`) live in the common stub.  Common memory
-is mapped in both system and screen mode, so this costs no call-site changes
-and keeps the bank-4 head above its 256-byte growth margin while the CSI
-code grows.
+
 
 ## Implemented
 
@@ -39,11 +35,21 @@ code grows.
 | `ESC [ n B` | CUD | Cursor down; clamps to the last viewport row. |
 | `ESC [ n C` | CUF | Cursor forward; clamps to the logical width minus 1. |
 | `ESC [ n D` | CUB | Cursor back; stops at column 0. |
+| `ESC [ n J` | ED | 0/default = cursor to end, 1 = start to cursor, 2 = whole viewport; reuses the VT-52 erases. |
+| `ESC [ n K` | EL | 0/default = cursor to end of line, 1 = start to cursor, 2 = whole line; reuses the VT-52 erases. |
+| `ESC [ s` | DECSC | Save cursor, same slot as `ESC j`. |
+| `ESC [ u` | DECRC | Restore cursor, same slot as `ESC k`. |
 
 ## Test coverage
 
 `tools/zx84_ansi.py` currently checks CUP at an interior cell, HVP, the
 bottom-right clamp (23,50 at 51 columns), home, `0;0` defaulting to 1,1,
-and each relative movement including its top/bottom/left/right clamp.
+each relative movement including its top/bottom/left/right clamp, all three
+ED and EL modes, and cursor save/restore.
 `tests/test_terminal.py` checks the parser wiring and that the handlers use
-`vp_height` and `_lg_width`.
+`vp_height` and `_lg_width` and reuse the VT-52 erase/cursor handlers.
+
+The screen colour/maths helpers (`_decode_colour`, `_decode_te_colour`,
+`_set_attr`, `_mul80`, `_lg_width`, `_cancel_paging`) live in the common
+stub, which keeps the bank-4 head above its 256-byte growth margin as the
+CSI code grows.
