@@ -60,8 +60,12 @@ def load_manifest(path: Path = MANIFEST) -> dict:
         raise SetupError(f"invalid manifest {path}: {exc}") from exc
 
 
-def check_base(manifest: dict) -> dict[str, Path]:
-    base = manifest.get("base", {})
+def check_base(manifest: dict, pkg: dict | None = None) -> dict[str, Path]:
+    base = dict(manifest.get("base", {}))
+    # A package may override the boot pair, e.g. to use the 720K layout for
+    # software that does not fit the 174K data area of a 180K disc.
+    if pkg:
+        base.update(pkg.get("base", {}))
     paths = {}
     for key in ("boot", "system"):
         raw = base.get(key)
@@ -232,6 +236,7 @@ def build_dsk(manifest: dict, pkg: dict, files: list[Path],
     dsk.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         sys.executable, str(ROOT / "tools" / "mkdsk.py"), "create", str(dsk),
+        "--format", pkg.get("format", "180k"),
         "--boot", str(base["boot"]),
         "--system", str(base["system"]),
         "--add", *[str(p) for p in base["files"]], *[str(p) for p in files],
@@ -403,7 +408,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        base = check_base(manifest)
+        check_base(manifest)
     except SetupError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -425,7 +430,8 @@ def main(argv: list[str] | None = None) -> int:
     built: dict[str, Path] = {}
     for pkg in selected:
         try:
-            built[pkg["id"]] = build_dsk(manifest, pkg, prepared[pkg["id"]], base)
+            built[pkg["id"]] = build_dsk(
+                manifest, pkg, prepared[pkg["id"]], check_base(manifest, pkg))
             print(f"[realworld] built {built[pkg['id']]}")
         except SetupError as exc:
             print(f"FAIL {pkg['id']}: {exc}", file=sys.stderr)

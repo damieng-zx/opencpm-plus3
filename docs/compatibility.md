@@ -9,8 +9,8 @@ on the ZX Spectrum +3.
 - **Doesn't work:** the observed failure is described below.
 - **Not yet tested:** candidate software; no claim either way.
 
-Build used for the current results: `CPM3.SYS` 16,303 bytes + `CPM3C.SYS` 1,847 bytes plus `CCP.COM` 3,620 bytes (the CCP is loaded from the disk), no FDC retries.
-Tests were run on 2026-10-28 through the zx84 MCP server.
+Build used for the current results: `CPM3.SYS` 16,107 bytes + `CPM3C.SYS` 2,551 bytes plus `CCP.COM` 3,845 bytes (the CCP is loaded from the disk), no FDC retries.
+Tests were run on 2026-10-28 through the zx84 MCP server; the language results were re-checked on 2026-11-07.
 
 ## ✅ Works
 
@@ -25,9 +25,9 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **dBASE II** | 2.43 | Starts, date prompt, dot prompt, `QUIT` returns to `A>` | FCB random I/O, overlays |
 | **Multiplan** | 1.05 | Banner, command bar, 80-column grid; the 24x80 variant flips to the right half | Needs the `MP80` data overlay; terminal escapes leave artifacts |
 | **VEDIT Plus** | 2.33 | CRT installer selects VT-52 and writes `VPLUS.COM`; opens `SMOKE.TXT` and shows the `LINE:`/`FILE:` status line | The installer is interactive; the manifest drives it |
-| **Microsoft COBOL-80** | 4.01 | Compiles `=HELLO` and writes `HELLO.REL` | Link/runtime blocked: the 4.01 archive lacks the CRT driver and the complete 4.65 set does not fit 174 KB |
+| **Microsoft COBOL-80** | 4.65 | `COBOL` compiles `=HELLO`, `L80` links it, `HELLO` prints `HELLO, WORLD` | Full chain on a 720K image: the 4.65 set does not fit the 174 KB data area of a 180K disc, and the 4.01 archive has no `CRTDRV.REL` |
 | **3CLCK** | 2.10 | Extractor writes `CLOCK.FID`/`CLOCK.F64`/`CLOCK.DOC`/`CLOCKCLR.COM`; CLOCKCLR reports the FID state | The clock FID is not loaded at boot; see below |
-| **BDS C** | 1.60 | Compiler part I and part II banners; `CC HELLO.C` starts the compile | Compiler does not return to the CCP; CLINK/run untested |
+| **BDS C** | 1.60 | `CC HELLO.C` compiles to `HELLO.CRL`, `CLINK HELLO` links it, and `HELLO` prints `HELLO, WORLD` | Full chain. `DEFF2.CRL` (the part-II library) must be on the disk or `CLINK` stops at `Missing function(s): PUTCHAR` |
 | **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | ⚠️ VT-100 escapes such as `ESC[?3h`, `ESC[2J`, `ESC[H` remain visible; `supercalc2_80` confirms 24x80 fixes only the width, not the terminal |
 | **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
 | **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE wraps on the 51-column screen; TINST+`SCREEN 64` or `turbo3_80` (24x80) fit it, though Kaypro escapes leave stray `1` characters |
@@ -55,7 +55,6 @@ Tests were run on 2026-10-28 through the zx84 MCP server.
 | **Turbo Pascal display** | The default run wraps; `turbo3_80` fits the IDE in 80 columns. Kaypro terminal escapes leave stray `1` characters in the buffer. | 24x80 solves the width; the remaining work is the Kaypro terminal escape set. |
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. `supercalc2_80` fits the banner and right half in 24x80; the escapes remain. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
 | **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The clock is a FID installed at cold boot. This loader only stages `RAMDISK.FID`; a generic +3 FID loader is needed. |
-| **BDS C compiler exit** | Part II prints `38K to spare`, then the CPU loops in TPA (PC around `183B`-`184D`) after a directory write; no CCP return. | The write completes, so the loop is in the compiler's exit path; needs a debugger session. |
 | **Sargon (chess)** | Prints nothing after the command line; the CPU spins polling port `2FFD`. | Copy protection. The program issues raw uPD765 `READ DATA` commands against the boot track (`C=1`, `R=1..N`) and waits for the original disk's sector IDs, which never match, so it never reaches its title screen. Not a BIOS bug: no CP/M file or console call is involved. |
 
 Recently fixed: **DRI ED/SET/SETKEYS**.  ED's `E` command corrupted page
@@ -132,16 +131,16 @@ It does not help WordStar, whose 80-column layout is unchanged.
 - [x] Microsoft BASIC compiler 5.3 (BASCOM) - works (automated, uses the generic BASCOM.ZIP build)
 - [ ] Microsoft BASIC 5.29
 - [x] Microsoft FORTRAN-80 3.44 - works (automated)
-- [x] Microsoft COBOL-80 4.01 - compiles (link/runtime blocked, see above)
+- [x] Microsoft COBOL-80 4.65 - works end to end on a 720K image (automated as `cobol80`)
 - [x] Aztec C 1.06D - works (automated)
-- [x] BDS C 1.60 - compiler banners; exit hang blocks CLINK/run
+- [x] BDS C 1.60 - works end to end (automated as `bdsc`)
 - [ ] Software Toolworks C80 3.1
 - [ ] Tiny C
 - [ ] JRT Pascal 3.0
-- [ ] Pascal/Z 4.0
+- [x] Pascal/Z 4.0 - works (automated as `pascalz`)
 - [ ] FTL Modula-2 1.30
-- [ ] APL/Z 1.1
-- [ ] LISP/80
+- [x] APL/Z 1.1 - works (automated as `aplz`)
+- [x] LISP/80 - automated as `mulisp` (muLISP-80)
 - [x] Microsoft M80 / L80 - works (automated)
 - [x] Microsoft MACRO-80 package - same binaries as M80 / L80 (automated)
 - [x] SLR Z80 assembler - works (multi-sector F20; automated)

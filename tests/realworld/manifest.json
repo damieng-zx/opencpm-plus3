@@ -1228,33 +1228,61 @@
     },
     {
       "id": "cobol80",
-      "title": "Microsoft COBOL-80 4.01",
-      "url": "http://www.retroarchive.org/cpm/lang/MSCOBOL401.ZIP",
+      "title": "Microsoft COBOL-80 4.65",
+      "url": "http://www.retroarchive.org/cpm/lang/mscobol.zip",
       "archive": "zip",
+      "format": "720k",
+      "base": {
+        "boot": "build/bootsect720.bin",
+        "system": "build/loader720.bin"
+      },
       "members": [
         "COBOL.COM",
         "COBOL1.OVR",
         "COBOL2.OVR",
         "COBOL3.OVR",
         "COBOL4.OVR",
-        "COBLIB.REL"
+        "COBLIB.REL",
+        "COBLBX.REL",
+        "CRTDRV.REL",
+        "CDADM3.REL",
+        "COBLOC",
+        "L80.COM"
       ],
       "fixtures": ["HELLO.COB"],
       "command": "COBOL",
-      "expect": ["COBOL-80 v4.01"],
+      "expect": ["Microsoft MS-COBOL"],
       "frames": 2500,
       "steps": [
         {
           "text": "=HELLO",
-          "frames": 4000
+          "frames": 5000,
+          "expect": ["No Errors or Warnings"]
         },
         {
-          "text": "DIR HELLO.REL",
+          "text": "",
+          "frames": 1500
+        },
+        {
+          "text": "L80 HELLO,CDADM3,COBLIB/S,CRTDRV,HELLO/N/E",
+          "frames": 5000
+        },
+        {
+          "text": "",
+          "frames": 1500
+        },
+        {
+          "text": "DIR HELLO.COM",
           "frames": 1200,
-          "expect": ["HELLO    REL"]
+          "expect": ["HELLO    COM"]
+        },
+        {
+          "text": "HELLO",
+          "frames": 3000,
+          "expect": ["HELLO, WORLD", "FROM A LITERAL"]
         }
       ],
-      "notes": "Compile-only coverage. The 4.01 archive has no CRT driver, so the REL cannot be linked/run on this image; the complete 4.65 set needs more than the 174 KB data area."
+      "notes": "Full chain on a 720K image: compile, link and run.  The 174K data area of a 180K disc cannot hold the 4.65 set, and the 4.01 archive lacks CRTDRV.REL entirely, so neither layout works at 180K.  Two staging rules: COBLOC and COBLBX.REL must be present (L80 stops with 'COBLOC not found' and then 'COBLBX Not Found'), and the link needs both CRTDRV.REL and a terminal driver such as CDADM3.REL.  The source must also give PROCEDURE DIVISION a named paragraph; without one COBOL-80 reports 1 error and the runtime gives 'DATA UNAVAILABLE'."
     },
     {
       "id": "clck3",
@@ -1295,6 +1323,7 @@
         "bdsc160/CC2.COM",
         "bdsc160/CLINK.COM",
         "bdsc160/DEFF.CRL",
+        "bdsc160/DEFF2.CRL",
         "bdsc160/C.CCC"
       ],
       "fixtures": ["HELLO.C"],
@@ -1304,7 +1333,12 @@
         "38K to spare"
       ],
       "frames": 4500,
-      "notes": "Compiler part I and part II run and print their banners, but the compiler does not return to the CCP afterwards (TPA loop after the final directory write), so CLINK and the linked program are not covered yet."
+      "steps": [
+        {"text": "DIR HELLO.CRL", "frames": 1200, "expect": ["HELLO    CRL"]},
+        {"text": "CLINK HELLO", "frames": 3000, "expect": ["BD Software C Linker"]},
+        {"text": "HELLO", "frames": 2000, "expect": ["HELLO, WORLD"]}
+      ],
+      "notes": "End to end: CC compiles HELLO.C, CLINK links the CRL against DEFF.CRL and DEFF2.CRL, and the result prints HELLO, WORLD.  The compiler does return to the CCP; the old 'exit hang' note was the CCP prompt waiting for input.  DEFF2.CRL (the part II library) was simply missing from the staged files, so CLINK stopped at 'Missing function(s): PUTCHAR'."
     }
   ]
 }

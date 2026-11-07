@@ -56,9 +56,9 @@ separate, explicitly triggered workflow.
 | `multiplan` | Microsoft Multiplan 1.05 | Spreadsheet, overlays, 80-column grid | Pass |
 | `multiplan_80` | Microsoft Multiplan 1.05 (24x80) | 80-column command bar/grid, right-half flip | Pass |
 | `vedit` | VEDIT Plus 2.33 (CRT) | Installer (VT-52), then open/edit a file | Pass |
-| `cobol80` | Microsoft COBOL-80 4.01 | Compile `=HELLO` to `HELLO.REL` | Pass (compile only) |
+| `cobol80` | Microsoft COBOL-80 4.65 | `COBOL` → `L80` → `HELLO.COM` prints `HELLO, WORLD` (720K image) | Pass |
 | `clck3` | Spectrum +3 clock extractor | Self-extract, `CLOCKCLR` | Pass (FID not loaded) |
-| `bdsc` | BDS C 1.60 | Compiler part I/II banners | Partial (exit hangs) |
+| `bdsc` | BDS C 1.60 | `CC` → `CLINK` → `HELLO.COM` prints `HELLO, WORLD` | Pass |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
 | `mbasic` | Microsoft BASIC-80 5.21 | Interpreter, console/file I/O | Pass |
@@ -122,20 +122,30 @@ issues; the others are history):
   prompt and then opens `SMOKE.TXT` with the generated `VPLUS.COM`.
   The installer ignores the first character of the Y/N answer, so the
   manifest answers `" yes"`.
-- **COBOL-80 4.01** compiles `=HELLO` and writes `HELLO.REL` (the
-  compiler reports one warning).  The archive has no CRT driver, so the
-  REL cannot be linked/run; the complete 4.65 distribution includes
-  `COBLIB.REL`/`CRTDRV.REL`/`L80.COM` but is too large for the 174 KB
-  data area.  The package is therefore compile-only.
+- **COBOL-80 4.65** runs the whole chain on a 720K image: `COBOL` compiles
+  `=HELLO`, `L80` links it and `HELLO` prints `HELLO, WORLD`.  Three things
+  had to be right.  The 4.01 archive used to be staged here has no
+  `CRTDRV.REL` at all, so the REL could never link; the 221K `mscobol.zip`
+  carries the complete 4.65 set.  That set does not fit the 174 KB data
+  area of a 180K disc, so the package overrides the boot pair to the 720K
+  layout (`"format": "720k"` plus a per-package `base`).  And L80 needs
+  `COBLOC` and `COBLBX.REL` staged alongside `COBLIB`, `CRTDRV` and a
+  terminal driver (`CDADM3`); without the terminal driver a program that
+  does cursor/erase work dies with `NO CRT DRIVER`.  The COBOL source itself
+  must give `PROCEDURE DIVISION` a named paragraph: without one the
+  compiler reports 1 error and the runtime answers `DATA UNAVAILABLE`.
 - **3CLCK** extracts `CLOCK.FID`, `CLOCK.F64`, `CLOCK.DOC` and
   `CLOCKCLR.COM`.  CLOCKCLR runs and correctly reports that the clock
   FID is not loaded: the clock is installed at boot through `CLOCK.FID`,
   while this BIOS only stages `RAMDISK.FID`.  A generic +3 FID loader is
   the remaining work.
-- **BDS C 1.60** compiles a HELLO fixture through both compiler parts
-  and prints `42K elbowroom` / `38K to spare`.  It then stops in a TPA
-  loop after the final directory write and never returns to the CCP, so
-  CLINK and the linked program are not exercised yet.
+- **BDS C 1.60** now runs end to end: `CC HELLO.C` compiles to `HELLO.CRL`,
+  `CLINK HELLO` links it and `HELLO` prints `HELLO, WORLD`.  Two earlier
+  notes were wrong.  The compiler does return to the CCP — what looked like
+  a hang was the CCP prompt waiting for input.  And `CLINK` failing with
+  `Missing function(s): PUTCHAR` was not a CP/M problem: `DEFF2.CRL`, the
+  part-II library, was missing from the staged files.  Both `DEFF.CRL` and
+  `DEFF2.CRL` must be on the disk.
 - **BASCOM 5.3** used to exit immediately because the suite pulled
   `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
   machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`
@@ -236,6 +246,9 @@ directory; they are extracted with `tools/mkdsk.py` (which reads both plain
 and extended CPCEMU containers).  `fixtures` refers to
 `tests/realworld/fixtures/`.
 
+Set `"format": "720k"` and a matching per-package `base` to build on the
+720K layout instead of 180K.
+
 `setup` is optional: each entry is typed at the `A>` prompt before
 `command` (a string is a command, or an object with `command`, `frames` and
 `expect`).  The 24x80 variants use `["SET24X80"]` so the same package runs
@@ -252,12 +265,18 @@ The package image is built from the manifest's `base` list: `CPM3.SYS`,
 `RAMDISK.FID`.  Keep that list in step with the boot files; a missing
 `CPM3C.SYS` stops the loader.
 
+A package may override the base boot pair and ask for a different disc
+format.  `"format": "720k"` with `"base": {"boot": "build/bootsect720.bin",
+"system": "build/loader720.bin"}` builds a 720K PCW-layout image instead of
+the default 180K +3 image; `cobol80` uses this because the complete COBOL-80
+4.65 set does not fit the 174 KB data area.
+
 The runner extracts files by basename, so archives with directory trees are
-supported. CP/M names must remain 8.3. Keep each package under the +3 data
+supported. CP/M names must remain 8.3. Keep a 180K package under the +3 data
 capacity of about 174 KB, or trim optional help/install files — and leave
 room for what the tools write while they run (`.ASM`, `.O`, `.COM`); a full
 disk can make an assembler create an empty output file and look like a
-format error.
+format error.  A 720K package has roughly four times that room.
 
 ## Curated candidate catalog
 
@@ -287,7 +306,7 @@ need conversion first.
 | Microsoft BASIC compiler 5.3 | [BASCOM.ZIP](http://www.retroarchive.org/cpm/lang/BASCOM.ZIP) - automated as `bascom53` |
 | Microsoft BASIC 5.29 | [MBASIC.ZIP](http://www.retroarchive.org/cpm/lang/mbasic.zip) |
 | Microsoft FORTRAN-80 3.44 | [F80-344.ZIP](http://www.retroarchive.org/cpm/lang/F80-344.ZIP) - automated as `f80344` |
-| Microsoft COBOL-80 4.01 | [MSCOBOL401.ZIP](http://www.retroarchive.org/cpm/lang/MSCOBOL401.ZIP) |
+| Microsoft COBOL-80 4.65 | [mscobol.zip](http://www.retroarchive.org/cpm/lang/mscobol.zip) - automated as `cobol80` (720K) |
 | Aztec C 1.06D | [AZ106D.ZIP](http://www.retroarchive.org/cpm/lang/az106d.zip) - automated as `aztec106` |
 | BDS C user group | [BDSCUG.ZIP](http://www.retroarchive.org/cpm/lang/BDSCUG.ZIP) |
 | Software Toolworks C80 3.1 | [C80V31.ZIP](http://www.retroarchive.org/cpm/lang/c80v31.zip) |

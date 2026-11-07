@@ -122,7 +122,7 @@ emulator.
   255) and PCW 720K images, with `SHOWXDPB` reporting the probed geometry.
 
 The known gaps are documented rather than hidden: 3CLCK's clock FID needs a
-generic +3 FID loader, BDS C's compiler exits with a hang, Sargon fails a
+generic +3 FID loader, Sargon fails a
 copy-protection check on the boot track, and VT-100 escapes (SuperCalc2) are
 still printed literally.  WordStar, Turbo Pascal, SuperCalc2 and Multiplan
 need the [24x80 screen](#screen-modes) or, for Turbo Pascal, `SCREEN 64` after
