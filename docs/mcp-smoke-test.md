@@ -180,6 +180,29 @@ The goal is to catch:
 - file operation regressions (`TYPE`, `ERA`, `REN`, `USER`, wildcard `DIR`)
 - disk-performance regressions (extra retries or materially higher cycle counts)
 
+## Test programs
+
+`build/cpm3-test.dsk` carries these in addition to the distribution files; the
+distribution image deliberately leaves them out.
+
+| Program | Covers |
+|---|---|
+| `BDOSTEST` | BDOS functions F1-F35 plus F104/F105, one line of output per call; blocking console calls are skipped unless input is pending |
+| `SYSTEST` | Stack balance, `MOVE`, the clock, page zero, TAB stops and F110 delimiters |
+| `DISKTEST` | File, directory, extent and SCB behaviour, T1-T30; T30 is the 16-bit block test and only runs on a 2K-block disk |
+| `REGTEST` | BDOS register preservation: B/D (the high bytes of BC/DE), IX and IY across F12, F2, F25, F13 and F15 |
+| `XTETEST` | The XBIOS terminal, disc and keyboard calls through `USERF`, including ink/border/speed, `SCR_RUN_ROUTINE`, `DD_*` and `KM_*` |
+| `STLTEST` | The status line (`TE_STL`), the 23-row viewport and scrolling |
+| `M80TEST` | 24x80 mode: `TE_ASK` width, auto-flip and leaving |
+| `M80BIT` | The fast 24x80 page flip, checked against an independent reference render |
+| `TERMTEST` | An interactive walkthrough of the terminal escape sequences, one sequence at a time, waiting for a key between each |
+| `INPTEST` | Reads a line with F10 and prints it back; used to prove a submit file can drive a program |
+
+The smoke runner exercises all of these except `TERMTEST` and `REGTEST`:
+`TERMTEST` is for eyeballing the screen, one sequence at a time, and `REGTEST`
+has its own harness, `tools/zx84_regtest.py`.  `INPTEST` is driven by the
+profile and submit-file checks rather than directly.
+
 ## Setup
 
 Start the emulator and boot the image:

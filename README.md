@@ -21,30 +21,10 @@ Beyond that, this system offers:
 | Virtual 80-column screen | — | **24x80**, paged (`SET24X80`) |
 | Formatting a disc | `DISCKIT` | our **`FORMAT`** (7 layouts) |
 | Copying a disc | `DISCKIT` | our **`DISKCOPY`** (track level, verified) |
+| RAM disk | `RAMDISC.FID` | **`RAMDISK.FID`**, 16K C: |
 | Serial (AUX) device | supported | **not implemented** |
-| Mallard BASIC | included | **not included** |
-| BBC BASIC | — | **on the distribution image** |
-
-## What's on the distribution disk
-
-`build/cpm3.dsk` is a ready-to-boot 180K image. It carries the system files,
-fonts and FID:
-
-| File | Contents |
-|---|---|
-| `CPM3.SYS` | BIOS and BDOS |
-| `CPM3C.SYS` | common-memory stub (page zero, BDOS and XBIOS bridge) |
-| `CCP.COM` | the command processor, read from the disk at cold boot |
-| `FONT32.BIN`, `FONT51.BIN`, `FONT64.BIN` | the three screen fonts |
-| `RAMDISK.FID` | the 16K C: RAM disk |
-
-The utilities on the disk are described in [Tools](#tools); the CCP's built-ins
-in [CCP commands](#ccp-commands). Optional third-party utilities (including BBC
-BASIC) are added from `references/binaries/` — see [Building](#building).
-
-No `PROFILE.SUB` is shipped, so a cold boot leaves `C:` empty and goes
-straight to the prompt. Put your own on the disk — or the stock Amstrad one,
-which works as it is — and it runs once at cold boot.
+| Parallel (printer) | supported | **not implemented** |
+| BASIC | Mallard BASIC | **BBC BASIC** |
 
 ## Features
 
@@ -82,21 +62,21 @@ which works as it is — and it runs once at cold boot.
 
 ### Screen modes
 
-| Mode | Size | Font | Notes |
-|---|---|---|---|
-| 32x24 | 32x24 | 8px | `SCREEN 32` |
-| 51x24 | 51x24 | 5px | default, `SCREEN 51` |
-| 64x24 | 64x24 | 4px | Compression font, `SCREEN 64` |
-| 24x80 | 80x24 | current | virtual, paged, `SET24X80` |
+| Mode | Font | Select with |
+|---|---|---|
+| 32x24 | 8px | `SCREEN 32` |
+| 51x24 | 5px | `SCREEN 51` (default) |
+| 64x24 | 4px | `SCREEN 64` |
+| 80x24 | current | `SET24X80` (virtual, paged) |
 
-The 24x80 buffer lives in bank 5 at `5B00-62BF`, outside the image and the
-visible character buffer, so it costs no TPA or bank-6 space.  `SET24X80` /
-`ESC x` enters it, `ESC y` leaves, `ESC 3 2` enters at the current width and
-`ESC 5 n` selects automatic or manual paging.  Automatic paging follows the
-cursor; otherwise EXTEND+Enter (or CAPS SHIFT+SYMBOL SHIFT+Enter) flips.  The
-window steps by 24, 29 or 16 columns at 32/51/64 columns.  A flip shifts the
-bitmap and re-renders only the exposed columns; `<`/`>` on the status line mark
-hidden text.
+All modes are 24 rows high.  The 80x24 buffer lives in bank 5 at
+`5B00-62BF`, outside the image and the visible character buffer, so it costs no
+TPA or bank-6 space.  `SET24X80` / `ESC x` enters it, `ESC y` leaves, `ESC 3 2`
+enters at the current width and `ESC 5 n` selects automatic or manual paging.
+Automatic paging follows the cursor; otherwise EXTEND+Enter (or CAPS
+SHIFT+SYMBOL SHIFT+Enter) flips.  The window steps by 24, 29 or 16 columns at
+32/51/64 columns.  A flip shifts the bitmap and re-renders only the exposed
+columns; `<`/`>` on the status line mark hidden text.
 
 ## CCP commands
 
@@ -122,65 +102,31 @@ SETDEF search path.
 ## Compatibility
 
 The system boots from a standard 40-track +3 DSK and runs real CP/M 3 software.
-Every package below is downloaded, booted and exercised by
-[the real-world suite](docs/realworld-suite.md); results are from the zx84 MCP
-emulator.  See [Documentation](#documentation) for the API and compatibility
-references.
+It has been exercised end to end with 24 third-party packages — interpreters,
+compilers, assemblers, debuggers, screen editors and databases — plus the DRI
+CP/M 3 utilities, all downloaded, booted and driven under the zx84 MCP
+emulator.
 
-| Package | Result | Notes |
-|---|---|---|
-| Zork I / II / III | Pass | large `.DAT` files, random reads, save files |
-| dBASE II 2.43 | Pass | overlays, FCB random I/O, dot prompt |
-| SuperCalc 1.05 / SuperCalc2 1.00 | Pass | overlays, cell entry, quit |
-| Microsoft Multiplan 1.05 | Pass | overlays, grid |
-| VEDIT Plus 2.33 | Pass | CRT installer (VT-52), generated `VPLUS.COM`, opens a file |
-| Microsoft COBOL-80 4.01 | Pass (compile) | `=HELLO` produces `HELLO.REL`; link/runtime needs the missing CRT driver |
-| Spectrum +3 clock (3CLCK) | Partial | Extractor and CLOCKCLR pass; the clock FID needs the boot FID loader |
-| BDS C 1.60 | Partial | Compiler part I/II banners; the compiler exits with a hang, so CLINK/run are untested |
-| WordStar 3.0 | Pass | starts and draws its no-file menu |
-| WordMaster 1.07A | Pass | full edit/save cycle, BREAK = ESC |
-| Microsoft BASIC-80 5.21 | Pass | interpreter, console and file I/O |
-| Turbo Pascal 3.0 | Pass | IDE starts |
-| Microsoft M80 + L80 3.44 | Pass | assemble → link → run |
-| Microsoft FORTRAN-80 3.44 | Pass | compile → link → run |
-| Microsoft BASIC Compiler 5.3 | Pass | compile → link → stand-alone `.COM` |
-| Aztec C 1.06D | Pass | cc → asm → object → link → run |
-| InterSystems Pascal/Z 4.0 | Pass | compile → assemble → link → run |
-| muLISP-80 | Pass | LISP read-eval-print loop |
-| APL/Z 1.1 | Pass | APL expressions in a 30 KB workspace |
-| Microsoft ZSID 1.4 | Pass | debugger: load, dump, `G0` |
-| SLR Z80ASM 1.32 | Pass | direct-to-`.COM` assembler; exercises F44 multi-sector reads |
+- **Compilers and toolchains** — M80/L80, FORTRAN-80, BASIC Compiler, Aztec C,
+  Pascal/Z and SLR Z80ASM assemble, link and run.
+- **Applications** — Zork I-III, dBASE II, SuperCalc, Multiplan, WordStar,
+  WordMaster, VEDIT Plus, Turbo Pascal and BASIC-80 work; the large data files,
+  overlays and random FCB I/O they use are the interesting part.
+- **DRI utilities** — ED, SET, SETKEYS and SHOW, including GENCOM files with a
+  COM header.
+- **Disc formats** — +3/CPC 8-bit blocks, the CP/M 3 16-bit block format (DSM >
+  255) and PCW 720K images, with `SHOWXDPB` reporting the probed geometry.
 
-All 24 packages are automated (some rows group several packages); the partial
-entries note what is still blocked.  The suite is run on demand rather than in
-CI because it downloads third-party software.  The four 24x80 variants
-(`wordstar30_80`, `turbo3_80`, `supercalc2_80`, `multiplan_80`) are additional
-runs under `SET24X80`, flipping with EXTEND+Enter.
+The known gaps are documented rather than hidden: 3CLCK's clock FID needs a
+generic +3 FID loader, BDS C's compiler exits with a hang, and VT-100 escapes
+(SuperCalc2) are still printed literally.  WordStar, Turbo Pascal, SuperCalc2
+and Multiplan need the [24x80 screen](#screen-modes) or, for Turbo Pascal,
+`SCREEN 64` after a TINST 64-column install.
 
-Because the default is 51 columns, four packages need the virtual 80-column
-screen:
-
-- **WordStar**'s menus wrap at 51 in the default mode; 24x80 gives them the
-  full 80 columns.  Visual 200 escape codes still leave artifacts at the line
-  starts.
-- **Turbo Pascal**'s IDE wraps with its default install; TINST can install the
-  editor for a 64-column terminal, which `SCREEN 64` fits, or use 24x80.
-  Kaypro terminal escapes still leave stray `1` characters.
-- **SuperCalc2** fits its banner in 24x80, but its VT-100 escapes are still
-  printed literally; a VT-100 parser is the remaining blocker.
-- **Multiplan** fits its command bar and grid in 24x80; terminal escapes still
-  leave artifacts.
-
-Also supported:
-
-- A: and B: are selectable (a stock +3 has one single-sided drive; B: reads as
-  empty rather than hanging, so software that probes it keeps working).  In an
-  emulator a PCW DS/DD 720K image can be mounted on B: and used normally; the
-  720K format needs a double-sided drive, which real +3 hardware does not have.
-- +3 and CPC 8-bit-block formats, plus the CP/M 3 16-bit block format (DSM >
-  255: eight 16-bit block numbers per extent, high byte first).  `SHOWXDPB`
-  displays the detected geometry; PCW DS/DD 720K disks (2K blocks, DSM=351)
-  support full file I/O.
+Per-package results, the exact checks run and why the failures fail are in the
+[compatibility tables](docs/compatibility.md); the harness is described in the
+[real-world suite](docs/realworld-suite.md).  See [Documentation](#documentation)
+for the API references.
 
 ## Tools
 
@@ -245,23 +191,6 @@ Also supported:
   (`Checking CPM3.SYS... ok`), and for the same drive the boot track is written
   after the swap.
 
-## Test programs
-
-These are on `build/cpm3-test.dsk` only:
-
-- `BDOSTEST` — BDOS function tests (F1-F35, F104/F105).
-- `STLTEST` — status line (`TE_STL`), 23-row viewport and scroll.
-- `M80TEST` — 24x80 mode: TE_ASK width, auto-flip and leaving.
-- `M80BIT` — 24x80 fast page flip, checked against a reference render of the
-  logical buffer.
-- `DISKTEST` — file, directory, extent and SCB tests (T1-T30, including 16-bit
-  block numbers on a 720K B: image).
-- `REGTEST` — BDOS register preservation (BC/DE/IX/IY across calls).
-- `SYSTEST` — stack/MOVE/clock, page-zero, TAB and delimiter checks.
-- `TERMTEST` — terminal escape-sequence walkthrough.
-- `XTETEST` — XBIOS self-test (`TE_ASK`, `TE_RESET`, ink, border, speed,
-  `SCR_RUN_ROUTINE`, and the disc calls).
-
 ## Wishlist / TODO
 
 - **DISKCOPY: optional check of the source as well** (a full source-read pass
@@ -311,8 +240,8 @@ Output: two +3 images and one data image.
 
 | Image | Contents |
 |---|---|
-| `build/cpm3.dsk` | **Distribution.** The system files, the utilities under [Tools](#tools), and — when `references/binaries/` is present — the local third-party utilities, including **BBC BASIC**. No test programs. |
-| `build/cpm3-test.dsk` | **Tests.** The distribution image plus the [test programs](#test-programs) and their fixtures (`SMOKE.TXT`, `PAGE.TXT`, `SMOKE.SUB`, `PARAM.SUB`). The smoke runner boots this image. |
+| `build/cpm3.dsk` | **Distribution.** The system files, the utilities under [Tools](#tools), and — when `references/binaries/` is present — the local third-party utilities, including **BBC BASIC**. |
+| `build/cpm3-test.dsk` | **Test image.** The distribution image plus the on-disk regression suite and its fixtures; the smoke runner boots this image. |
 | `build/cpm3_720.dsk` | PCW DS/DD 720K data image used by the 16-bit block tests. |
 
 A disk without `CCP.COM` boots to a diagnostic instead of a prompt; a disk
@@ -342,8 +271,8 @@ disk_boot
 run 1000
 ```
 
-For the on-disk test programs (`SYSTEST`, `DISKTEST`, ...) use
-`build/cpm3-test.dsk` instead.
+To run the on-disk test suite use `build/cpm3-test.dsk` instead; the programs
+and what each covers are listed in the [smoke test](docs/mcp-smoke-test.md).
 
 zx84 snapshots can also be saved and loaded through MCP. After reaching a clean
 prompt, use `save build/prompt.szx`; later use `load build/prompt.szx` to resume
@@ -355,15 +284,15 @@ Automated runners:
 python3 tools/zx84_smoke.py              # boot, system tests, CCP, terminal
 python3 tools/zx84_negative.py           # corrupted images must not boot
 python3 tools/zx84_dri.py                # DRI utilities (needs local copies)
-python3 tools/zx84_realworld.py          # the packages in the table above
+python3 tools/zx84_realworld.py          # the third-party packages
 python3 -m unittest discover -s tests -t .
 ```
 
-The smoke runner defaults to `build/cpm3-test.dsk`; pass
-`--dsk build/cpm3.dsk` to boot the distribution image (the test programs are
-not there, so that only makes sense with `--quick`).  When BBC BASIC is in
-`references/binaries/` the smoke also boots a copy of the distribution image
-and checks that it starts (`BBC BASIC (Z80)` and the `>` prompt).
+The smoke runner defaults to the test image; pass `--dsk build/cpm3.dsk` to
+boot the distribution image (that only makes sense with `--quick`).  When BBC
+BASIC is in `references/binaries/` the smoke also boots a copy of the
+distribution image and checks that it starts (`BBC BASIC (Z80)` and the `>`
+prompt).
 
 ### Project Structure
 
@@ -375,7 +304,7 @@ src/
   ccp/      MiniCCP command processor
   fid/      RAM disk FID module
   util/     CP/M utilities
-  test/     Test programs
+  test/     Sources for the on-disk regression programs
 tools/      Build tools (DSK image builder, font generator) and test runners
 docs/       API reference, filesystem and compatibility documentation
 ```
