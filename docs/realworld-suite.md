@@ -140,8 +140,12 @@ issues; the others are history):
 - **3CLCK** extracts `CLOCK.FID`, `CLOCK.F64`, `CLOCK.DOC` and
   `CLOCKCLR.COM`.  CLOCKCLR runs and correctly reports that the clock
   FID is not loaded: the clock is installed at boot through `CLOCK.FID`,
-  while this BIOS only stages `RAMDISK.FID`.  A generic +3 FID loader is
-  the remaining work.
+  while this BIOS only stages `RAMDISK.FID`.  Loading it is deliberately
+  not planned: the Locomotive FIDs call fixed addresses in the private
+  common-memory ABI (`FF04`/`FF05`/`FF08`/`FF09`) and use their own header,
+  so a native status-line clock built on `scb_date`/`scb_minute`/`scb_sec`
+  is the better route.  The package stays automated because the extractor
+  and CLOCKCLR are still worth covering.
 - **BDS C 1.60** now runs end to end: `CC HELLO.C` compiles to `HELLO.CRL`,
   `CLINK HELLO` links it and `HELLO` prints `HELLO, WORLD`.  Two earlier
   notes were wrong.  The compiler does return to the CCP — what looked like

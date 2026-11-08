@@ -123,11 +123,10 @@ emulator.
   720K disc can be the *boot* disc: the stage-2 loader and boot sector are
   built for both layouts, and the test image uses the 720K pair.
 
-The known gaps are documented rather than hidden: 3CLCK's clock FID needs a
-generic +3 FID loader and Sargon fails a copy-protection check on the boot
-track.  WordStar, Turbo Pascal, SuperCalc2 and Multiplan need the
-[24x80 screen](#screen-modes) or, for Turbo Pascal, `SCREEN 64` after a TINST
-64-column install.
+The known gaps are documented rather than hidden: Sargon fails a
+copy-protection check on the boot track.  WordStar, Turbo Pascal, SuperCalc2
+and Multiplan need the [24x80 screen](#screen-modes) or, for Turbo Pascal,
+`SCREEN 64` after a TINST 64-column install.
 
 Per-package results, the exact checks run and why the failures fail are in the
 [compatibility tables](docs/compatibility.md); the harness is described in the
@@ -201,8 +200,12 @@ for the API references.
 
 ## Wishlist / TODO
 
-- **DISKCOPY: optional check of the source as well** (a full source-read pass
-  before the copy).
+- **A status-line clock** — the machine has no real-time clock, but the ISR
+  already keeps `scb_date`/`scb_minute`/`scb_sec` from the frame counter and
+  `DATE.COM` reads them, so a `HH:MM` renderer on row 23 would give the
+  status line the same information 3CLCK's `CLOCK.FID` displayed.  The
+  third-party FID is not a route to this: it is built for Locomotive's
+  private common-memory ABI, not a documented interface.
 - **FORMAT bad-sector mapping** — a sector that fails to format or read back
   is reported and the disc abandoned; mapping it into a hidden file (so a
   slightly damaged disc still yields a CP/M volume) is not implemented.
