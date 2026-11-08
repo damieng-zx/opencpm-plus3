@@ -1714,10 +1714,7 @@ xbios_handler:
     jr nz, .ddlw_loop
 .ddlw_results:
     call .dd_drain_results
-    ld a, 0xFF
-    ld (deblock_drv), a
-    xor a
-    ld (deblock_dirty), a
+    call deblock_invalidate     ; drop the cached sector (A = 0 after)
     ld hl, dd_results
     ret
 
@@ -2044,10 +2041,7 @@ xbios_handler:
     ld a, (dd_phys_sec)
     call fdc_write_sector
     jp nz, .dd2_write_error     ; lint: ignore - write returns Z/NZ
-    ld a, 0xFF
-    ld (deblock_drv), a
-    xor a
-    ld (deblock_dirty), a
+    call deblock_invalidate     ; drop the cached sector (A = 0 after)
     scf
     ret
 
@@ -2122,10 +2116,7 @@ xbios_handler:
     ; has been flushed, and its 128 bytes hold up to 32 CHRN entries.
     call flush_deblock_body
     jp nz, .dd2_write_error        ; lint: ignore - flush returns Z/NZ
-    ld a, 0xFF
-    ld (deblock_drv), a
-    xor a
-    ld (deblock_dirty), a
+    call deblock_invalidate     ; drop the cached sector (A = 0 after)
 
     ; Copy 4 * SC header bytes into the deblock buffer.
     ld a, (dd_format_sc)
@@ -2183,10 +2174,7 @@ xbios_handler:
 
     call flush_deblock_body
     jr nz, .ddp_write_error     ; lint: ignore - flush returns Z/NZ
-    ld a, 0xFF
-    ld (deblock_drv), a
-    xor a
-    ld (deblock_dirty), a
+    call deblock_invalidate     ; drop the cached sector (A = 0 after)
 
     ld ix, (xbios_ret_ix)
     ld a, ixh

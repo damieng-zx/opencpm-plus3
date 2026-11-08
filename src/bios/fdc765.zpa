@@ -225,9 +225,7 @@ fdc_init:
     ld a, 0xFF
     ld (fdc_current_track), a
     ld (fdc_current_track + 1), a
-    ld (deblock_drv), a
-    xor a
-    ld (deblock_dirty), a
+    call deblock_invalidate     ; drop the cached sector (A = 0 after)
     ld (motor_running), a
     ; Recalibrate drive 0 (drive 1 recalibrates lazily on first access)
     ld (disk_drive), a         ; A = 0 after xor
@@ -768,6 +766,23 @@ ensure_sector:
 
 .already_buffered:
     xor a                      ; Z flag, A=0 (success)
+    ret
+
+
+; ==========================================================================
+; deblock_invalidate — Forget the cached deblock sector without writing it
+;   Out: A = 0, Z set
+;   Clobbers: AF
+; ==========================================================================
+; @proc deblock_invalidate
+; @out   a
+; @clobbers af
+; @end
+deblock_invalidate:
+    ld a, 0xFF
+    ld (deblock_drv), a
+    xor a
+    ld (deblock_dirty), a
     ret
 
 

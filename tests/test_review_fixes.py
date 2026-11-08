@@ -666,7 +666,12 @@ class P2DiskChangeInvalidation(unittest.TestCase):
         self.assertIn("ld (cached_drive), a", body)
         self.assertIn("ld (last_dir_sec), a", body)
         self.assertIn("ld (last_dir_drv), a", body)
-        self.assertIn("ld (deblock_drv), a", body)
+        self.assertIn("call deblock_invalidate", body)
+
+    def test_deblock_invalidate_drops_the_sector(self):
+        text = source("src/bios/fdc765.zpa")
+        body = text[text.index("deblock_invalidate:"):text.index("; flush_deblock —")]
+        self.assertIn("ld a, 0xFF\n    ld (deblock_drv), a", body)
         self.assertIn("ld (deblock_dirty), a", body)
 
 

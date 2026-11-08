@@ -987,9 +987,7 @@ bf_f13:
     ld a, 0xFF
     ld (last_dir_sec), a
     ld (last_dir_drv), a
-    ld (deblock_drv), a
-    xor a
-    ld (deblock_dirty), a
+    call deblock_invalidate     ; drop the cached sector (A = 0 after)
 
     ; Re-login drive A: caches DPH/DPB/ALV pointers and rebuilds ALV
     xor a

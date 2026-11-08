@@ -583,7 +583,7 @@ class DdLWrite(unittest.TestCase):
         self.assertIn("call read_user_byte", body)
         self.assertIn("call fdc_send_byte", body)
         self.assertIn("call .dd_drain_results", body)
-        self.assertIn("deblock_drv", body)      # invalidate cache
+        self.assertIn("call deblock_invalidate", body)      # invalidate cache
 
         setup = handler_body(".dd_l_setup:", ".dd_l_no_xfer:")
         self.assertIn("dd_xfer_left", setup)
