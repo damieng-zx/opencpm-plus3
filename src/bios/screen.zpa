@@ -1712,6 +1712,49 @@ _mul_row_scr_cols:
 
 
 ; ==========================================================================
+; _row_buf_addr - Compute HL = &char_buffer[A * scr_cols]
+;   In:  A = row
+;   Out: HL = start of that row in char_buffer
+;   Clobbers: AF, BC, DE, HL
+; ==========================================================================
+; @proc _row_buf_addr
+; @param %row:u8 a
+; @out   hl
+; @clobbers af,bc,de,hl
+; @end
+_row_buf_addr:
+    call _mul_row_scr_cols
+    ld de, char_buffer
+    add hl, de
+    ret
+
+
+; ==========================================================================
+; _lg_cur_row_addr / _lg_row_addr - Compute HL = &LG_BUF[row * 80]
+;   In:  _lg_row_addr: A = logical row; _lg_cur_row_addr: row = lg_row
+;   Out: HL = start of that row in the 24x80 buffer (bank 5)
+;   Clobbers: AF, DE, HL
+; ==========================================================================
+; @proc _lg_cur_row_addr
+; @out   hl
+; @clobbers af,de,hl
+; @end
+_lg_cur_row_addr:
+    ld a, (lg_row)
+    ; fall through
+; @proc _lg_row_addr
+; @param %row:u8 a
+; @out   hl
+; @clobbers af,de,hl
+; @end
+_lg_row_addr:
+    call _mul80
+    ld de, LG_BUF
+    add hl, de
+    ret
+
+
+; ==========================================================================
 ; _render_char — Render one character to the screen bitmap
 ;   In:      B = character code
 ;            C = column (0-50)
@@ -2159,9 +2202,7 @@ _scroll_up_vis:
 
     ; Clear the last buffer row
     ld a, (_scroll_last)
-    call _mul_row_scr_cols
-    ld de, char_buffer
-    add hl, de
+    call _row_buf_addr
     ld d, h
     ld e, l
     inc de
@@ -2532,9 +2573,7 @@ _clear_row_a:
     ld (_cra_row), a            ; save row for pixel phase
 
     ; Clear row in char_buffer: offset = A * scr_cols
-    call _mul_row_scr_cols      ; HL = row * scr_cols
-    ld de, char_buffer
-    add hl, de                  ; HL = &char_buffer[row * scr_cols]
+    call _row_buf_addr   ; HL = &char_buffer[row * scr_cols]
     ld d, h
     ld e, l
     inc de                      ; DE = HL + 1
@@ -2630,9 +2669,7 @@ _blank_render_range:
 
 .brr_generic:
     ld a, (_brr_row)
-    call _mul_row_scr_cols
-    ld de, char_buffer
-    add hl, de
+    call _row_buf_addr
     ld a, (_brr_col)
     ld e, a
     ld d, 0
@@ -2696,9 +2733,7 @@ _blank_row_direct:
     ld (_cra_row), a
 
     ; char_buffer: scr_cols spaces at row * scr_cols
-    call _mul_row_scr_cols
-    ld de, char_buffer
-    add hl, de
+    call _row_buf_addr
     ld d, h
     ld e, l
     inc de
@@ -3022,9 +3057,7 @@ _delete_line:
     ld b, a
     ld a, (_dl_row)
     add a, b
-    call _mul_row_scr_cols
-    ld de, char_buffer
-    add hl, de                  ; HL = dest
+    call _row_buf_addr   ; HL = dest
     ld d, h
     ld e, l
     ld a, (scr_cols)
@@ -3264,9 +3297,7 @@ _lg_clear_all:
 ; @clobbers af,bc,de,hl
 ; @end
 _lg_clear_row:
-    call _mul80
-    ld de, LG_BUF
-    add hl, de
+    call _lg_row_addr
     ld d, h
     ld e, l
     inc de
@@ -3354,19 +3385,14 @@ _lg_scroll_down:
 _lg_render_row:
     ld (lg_row), a
     call _page_in
-    ld a, (lg_row)
-    call _mul80
-    ld de, LG_BUF
-    add hl, de
+    call _lg_cur_row_addr
     ld a, (lg_off)
     ld e, a
     ld d, 0
     add hl, de
     ld (lg_src), hl
     ld a, (lg_row)
-    call _mul_row_scr_cols
-    ld de, char_buffer
-    add hl, de
+    call _row_buf_addr
     ld (lg_dst), hl
     xor a
     ld (lg_col), a
@@ -3428,9 +3454,7 @@ _lg_store_char:
     ld (lg_char), a
     call _page_in
     ld a, (cursor_row)
-    call _mul80
-    ld de, LG_BUF
-    add hl, de
+    call _lg_row_addr
     ld a, (cursor_col)
     ld e, a
     ld d, 0
@@ -3453,9 +3477,7 @@ _lg_store_char:
     jr z, .lsc_done
 
     ld a, (cursor_row)
-    call _mul_row_scr_cols
-    ld de, char_buffer
-    add hl, de
+    call _row_buf_addr
     ld a, (lg_vis)
     ld e, a
     ld d, 0
@@ -3685,10 +3707,7 @@ _lg_erase_range:
     or a
     ret z
     call _page_in
-    ld a, (lg_row)
-    call _mul80
-    ld de, LG_BUF
-    add hl, de
+    call _lg_cur_row_addr
     ld a, (lg_col)
     ld e, a
     ld d, 0
@@ -3731,10 +3750,7 @@ _lg_delete_line:
     ld b, h
     ld c, l
     push bc
-    ld a, (lg_row)
-    call _mul80
-    ld de, LG_BUF
-    add hl, de
+    call _lg_cur_row_addr
     ld d, h
     ld e, l
     ld a, 80
@@ -3801,10 +3817,7 @@ _lg_delete_char:
     ld a, (cursor_col)
     ld (lg_col), a
     call _page_in
-    ld a, (lg_row)
-    call _mul80
-    ld de, LG_BUF
-    add hl, de
+    call _lg_cur_row_addr
     ld a, (lg_col)
     ld e, a
     ld d, 0
@@ -3825,10 +3838,7 @@ _lg_delete_char:
     jr z, .ldc_blank
     ldir
 .ldc_blank:
-    ld a, (lg_row)
-    call _mul80
-    ld de, LG_BUF
-    add hl, de
+    call _lg_cur_row_addr
     ld de, 79
     add hl, de
     ld (hl), ' '
@@ -4103,14 +4113,10 @@ _lg_flip_shift:
     djnz .fs_scan
     ; mirror the new window into char_buffer
     ld a, (lg_loop)
-    call _mul_row_scr_cols
-    ld de, char_buffer
-    add hl, de
+    call _row_buf_addr
     push hl
     ld a, (lg_loop)
-    call _mul80
-    ld de, LG_BUF
-    add hl, de
+    call _lg_row_addr
     ld a, (lg_off)
     ld e, a
     ld d, 0
@@ -4122,9 +4128,7 @@ _lg_flip_shift:
     ldir
     ; render the newly exposed columns from the logical row
     ld a, (lg_loop)
-    call _mul80
-    ld de, LG_BUF
-    add hl, de
+    call _lg_row_addr
     ld a, (lg_off)
     ld e, a
     ld d, 0
@@ -4219,9 +4223,7 @@ _stl_mark:
     ld a, b
     ld (lg_char), a
     ld a, SCR_ROWS - 1
-    call _mul_row_scr_cols
-    ld de, char_buffer
-    add hl, de
+    call _row_buf_addr
     ld a, (lg_vis)
     ld e, a
     ld d, 0
