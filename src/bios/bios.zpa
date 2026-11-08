@@ -1103,7 +1103,7 @@ xbios_handler:
     ld a, c
     and 0x03
     cp 2
-    jp nc, .dri_not_ready         ; units 0 and 1 only
+    jr nc, .dri_not_ready         ; units 0 and 1 only
     ld (disk_drive), a
     ld ix, (xbios_ret_ix)
     ld a, ixh
@@ -1128,16 +1128,7 @@ xbios_handler:
     jr nz, .dri_seek_fail         ; lint: ignore - fdc_seek returns Z/NZ
 
     ld a, FDC_READ_ID
-    call fdc_send_byte
-    ld a, (disk_head)
-    rlca
-    rlca
-    and 0x04
-    ld b, a
-    ld a, (disk_drive)
-    and 0x03
-    or b
-    call fdc_send_byte
+    call fdc_send_cmd_hdus     ; command, then HD | US
 
     ld hl, dd_results + 1
     ld b, 7

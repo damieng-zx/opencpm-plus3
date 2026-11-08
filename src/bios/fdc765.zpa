@@ -895,16 +895,7 @@ fdc_seek:
 
     ; Issue SEEK command
     ld a, FDC_SEEK
-    call fdc_send_byte
-    ld a, (disk_head)
-    rlca
-    rlca                       ; HD bit (bit 2 of drive-select byte)
-    and 0x04
-    ld b, a
-    ld a, (disk_drive)
-    and 0x03
-    or b                       ; HD | US
-    call fdc_send_byte
+    call fdc_send_cmd_hdus     ; command, then HD | US
     ld a, (seek_target)        ; NCN = target track
     call fdc_send_byte
 
@@ -1082,16 +1073,7 @@ fdc_transfer:
 fdc_retry:
     ; ---- Command phase: opcode, HD|US, C, H, R, N, EOT, GPL, DTL ----
     ld a, (fdc_cmd)
-    call fdc_send_byte
-    ld a, (disk_head)
-    rlca
-    rlca
-    and 0x04
-    ld c, a
-    ld a, (disk_drive)
-    and 0x03
-    or c                       ; HD | US
-    call fdc_send_byte
+    call fdc_send_cmd_hdus     ; command, then HD | US
     call current_track_slot    ; A = cached track for current drive
     call fdc_send_byte          ; C = cylinder
     ld a, (disk_head)          ; H = head
@@ -1247,16 +1229,7 @@ fdc_format_track:
 
     ; Command phase
     ld a, FDC_FORMAT
-    call fdc_send_byte
-    ld a, (disk_head)
-    rlca
-    rlca
-    and 0x04
-    ld b, a
-    ld a, (disk_drive)
-    and 0x03
-    or b                       ; HD | US
-    call fdc_send_byte
+    call fdc_send_cmd_hdus     ; command, then HD | US
     ld a, (fmt_n)
     call fdc_send_byte         ; N
     ld a, (fmt_sc)
@@ -1326,6 +1299,30 @@ fdc_format_track:
 ; ==========================================================================
 ; FDC byte-level I/O
 ; ==========================================================================
+
+; ------------------------------------------------------------------
+; fdc_send_cmd_hdus — Send a command byte, then the HD | US drive-select
+; byte built from disk_head and disk_drive (the second byte of SEEK,
+; READ, WRITE, FORMAT and READ ID)
+;   In:  A = command byte
+;   Out: nothing
+;   Clobbers: AF, BC
+; ------------------------------------------------------------------
+; @proc fdc_send_cmd_hdus
+; @param %cmd:u8 a
+; @clobbers af,bc
+; @end
+fdc_send_cmd_hdus:
+    call fdc_send_byte
+    ld a, (disk_head)
+    rlca
+    rlca                       ; HD bit (bit 2 of drive-select byte)
+    and 0x04
+    ld b, a
+    ld a, (disk_drive)
+    and 0x03
+    or b                       ; HD | US
+    jr fdc_send_byte
 
 ; ------------------------------------------------------------------
 ; fdc_send_byte — Send command/parameter byte to FDC
