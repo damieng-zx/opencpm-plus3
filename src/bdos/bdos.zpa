@@ -1889,15 +1889,15 @@ get_dir_block:
     ret
 
 
-; @proc set_alloc_bit
+; @proc alv_bit_addr
 ; @param %block:u16 hl
-; @clobbers af
+; @out   hl
+; @out   a
+; @clobbers bc,de
 ; @end
-; set_alloc_bit — Mark block HL as used in the ALV
-set_alloc_bit:
-    push bc
-    push de
-    push hl
+; alv_bit_addr — Locate block HL's bit in the ALV
+;   Out: HL = ALV byte, A = mask with only that block's bit set
+alv_bit_addr:
     ld a, l
     and 0x07
     ld b, a                    ; bit within the ALV byte
@@ -1912,11 +1912,23 @@ set_alloc_bit:
     ld a, b
     or a
     ld a, 0x80
-    jr z, .apply
+    ret z
 .shift:
     srl a
     djnz .shift
-.apply:
+    ret
+
+
+; @proc set_alloc_bit
+; @param %block:u16 hl
+; @clobbers af
+; @end
+; set_alloc_bit — Mark block HL as used in the ALV
+set_alloc_bit:
+    push bc
+    push de
+    push hl
+    call alv_bit_addr
     or (hl)
     ld (hl), a
     pop hl
@@ -1934,25 +1946,7 @@ clear_alloc_bit:
     push bc
     push de
     push hl
-    ld a, l
-    and 0x07
-    ld b, a
-    srl h
-    rr l
-    srl h
-    rr l
-    srl h
-    rr l
-    ld de, (cached_alv)
-    add hl, de
-    ld a, b
-    or a
-    ld a, 0x80
-    jr z, .apply
-.shift:
-    srl a
-    djnz .shift
-.apply:
+    call alv_bit_addr
     cpl
     and (hl)
     ld (hl), a

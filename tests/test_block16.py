@@ -57,8 +57,11 @@ class BlockAccessors(unittest.TestCase):
         text = source("src/bdos/bdos.zpa")
         for name in ("set_alloc_bit:", "clear_alloc_bit:"):
             body = text[text.index(name):text.index("; @proc ", text.index(name) + 1)]
-            self.assertIn("srl h", body, name)
-            self.assertIn("rr l", body, name)
+            self.assertIn("call alv_bit_addr", body, name)
+        # The shared lookup divides the whole 16-bit block number by 8.
+        body = text[text.index("alv_bit_addr:"):text.index("; @proc set_alloc_bit")]
+        self.assertIn("srl h", body)
+        self.assertIn("rr l", body)
 
     def test_find_free_block_returns_hl(self):
         # The helper lives in the common stub (relocated for headroom).
