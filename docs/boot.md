@@ -124,10 +124,13 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 15,852 | 16,384 (`C000-FFFF`) | 532   |
-| `CPM3C.SYS` common stub | 2,407  | 2,560 (`F600-FFFF`)  | 153   |
-| loader (180K)           | 1,377  | 8,704 (17 sectors)   | 7,327 |
-| loader (720K, `-DDS720`)| 1,388  | 8,704 (17 sectors)   | 7,316 |
+| `CPM3.SYS` head         | 15,561 | 16,384 (`C000-FFFF`) | 823   |
+| `CPM3C.SYS` common stub | 2,528  | 2,560 (`F600-FFFF`)  | 32    |
+| loader (180K)           | 1,399  | 8,704 (17 sectors)   | 7,305 |
+| loader (720K, `-DDS720`)| 1,410  | 8,704 (17 sectors)   | 7,294 |
+
+The build prints both budgets on every run (`tools/check_layout.py`); the
+table is a snapshot.
 
 Total code capacity is `16,384 + 2,560 = 18,944` bytes, up from 16,058
 before the split. The old 326-byte ceiling is gone.
@@ -143,7 +146,29 @@ keeps `copy_record_to_tpa/from_tpa`, `ccp_fcb` and `ccp_run_prog` at the
 addresses RAMDISK.FID and the CCP hardcode.  `tests/test_boot_split.py`
 pins both facts.
 
+A size pass in November 2026 took the head from 16,151 bytes (233 spare)
+to 15,561 and the common stub from 2,556 (4 spare) to 2,528 without
+changing behaviour:
+
+- every `jp` whose target is in range is now `jr`, and `tools/jp2jr.py
+  --check` fails the build if one appears (`--fix` rewrites them);
+- `call X / ret` became `jp X` everywhere, and `z80lint` check 8 keeps it
+  that way (`; keep call` marks the three pinned common-memory exceptions);
+- the XBIOS compare chain became a jump table;
+- repeated sequences became shared helpers: `fdc_send_cmd_hdus`,
+  `fdc_read_result`, `deblock_invalidate`, `setup_select_fcb`,
+  `alv_bit_addr`, `_row_buf_addr`, `_lg_row_addr`, `_clear_char_row`,
+  shared escape-state exits, and `scr_init` finishing through
+  `_clear_screen`.
+
 Remaining strategies, in order:
+
+0. **Code in the free RST slots.** Bank 4's `0000-0037` ships as zeros;
+   interrupts are off in system mode and only the `0038` vector is used.
+   Putting the hottest call targets on `RST 08`-`RST 30` (1-byte calls,
+   or a stack-resetting BDOS exit) is worth roughly 600 bytes, but ZPA and
+   the linter must learn about RST first, and common-memory code that can
+   run in TPA mode must never use them.
 
 1. **Loader staging for pure data.** Anything that is only `db`/`dw` (fonts,
    the screen row table at `A890`, message strings, `xdpb_std_table`) can be

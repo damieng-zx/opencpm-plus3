@@ -20,9 +20,9 @@ ignored; the logical width stays 51, 64 or 80 columns.
 
 **Not yet implemented:** SGR (`ESC [ ... m`, so reverse/bold/blink are
 currently consumed and ignored) and the private autowrap modes
-(`ESC [ ? 7 h/l`).  The bank-4 head is down to 262 bytes of slack; adding
-SGR needs a headroom decision (drop relative horizontal movement, relocate
-the VT-52 escape table to bank 6, or stage the code in bank 5 free RAM).
+(`ESC [ ? 7 h/l`).  The bank-4 head has about 820 bytes of slack (see
+`docs/boot.md`, *Image headroom*); bank 5 free RAM and the RST slots are
+the next sources if SGR needs more.
 
 The runtime checks live in `tools/zx84_ansi.py`; they type the sequences at
 the CCP prompt (whose line editor echoes through the normal console output
