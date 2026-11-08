@@ -126,6 +126,19 @@ lg_bytes:    equ 0xA8D4
 lg_bits:     equ 0xA8D5
 lg_ptr:      equ 0xA8D6
 lg_first:    equ 0xA8D8
+; Exposed strip of a page change (see _lg_flip_shift): bytes lg_cs ..
+; lg_cs+lg_cn-1 of every scan line are zeroed, and the byte at lg_pi is
+; ANDed with lg_pm (keeps the survivors' bits where the strip starts or
+; ends inside a byte, as it does at 51 columns).
+lg_cs:       equ 0xA8D9
+lg_cn:       equ 0xA8DA
+lg_pi:       equ 0xA8DB
+lg_pm:       equ 0xA8DC
+; Which row routine _lg_flip_shift uses (0 = generic per-scan-line loop,
+; 1/2 = byte-aligned left/right, 3/4 = 51-column 145-pixel left/right) and the
+; survivor count in bytes (32 - shift) as a 16-bit LDIR count.
+lg_mode:     equ 0xA8DD
+lg_sn:       equ 0xA8DE
 LG_BUF       equ 0x5B00         ; 80*24 bytes in bank 5, after the attributes
 
 ; --- XBIOS colour state ---
@@ -1783,9 +1796,9 @@ _render_char:
 
 ; @proc _render_char_noattr
 ;   As _render_char, but the caller has already painted this row's
-;   attributes.  The 24x80 page flip stamps the whole attribute row in one
-;   pass and then draws the exposed cells, so paying _put_attr again for
-;   every cell only rewrites the same byte.
+;   attributes.  The 24x80 page flip hides the whole page with one attribute
+;   fill (_lg_attr_hide) and restores it with another, so stamping every
+;   cell with _put_attr in between would only rewrite the same byte.
 ; @param %ch:u8  b
 ; @param %col:u8 c
 ; @param %row:u8 d
@@ -3327,6 +3340,22 @@ _lg_scroll_down:
 _lg_render_row:
     ld (lg_row), a
     call _page_in
+    ; The whole row is rewritten, so zero its pixels and stamp its 32
+    ; attribute cells once up front; blank cells then need no drawing.
+    ld a, (lg_row)
+    call _calc_row_addr
+    call _clear_char_row
+    ld a, (lg_row)
+    call _attr_row_offset
+    ld de, SCR_ATTR
+    add hl, de
+    ld d, h
+    ld e, l
+    inc de
+    ld a, (scr_attr)
+    ld (hl), a
+    ld bc, 31
+    ldir
     call _lg_cur_row_addr
     ld a, (lg_off)
     ld e, a
@@ -3349,12 +3378,15 @@ _lg_render_row:
     ld (hl), a
     inc hl
     ld (lg_dst), hl
+    cp ' '                     ; already zero: nothing to draw
+    jr z, .lrr_next
     ld b, a
     ld a, (lg_col)
     ld c, a
     ld a, (lg_row)
     ld d, a
-    call _render_char
+    call _render_char_noattr   ; the row's attributes are stamped above
+.lrr_next:
     ld a, (lg_col)
     inc a
     ld (lg_col), a
@@ -3569,6 +3601,14 @@ _lg_set_page:
     ld a, c
     sub b
     ld (lg_delta), a
+    ; Hide the change.  Shifting and drawing takes many frames, and the beam
+    ; would show the new page arriving row by row.  With ink = paper every
+    ; cell looks blank meanwhile; the real attribute (parked on the stack) is
+    ; restored with one fill after the last glyph is drawn.  scr_attr itself
+    ; holds the blank form until then, so every stamp in between is invisible.
+    ld a, (scr_attr)
+    push af
+    call _lg_attr_hide
     ; offset/narrow viewports cannot be shifted reliably: redraw them
     ld a, (vp_top)
     or a
@@ -3604,7 +3644,10 @@ _lg_set_page:
 .sp_full:
     call _lg_redraw
 .sp_drawn:
-    jp _stl_draw
+    call _stl_draw
+    pop af                     ; the real attribute
+    ld (scr_attr), a
+    jr _lg_attr_fill           ; reveal the finished page
 
 
 ; @proc _flip_chord
@@ -3626,6 +3669,52 @@ _flip_chord:
     pop bc
     pop af
     ret
+
+
+; @proc _lg_attr_hide
+;   Turn scr_attr into its ink = paper form (PAPER, BRIGHT and FLASH kept)
+;   and fill the viewport's attribute rows with it, so nothing drawn from
+;   here until the real attribute is restored can be seen.
+; @clobbers af,bc,de,hl
+; @end
+_lg_attr_hide:
+    ld a, (scr_attr)
+    ld b, a
+    and 0x38                   ; PAPER, bits 5-3
+    rrca
+    rrca
+    rrca                       ; ... moved to the INK position, bits 2-0
+    ld c, a
+    ld a, b
+    and 0xF8                   ; FLASH, BRIGHT, PAPER
+    or c
+    ld (scr_attr), a
+    ; fall through
+
+
+; @proc _lg_attr_fill
+;   Fill attribute rows 0..vp_height-1 (the rows a page change redraws, all
+;   32 cells wide) with one attribute byte.
+;   In: A = attribute.
+; @param %attr:u8 a
+; @clobbers af,bc,de,hl
+; @end
+_lg_attr_fill:
+    push af
+    call _page_in
+    ld a, (vp_height)
+    call _attr_row_offset      ; HL = rows * 32
+    ld b, h
+    ld c, l
+    ld hl, SCR_ATTR
+    ld d, h
+    ld e, l
+    inc de
+    pop af
+    ld (hl), a
+    dec bc
+    ldir
+    jp _page_out
 
 
 ; ==========================================================================
@@ -3920,6 +4009,239 @@ _lg_line_right:
     ret
 
 
+; @proc _lg_clear_strip
+;   Zero the exposed strip of one scan line, as laid out by _lg_flip_shift
+;   (lg_cs/lg_cn/lg_pi/lg_pm).  Bank 5 must be paged in.
+;   In: HL = line base (32-byte aligned).  HL is preserved.
+; @param %line:u16 hl
+; @clobbers af,bc,de
+; @end
+_lg_clear_strip:
+    push hl
+    ld a, (lg_pi)
+    or l
+    ld l, a
+    ld a, (lg_pm)
+    and (hl)
+    ld (hl), a                 ; the straddling byte keeps the survivors' bits
+    pop hl
+    ld a, (lg_cn)
+    or a
+    ret z
+    push hl
+    ld c, a
+    ld a, (lg_cs)
+    or l
+    ld l, a
+    ld d, h
+    ld e, l
+    inc de
+    ld (hl), 0
+    dec c
+    jr z, .cs_done
+    ld b, 0
+    ldir
+.cs_done:
+    pop hl
+    ret
+
+
+; @proc _lg_row_left0
+;   Byte-aligned left shift of one text row (32 and 64 columns): on every
+;   scan line the survivors move down by lg_bytes and the lg_bytes bytes
+;   above them are zeroed.  Register-only apart from the two counts.
+;   In: HL = scan 0 of the row.
+; @clobbers af,bc,de,hl
+; @end
+_lg_row_left0:
+.l0_scan:
+    push hl
+    ld d, h
+    ld e, l                    ; DE = line base
+    ld a, (lg_bytes)
+    add a, l
+    ld l, a                    ; HL = base + shift
+    ld bc, (lg_sn)
+    ldir                       ; survivors; DE = start of the strip
+    ld a, (lg_bytes)
+    dec a                      ; strip length - 1
+    ld h, d
+    ld l, e
+    ld (hl), 0
+    jr z, .l0_next
+    inc de
+    ld c, a
+    ld b, 0
+    ldir
+.l0_next:
+    pop hl
+    inc h
+    ld a, h
+    and 7
+    jr nz, .l0_scan
+    ret
+
+
+; @proc _lg_row_right0
+;   Byte-aligned right shift of one text row: survivors move up by
+;   lg_bytes (LDDR) and the lg_bytes bytes below them are zeroed.
+;   In: HL = scan 0 of the row.
+; @clobbers af,bc,de,hl
+; @end
+_lg_row_right0:
+.r0_scan:
+    push hl
+    ld a, l
+    add a, 31                  ; line bases are 32-aligned: no carry
+    ld e, a
+    ld d, h                    ; DE = last byte of the line
+    ld a, (lg_bytes)
+    ld c, a
+    ld a, e
+    sub c
+    ld l, a                    ; HL = last survivor (base + 31 - shift)
+    ld bc, (lg_sn)
+    lddr                       ; DE = last byte of the strip
+    ld a, (lg_bytes)
+    dec a
+    ld h, d
+    ld l, e
+    ld (hl), 0
+    jr z, .r0_next
+    dec de
+    ld c, a
+    ld b, 0
+    lddr
+.r0_next:
+    pop hl
+    inc h
+    ld a, h
+    and 7
+    jr nz, .r0_scan
+    ret
+
+
+; @proc _lg_row_left51
+;   Shift one text row left by 145 pixels (18 bytes + 1 bit: 29 columns of
+;   the 5-pixel font).  The 1-bit rotate must stay: without it the
+;   survivors would sit a pixel off the 5-pixel cell grid, and any later
+;   edit of those cells would leave a one-pixel sliver of the old glyph.
+;   It is unrolled and register-only, 14 bytes per scan line.
+;   In: HL = scan 0 of the row.
+; @clobbers af,bc,de,hl
+; @end
+_lg_row_left51:
+.l5_scan:
+    push hl
+    ld d, h
+    ld e, l                    ; DE = line base
+    ld a, l
+    add a, 18
+    ld l, a                    ; HL = base + 18
+    ld bc, 14
+    ldir                       ; survivors; DE = base + 14
+    dec de
+    ex de, hl                  ; HL = last survivor (base + 13)
+    or a                       ; carry in = 0
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    dec hl
+    rl (hl)
+    pop hl                     ; line base
+    call _lg_clear_strip       ; top 6 bits of byte 13 stay, 14..31 zeroed
+    inc h
+    ld a, h
+    and 7
+    jr nz, .l5_scan
+    ret
+
+
+; @proc _lg_row_right51
+;   The mirror image: shift one text row right by 145 pixels.
+;   In: HL = scan 0 of the row.
+; @clobbers af,bc,de,hl
+; @end
+_lg_row_right51:
+.r5_scan:
+    push hl
+    ld a, l
+    add a, 31
+    ld e, a
+    ld d, h                    ; DE = base + 31
+    sub 18
+    ld l, a                    ; HL = base + 13
+    ld bc, 14
+    lddr                       ; bytes 0..13 -> 18..31; DE = base + 17
+    ld h, d
+    ld l, e
+    inc hl                     ; HL = base + 18, the first survivor
+    or a                       ; carry in = 0
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    inc hl
+    rr (hl)
+    pop hl                     ; line base
+    call _lg_clear_strip       ; bytes 0..17 zeroed, byte 18 loses its top bit
+    ; pixel 255 belongs to the column just outside the window
+    ld a, l
+    or 31
+    ld l, a
+    res 0, (hl)
+    xor 31
+    ld l, a                    ; back to the line base
+    inc h
+    ld a, h
+    and 7
+    jr nz, .r5_scan
+    ret
+
+
 ; @proc _lg_flip_left
 ; @clobbers af,bc,de,hl,ix
 ; @end
@@ -4004,24 +4326,139 @@ _lg_flip_shift:
     neg
     ld (lg_dcount), a
 .fs_rows:
+    ; Geometry of the exposed strip.  Every scan line has it zeroed right
+    ; after the shift, so blank cells need no drawing at all.
+    ;   window moved right (dir 0): the strip is the right edge, pixels
+    ;     Sx..end where Sx = used width - shift (used width is 255 at 51
+    ;     columns, 256 otherwise); byte Sx/8 keeps its top (Sx mod 8) bits,
+    ;     bytes above it are zeroed.
+    ;   window moved left (dir 1): the strip is pixels 0..X-1 (X = shift);
+    ;     bytes 0..X/8-1 are zeroed, byte X/8 keeps its bottom 8-(X mod 8)
+    ;     bits.
+    ld a, (lg_bytes)
+    ld b, a                    ; B = whole bytes of the shift
+    ld a, (lg_bits)
+    ld e, a                    ; E = leftover bits
+    ld a, (lg_dir)
+    or a
+    jr nz, .fs_geo_right
+    ld a, b
+    add a, a
+    add a, a
+    add a, a
+    or e                       ; A = shift in pixels
+    ld c, a
+    ld a, (scr_cols)
+    cp 51
+    ld a, c
+    jr z, .fs_geo_51
+    neg                        ; 256 - shift
+    jr .fs_geo_left
+.fs_geo_51:
+    cpl                        ; 255 - shift
+.fs_geo_left:
+    ld c, a                    ; C = Sx
+    and 7
+    ld e, a                    ; E = Sx mod 8
+    ld a, c
+    srl a
+    srl a
+    srl a                      ; A = Sx / 8
+    ld (lg_pi), a
+    inc a
+    ld (lg_cs), a              ; zero from the next byte on
+    ld b, a
+    ld a, 32
+    sub b
+    ld (lg_cn), a
+    jr .fs_geo_mask
+.fs_geo_right:
+    xor a
+    ld (lg_cs), a
+    ld a, b
+    ld (lg_cn), a              ; zero bytes 0..B-1
+    ld (lg_pi), a              ; the straddling byte
+.fs_geo_mask:
+    ld b, e
+    inc b
+    ld a, 0xFF
+.fs_geo_shr:
+    dec b
+    jr z, .fs_geo_done
+    srl a
+    jr .fs_geo_shr
+.fs_geo_done:                  ; A = 0xFF >> (leftover bits)
+    ld c, a
+    ld a, (lg_dir)
+    or a
+    ld a, c
+    jr nz, .fs_geo_store
+    cpl                        ; left strip keeps the top bits instead
+.fs_geo_store:
+    ld (lg_pm), a
+    ; Pick the row routine.  Byte-aligned shifts (32/64 columns) and the one
+    ; 51-column page step (18 bytes + 1 bit) have tight versions; anything
+    ; else takes the generic per-scan-line loop.
+    ld a, (lg_bytes)
+    ld b, a
+    ld a, 32
+    sub b
+    ld l, a
+    ld h, 0
+    ld (lg_sn), hl             ; survivors = 32 - shift bytes
+    ld c, 0                    ; mode 0 = generic
+    ld a, (scr_cols)
+    cp 51
+    ld a, (lg_bits)
+    jr z, .fs_m51
+    or a
+    jr nz, .fs_mode_set
+    ld c, 1                    ; byte-aligned: 1 = left, 2 = right
+    jr .fs_mode_dir
+.fs_m51:
+    dec a
+    jr nz, .fs_mode_set        ; not a 1-bit shift
+    ld a, b
+    cp 18
+    jr nz, .fs_mode_set
+    ld c, 3                    ; 3 = left, 4 = right
+.fs_mode_dir:
+    ld a, (lg_dir)
+    add a, c
+    ld c, a
+.fs_mode_set:
+    ld a, c
+    ld (lg_mode), a
     call _page_in
     xor a
     ld (lg_loop), a
 .fs_row:
-    ; paint the whole text row's attributes with the current colour
-    ld a, (lg_loop)
-    call _attr_row_offset
-    ld de, SCR_ATTR
-    add hl, de
-    ld a, (scr_attr)
-    ld b, 32
-.fs_attr:
-    ld (hl), a
-    inc hl
-    djnz .fs_attr
+    ; (the attributes are not touched here: _lg_set_page has hidden the whole
+    ; page and restores it at the end)
     ; shift the eight scan lines of this text row
     ld a, (lg_loop)
     call _calc_row_addr
+    ld a, (lg_mode)
+    or a
+    jr z, .fs_generic
+    dec a
+    jr nz, .fs_not1
+    call _lg_row_left0
+    jr .fs_shifted
+.fs_not1:
+    dec a
+    jr nz, .fs_not2
+    call _lg_row_right0
+    jr .fs_shifted
+.fs_not2:
+    dec a
+    jr nz, .fs_not3
+    call _lg_row_left51
+    jr .fs_shifted
+.fs_not3:
+    call _lg_row_right51
+    jr .fs_shifted
+.fs_generic:
     ld b, 8
 .fs_scan:
     push bc
@@ -4039,6 +4476,7 @@ _lg_flip_shift:
     call _lg_line_right
 .fs_scan_done:
     pop hl                     ; line base
+    call _lg_clear_strip       ; zero the exposed strip (HL preserved)
     ; 51 columns use 255 of the 256 pixels; the last one belongs to the
     ; column just outside the window, so blank it after a shift.
     ld a, (scr_cols)
@@ -4053,6 +4491,7 @@ _lg_flip_shift:
     inc h
     pop bc
     djnz .fs_scan
+.fs_shifted:
     ; mirror the new window into char_buffer
     ld a, (lg_loop)
     call _row_buf_addr
@@ -4089,12 +4528,15 @@ _lg_flip_shift:
     ld a, (hl)
     inc hl
     ld (lg_src), hl
+    cp ' '                     ; the strip is already zero: nothing to draw
+    jr z, .fs_blank            ; (a space is an all-zero glyph in every font)
     ld b, a
     ld a, (lg_vis)
     ld c, a
     ld a, (lg_loop)
     ld d, a
     call _render_char_noattr    ; the whole row's attributes are already set
+.fs_blank:
     ld a, (lg_vis)
     inc a
     ld (lg_vis), a

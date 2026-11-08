@@ -500,7 +500,7 @@ class Smoke:
     # A880-A881 is f111_addr, A890-A8BF is the loader-staged row table and
     # A8C0 is the status-line flag, so the old A870-A8FF gap is split.
     BANK6_GAPS = ((0xA6FC, 4), (0xA83D, 3), (0xA870, 0x10),
-                  (0xA882, 0x0E), (0xA8D9, 0x27), (0xADA4, 0x25C))
+                  (0xA882, 0x0E), (0xA8E0, 0x20), (0xADA4, 0x25C))
 
     def run_bank6_sentinels(self) -> None:
         self.sentinels: list[tuple[int, bytes]] = []

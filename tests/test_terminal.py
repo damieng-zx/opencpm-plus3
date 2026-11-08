@@ -318,6 +318,39 @@ class Wide80(unittest.TestCase):
         self.assertLess(left.index("ldir"), left.index(".ll_roll:"))
         self.assertLess(right.index("lddr"), right.index(".lr_bits:"))
 
+    def test_flip_hides_the_page_and_draws_only_non_blank_cells(self):
+        """The page change blanks the attributes (ink = paper), clears the
+        exposed strip after the shift and then draws only non-space cells."""
+        text = source("src/bios/screen.zpa")
+        page = text[text.index("_lg_set_page:"):text.index("_flip_chord:")]
+        self.assertIn("call _lg_attr_hide", page)
+        self.assertIn("jr _lg_attr_fill", page)
+        self.assertIn("_lg_attr_hide:", text)
+        flip = text[text.index("_lg_flip_shift:"):text.index("_stl_draw:")]
+        self.assertIn("call _lg_clear_strip", flip)
+        cells = flip[flip.index(".fs_cell:"):]
+        self.assertLess(cells.index("cp ' '"),
+                        cells.index("call _render_char_noattr"))
+        # the full redraw clears its row up front for the same reason
+        row = text[text.index("_lg_render_row:"):text.index("_lg_redraw:")]
+        self.assertIn("call _clear_char_row", row)
+        self.assertIn("cp ' '", row)
+        self.assertIn("call _render_char_noattr", row)
+
+    def test_51_column_flip_keeps_the_one_pixel_rotate(self):
+        """145 pixels = 18 bytes + 1 bit.  Dropping the bit would leave the
+        survivors a pixel off the 5-pixel cell grid (later edits would leave
+        slivers), so the tight 51-column rows must rotate all 14 survivors."""
+        text = source("src/bios/screen.zpa")
+        left = text[text.index("_lg_row_left51:"):text.index("_lg_row_right51:")]
+        right = text[text.index("_lg_row_right51:"):text.index("_lg_flip_left:")]
+        self.assertEqual(left.count("rl (hl)"), 14)
+        self.assertEqual(right.count("rr (hl)"), 14)
+        # anything but the one 29-column step must use the generic loop
+        flip = text[text.index("_lg_flip_shift:"):text.index("_stl_draw:")]
+        self.assertIn("cp 18", flip)
+        self.assertIn(".fs_generic:", flip)
+
     def test_flip_skips_the_per_cell_attribute_stamp(self):
         text = source("src/bios/screen.zpa")
         flip = text[text.index("_lg_flip_shift:"):text.index("_stl_draw:")]
