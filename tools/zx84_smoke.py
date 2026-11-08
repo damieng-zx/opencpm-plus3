@@ -751,7 +751,11 @@ class Smoke:
             # Argument handling and the ESC escape hatch, before anything
             # destructive happens.
             self.command("FORMAT", 300)
-            self.expect("FORMAT usage", "Format the disc in the given drive.")
+            self.expect("FORMAT usage", "Format the disc in the given drive.",
+                        "/Q formats without verifying")
+            # A junk switch must not be mistaken for a format.
+            self.command("FORMAT A: /X", 300)
+            self.expect("FORMAT /X refused", "Format the disc in the given drive.")
             self.command("FORMAT C:", 300)
             self.expect("FORMAT C: refused", "cannot be formatted",
                         "Only drives A: and B: are supported")
@@ -864,6 +868,18 @@ class Smoke:
             self.command("SHOWXDPB", 1500)
             self.expect("CPC IBM XDPB", "8x512", "DSM=155", "Gap2=50h")
 
+            # /Q: format only, no read-back.  The disc must still be laid
+            # out correctly, and the summary must say it was not verified.
+            self.log("FORMAT B: /Q (no verify)")
+            self.format_disc("B", None, "1", "Done - 180K SS/40 track",
+                             "Side 0", flags=" /Q")
+            self.expect("/Q format",
+                        "Done - 180K SS/40 track.",
+                        "40 tracks, 9 sectors.",
+                        "Every track formatted; not verified (/Q).")
+            self.check_sector(0, 0, 1, "00 00 28 09 02 01 03 02", drive=1)
+            self.check_e5(39, 0, 1, drive=1)
+
             # A drive with no disc must fail cleanly, not hang.
             self.mcp.call("eject", {"target": "disk", "drive": "B"})
             self.command("FORMAT B:", 400)
@@ -891,14 +907,18 @@ class Smoke:
                     pass
 
     def format_disc(self, letter: str, target: Path | None, choice: str,
-                    done_needle: str, side_needle: str) -> None:
+                    done_needle: str, side_needle: str,
+                    flags: str = "") -> None:
         """Drive FORMAT.COM's prompts; swap `target` in for drive A:.
 
         Waits for this run's own summary line: the screen still holds the
         previous run's progress, so a generic "verified" match would return
-        before the disc is done.
+        before the disc is done.  `flags` goes on the command line, e.g. " /Q".
         """
-        self.command(f"FORMAT {letter}:", 400)
+        # With /Q there is no VERIFY phase, so check for it only when the
+        # read-back was asked for.
+        want_verify = "/Q" not in flags.upper()
+        self.command(f"FORMAT {letter}:{flags}", 400)
         self.wait_for([f"FORMAT {letter}: - ALL DATA"], frames=400,
                       attempts=4)
         self.wait_for([f"Take the disc out of drive {letter}:"], frames=50,
@@ -926,11 +946,17 @@ class Smoke:
             saw_verify = saw_verify or "VERIFY" in screen
             saw_percent = saw_percent or "%" in screen
             if done_needle in screen:
-                if not (saw_side and saw_verify and saw_percent):
+                if not (saw_side and saw_percent):
                     raise SmokeError(
                         "FORMAT progress line missing "
-                        f"(track/side={saw_side} verify={saw_verify} "
-                        f"percent={saw_percent}):\n" + screen)
+                        f"(track/side={saw_side} percent={saw_percent}):\n"
+                        + screen)
+                if want_verify and not saw_verify:
+                    raise SmokeError(
+                        "FORMAT progress line missing VERIFY:\n" + screen)
+                if not want_verify and saw_verify:
+                    raise SmokeError(
+                        "FORMAT /Q still ran a VERIFY phase:\n" + screen)
                 return
             if "FAILED" in screen:
                 raise SmokeError("FORMAT reported a failure:\n" + screen)

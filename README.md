@@ -165,7 +165,9 @@ for the API references.
   disk spec into the boot sector of the layouts that reserve one, and the login
   probe rebuilds the geometry from that spec, so 10-sector and 42-track disks
   are detected as themselves. CPC Data is identified by its sector IDs
-  instead. No no-verify option or bad-sector mapping yet.
+  instead. `FORMAT A: /Q` skips the read-back — about a third off the total
+  time, and the summary says `not verified (/Q)`; bad-sector mapping is still
+  to do. Making the result bootable is `SYSGEN B:` afterwards.
 - `STAT.COM` — `STAT` shows each drive's free space (`A: 59K free of 175K`);
   `STAT filespec` lists matching files with size and attributes (`R/O`,
   `SYS`); `STAT filespec $R/O` / `$R/W` / `$SYS` sets or clears an attribute.
@@ -201,8 +203,11 @@ for the API references.
 
 - **DISKCOPY: optional check of the source as well** (a full source-read pass
   before the copy).
-- **FORMAT options** — no-verify, a bootable system layout and mapping bad
-  sectors into a hidden file.
+- **FORMAT bad-sector mapping** — a sector that fails to format or read back
+  is reported and the disc abandoned; mapping it into a hidden file (so a
+  slightly damaged disc still yields a CP/M volume) is not implemented.
+  `FORMAT d: /Q` covers the other option from that list: it skips the
+  read-back for a known-good disc.
 - **ANSI extras** — the CSI subset (see
   [docs/ansi-subset.md](docs/ansi-subset.md)) covers cursor motion, erase
   and save/restore; SGR (`ESC [ … m`) and the private autowrap modes

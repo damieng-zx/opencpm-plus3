@@ -51,12 +51,15 @@ track with `sector_read`.
 It then formats a disc for every `FORMAT` layout.  A 180K SS/40-track disc
 on A: is formatted from a scratch copy of the test image with the target
 hot-swapped in at the "put the disc in" prompt, which exercises both
-disc-change prompts; `FORMAT`, `FORMAT C:` and ESC-cancel are checked first.
+disc-change prompts; `FORMAT`, `FORMAT A: /X` (a junk switch must not start
+a format), `FORMAT C:` and ESC-cancel are checked first.
 The disc swap reboots the machine, because the FDC login freezes a drive's
 XDPB after the first detect and the 720K system disc must not keep the
 formatted disc's geometry.  The rest run on B: with a scratch copy of
 `build/cpm3_720.dsk` mounted there: 720K DS/80, CPC System, CPC Data, HiForm
-203 (42 tracks, 10 sectors), SuperMat 192 and CPC IBM.
+203 (42 tracks, 10 sectors), SuperMat 192 and CPC IBM, and finally a
+180K `/Q` run that must show no `VERIFY` phase and report
+`Every track formatted; not verified (/Q).`
 
 The checks require the `percentage / Track / Side / FORMAT|VERIFY` progress
 line, the layout-named summary, `E5` on the last track, the boot-sector

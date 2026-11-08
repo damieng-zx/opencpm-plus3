@@ -1,11 +1,26 @@
 ; FORMAT.COM - format a 3-inch disc
 ;
-; Usage:  FORMAT A:      or      FORMAT B:
+; Usage:  FORMAT d: [/Q]
+;
+;   FORMAT A:       format, verifying every track
+;   FORMAT A: /Q    format only: skip the read-back verification
 ;
 ; The drive letter is mandatory.  A: and B: are the units the XBIOS disc
 ; calls (DD_INIT, DD_FORMAT, DD_WRITE, DD_CHECK_SECTOR) address; whether a
 ; second drive is actually fitted is for the FDC to say, so a FORMAT B: on
 ; a single-drive machine fails with "not ready".
+;
+; /Q halves the work on a real drive: each track is formatted and then read
+; back sector by sector, and on a 40-track disc that read-back is about as
+; long again as the format.  The disc is then only as good as the drive, so
+; /Q suits a known-good disc or a quick initialise; leave it off when the
+; disc's condition is unknown.
+;
+; Making the result bootable is SYSGEN's job, not a FORMAT switch: SYSGEN
+; already buffers the system from A: and writes the boot track and the three
+; files, and both tools ship on every image, so "FORMAT B:" then "SYSGEN B:"
+; is the two-step.  A /S here would have to duplicate that code, or depend on
+; SYSGEN.COM being on the disc.
 ;
 ; The user is asked to take the disc out of the drive, put the one to be
 ; formatted in, and choose a layout:
@@ -23,7 +38,8 @@
 ; ID, so this only changes timing.
 ;
 ; Every track is formatted and then verified sector by sector before the
-; next track is touched.  A single progress line is rewritten in place:
+; next track is touched, unless /Q was given.  A single progress line is
+; rewritten in place:
 ;
 ;    45%  Track 18  Side 0  FORMAT
 ;    45%  Track 18  Side 0  VERIFY
@@ -87,7 +103,7 @@ start:
     add hl, de
     ld (userf_call + 1), hl
 
-    ; ---- Command tail: "A:" (a bare "A" is accepted too) ----
+    ; ---- Command tail: "A:" (a bare "A" is accepted too), plus /Q ----
     ld hl, TAIL
     ld a, (hl)
     or a
@@ -112,7 +128,7 @@ start:
     jr nz, .tail_end
     inc hl
 .tail_end:
-    call tail_end_ok
+    call parse_quiet
     jp nz, usage
 
     ; Only the two FDC units are formattable.
@@ -301,6 +317,11 @@ track_loop:
     call userf_call
     jp nc, fail_format
 
+    ; /Q skips the read-back: the disc is formatted but unproven.
+    ld a, (quiet)
+    or a
+    jr nz, .track_done
+
     ld de, st_verify
     ld (status_ptr), de
     call progress
@@ -308,6 +329,7 @@ track_loop:
     call verify_track
     jp nc, fail_verify
 
+.track_done:
     ld a, (cur_track)
     inc a
     ld (cur_track), a
@@ -343,7 +365,12 @@ track_loop:
     call print_dec
     ld de, msg_sectors
     call pstr
+    ld a, (quiet)
+    or a
+    ld de, msg_unverified
+    jr nz, .summary
     ld de, msg_verified
+.summary:
     call pstr
     rst 0
 
@@ -1056,22 +1083,36 @@ fill_zero:
     jr nz, .loop
     ret
 
-; tail_end_ok - is the tail finished at HL?
+; parse_quiet - consume the rest of the tail, picking up a /Q switch
 ;   In:       HL = tail pointer
-;   Out:      Z set when only spaces remain
+;   Out:      Z set when nothing but spaces remains (an error otherwise)
+;             quiet = 1 when /Q was seen
 ;   Clobbers: AF, HL
-tail_end_ok:
+parse_quiet:
     ld a, (hl)
     or a
-    ret z
+    ret z                       ; end of the tail, Z set
     cp 0x0D
     ret z
     cp ' '
-    jr nz, .junk
+    jr z, .q_skip
+    cp '/'
+    jr nz, .q_junk
     inc hl
-    jr tail_end_ok
-.junk:
-    or a                        ; clear Z: extra arguments are not supported
+    ld a, (hl)
+    and 0xDF
+    cp 'Q'
+    jr nz, .q_junk
+    ld a, 1
+    ld (quiet), a
+    inc hl
+    jr parse_quiet
+.q_skip:
+    inc hl
+    jr parse_quiet
+.q_junk:
+    xor a
+    dec a                       ; A = FFh: clear Z, the tail is not finished
     ret
 
 ; ==========================================================================
@@ -1125,6 +1166,7 @@ shift:         db 0
 il:            db 0
 pcur:          db 0
 cur_id:        db 0
+quiet:         db 0                    ; /Q: 1 = format only, no read-back
 taken:         db 0, 0, 0, 0
 idtab:         ds 32
 last_error:    db 0
@@ -1179,6 +1221,8 @@ msg_sectors:
     db " sectors.", 0x0D, 0x0A, '$'
 msg_verified:
     db "Every track formatted and verified.", 0x0D, 0x0A, '$'
+msg_unverified:
+    db "Every track formatted; not verified (/Q).", 0x0D, 0x0A, '$'
 
 name_180:
     db "180K SS/40 track", '$'
@@ -1215,7 +1259,9 @@ msg_mismatch:
 msg_usage:
     db "FORMAT A:", 0x0D, 0x0A
     db "FORMAT B:", 0x0D, 0x0A
-    db "  Format the disc in the given drive.", 0x0D, 0x0A, '$'
+    db "FORMAT A: /Q", 0x0D, 0x0A
+    db "  Format the disc in the given drive.", 0x0D, 0x0A
+    db "  /Q formats without verifying every track.", 0x0D, 0x0A, '$'
 msg_notsup1:
     db "FORMAT: drive ", '$'
 msg_notsup2:
