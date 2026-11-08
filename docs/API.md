@@ -181,11 +181,14 @@ BDOS function 124 (private, used by the CCP only):
 - **In**: E=character
 - **Note**: Stub — discarded (no printer).
 
-#### F6 — Direct Console I/O
+#### F6 - Direct Console I/O
 - **In**: C=6, E=command
 - **Out**: varies
 - E=0xFF: Read a character (non-blocking). Returns 0 if none ready.
 - E=0xFE: Status check. Returns 0xFF if char ready, 0x00 if not.
+- E=0xFD: Wait for a character and return it without echoing (CP/M 3).
+  Programs use this for "press any key" prompts; returning immediately
+  would look like a keypress and the program would carry on.
 - E=other: Output character E directly. Bypasses BDOS paging and echo processing.
 
 #### F7 — Get IOBYTE

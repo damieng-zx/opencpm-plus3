@@ -208,11 +208,34 @@ tst_f06:
     ld de, lbl_f06
     call print_label
 
+    ; E=FFh: non-blocking read, 0 when no key is waiting.
     ld e, 0FFh              ; Read-status mode
     ld c, 6
     call BDOS               ; Returns 0 (no char) or char value in A
     call print_hex_a
     ld de, msg_h_ret
+    ld c, 9
+    call BDOS
+    call print_crlf
+
+    ; E=FDh: wait for a key and return it without echoing.  The runner
+    ; presses 'K' when it sees the prompt, so this call must block
+    ; and then hand back 'K'.  If E=FDh were treated as output (as
+    ; it once was) it would return at once and a "press any key"
+    ; prompt would carry straight on - which is exactly how
+    ; DISCKIT's confirmation page vanished.
+    ld de, msg_fd_wait
+    ld c, 9
+    call BDOS
+    ld e, 0FDh              ; wait for a key, no echo
+    ld c, 6
+    call BDOS
+    and 5Fh                 ; fold to upper case
+    cp 'K'
+    ld de, msg_fd_bad
+    jr nz, .f06_fd_out
+    ld de, msg_fd_ok
+.f06_fd_out:
     ld c, 9
     call BDOS
     jp print_crlf
@@ -1999,6 +2022,9 @@ f09_test_str:   DB "TEST$"
 
 msg_visual_ok:  DB "] visual OK$"
 msg_h:          DB "h$"
+msg_fd_wait: db "FDh wait: ", '$'
+msg_fd_ok:   db "OK (blocked)", '$'
+msg_fd_bad:  db "FAIL (did not block)", '$'
 msg_h_ret:      DB "h (ret)$"
 msg_pass_suffix:DB " OK (round-trip)$"
 msg_fail_suffix:DB " FAIL (no round-trip)$"
