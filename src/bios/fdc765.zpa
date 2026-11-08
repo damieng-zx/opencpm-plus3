@@ -387,14 +387,7 @@ fdc_login_body:
     call fdc_send_byte
 
     ; Result: 7 bytes — ST0 ST1 ST2 C H R N.  We want R.
-    call fdc_read_byte              ; ST0
-    call fdc_read_byte              ; ST1
-    call fdc_read_byte              ; ST2
-    call fdc_read_byte              ; C
-    call fdc_read_byte              ; H
-    call fdc_read_byte              ; R — sector ID
-    ld d, a                         ; D = first sector ID
-    call fdc_read_byte              ; N
+    call fdc_read_result            ; D = R, the first sector ID
 
     ; ---- Step 2: map sector ID → format type ----
     ; READ ID returns whichever sector the head happens to be over, so
@@ -1172,19 +1165,7 @@ fdc_exec_wr:
 
 ; ---- Result phase: seven bytes, then ST0/ST1 decide success ----
 fdc_result:
-    ; fdc_read_byte clobbers BC, so save ST0/ST1 before reading the rest.
-    call fdc_read_byte         ; ST0
-    push af
-    call fdc_read_byte         ; ST1
-    push af
-    call fdc_read_byte         ; ST2 (unused)
-    call fdc_read_byte         ; C (unused)
-    call fdc_read_byte         ; H (unused)
-    call fdc_read_byte         ; R (unused)
-    call fdc_read_byte         ; N (unused)
-
-    pop bc                     ; B = ST1 (was the second push)
-    pop af                     ; A = ST0 (was the first push)
+    call fdc_read_result       ; A = ST0, B = ST1
     and 0xC0
     cp 0x80                    ; ST0 bits 7:6 >= 10 = real failure
     jr nc, fdc_error
@@ -1274,17 +1255,7 @@ fdc_format_track:
     jr nz, .fmt_loop
 
 .fmt_result:
-    call fdc_read_byte         ; ST0
-    push af
-    call fdc_read_byte         ; ST1
-    push af
-    call fdc_read_byte         ; ST2
-    call fdc_read_byte         ; C
-    call fdc_read_byte         ; H
-    call fdc_read_byte         ; R
-    call fdc_read_byte         ; N
-    pop bc                     ; B = ST1
-    pop af                     ; A = ST0
+    call fdc_read_result       ; A = ST0, B = ST1
 
     bit 6, b                   ; ST1.WP
     jr nz, .fmt_wp
@@ -1314,6 +1285,33 @@ fdc_format_track:
 ; ==========================================================================
 ; FDC byte-level I/O
 ; ==========================================================================
+
+; ------------------------------------------------------------------
+; fdc_read_result — Read the seven-byte result phase ST0 ST1 ST2 C H R N
+;   Out: A = ST0, B = ST1, D = R (sector ID)
+;   Clobbers: F, C
+; fdc_read_byte clobbers BC, so ST0/ST1 ride on the stack until the end.
+; ------------------------------------------------------------------
+; @proc fdc_read_result
+; @out   a
+; @out   b
+; @out   d
+; @clobbers af,bc
+; @end
+fdc_read_result:
+    call fdc_read_byte         ; ST0
+    push af
+    call fdc_read_byte         ; ST1
+    push af
+    call fdc_read_byte         ; ST2
+    call fdc_read_byte         ; C
+    call fdc_read_byte         ; H
+    call fdc_read_byte         ; R
+    ld d, a
+    call fdc_read_byte         ; N
+    pop bc                     ; B = ST1
+    pop af                     ; A = ST0
+    ret
 
 ; ------------------------------------------------------------------
 ; fdc_send_cmd_hdus — Send a command byte, then the HD | US drive-select

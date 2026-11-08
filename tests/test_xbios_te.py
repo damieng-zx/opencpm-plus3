@@ -376,7 +376,7 @@ class DiscPhase2(unittest.TestCase):
         self.assertIn("fmt_left", body)
         self.assertIn("bit 6, b", body)        # write protected
         self.assertIn("0x3B", body)            # data/ID error bits
-        self.assertIn("fdc_read_byte", body)
+        self.assertIn("call fdc_read_result", body)   # A = ST0, B = ST1
 
     def test_tester_covers_phase2(self):
         text = source("src/test/xtetest.asm")
