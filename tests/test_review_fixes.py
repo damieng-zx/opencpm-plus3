@@ -107,7 +107,9 @@ class Issue05SelectDriveErrors(unittest.TestCase):
 
     def test_every_select_fcb_drive_checks_carry(self):
         text = source("src/bdos/bdos.zpa")
-        calls = list(re.finditer(r"call select_fcb_drive\n((?:.*\n){0,3})", text))
+        calls = list(re.finditer(
+            r"call (?:select_fcb_drive|setup_select_fcb\(de\))[^\n]*\n((?:.*\n){0,3})",
+            text))
         self.assertGreaterEqual(len(calls), 7)
         for m in calls:
             self.assertRegex(

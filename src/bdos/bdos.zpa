@@ -1155,10 +1155,8 @@ bf_f29:
 bf_f30:
     pop de
     pop bc
-    call setup_fcb(de)         ; IX = fcb_buf
-
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    call select_fcb_drive
+    call setup_select_fcb(de)
     jp c, .f30_not_found       ; invalid drive → not found
     call is_fcb_readonly
     jr nz, .f30_not_found      ; read-only → not found
@@ -1537,6 +1535,21 @@ select_drive:
     scf                        ; CF=1 → invalid drive
     ret
 
+
+; ==========================================================================
+; setup_select_fcb — setup_fcb, then select_fcb_drive (falls through)
+;   In:  DE = FCB in the TPA
+;   Out: IX = fcb_buf; CF=0 success, CF=1 invalid drive
+;   Clobbers: AF, BC, DE, HL, IY
+; @proc setup_select_fcb
+; @param %fcb:u16 de
+; @out   ix
+; @out   carry
+; @clobbers af,bc,de,hl,iy
+; @end
+setup_select_fcb:
+    call setup_fcb(de)         ; IX = fcb_buf
+    ; fall through
 
 ; ==========================================================================
 ; @proc select_fcb_drive
@@ -1965,10 +1978,8 @@ clear_alloc_bit:
 bf_f19:
     pop de
     pop bc
-    call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
-
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    call select_fcb_drive
+    call setup_select_fcb(de)
     jr c, .del_none            ; invalid drive → not found
     call is_fcb_readonly
     jr nz, .del_none           ; read-only → not deleted
@@ -2090,12 +2101,10 @@ bf_f20:
 ; @end
 f20_body:
     ; In: DE = FCB (the multi-sector wrapper supplies it)
-    call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
-
     ; Cache DPB/ALV for the FCB's drive so cached_* is consistent with
     ; this operation (and unaffected by what some earlier BDOS call left
     ; cached for a different drive).
-    call select_fcb_drive
+    call setup_select_fcb(de)
     jp c, .read_drv_err
 
     ; Get current position from FCB
@@ -2593,10 +2602,8 @@ zero_fill_block:
 bf_f22:
     pop de
     pop bc
-    call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
-
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    call select_fcb_drive
+    call setup_select_fcb(de)
     jr c, .mk_full             ; invalid drive → error
     call is_fcb_readonly
     jr nz, .mk_full            ; read-only → error
@@ -2687,10 +2694,8 @@ bf_f22:
 bf_f23:
     pop de
     pop bc
-    call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
-
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    call select_fcb_drive
+    call setup_select_fcb(de)
     jr c, .ren_none            ; invalid drive → not found
     call is_fcb_readonly
     jr nz, .ren_none           ; read-only → not renamed
@@ -2866,10 +2871,8 @@ rand_to_seq:
 bf_f33:
     pop de
     pop bc
-    call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
-
     ; Cache DPB/ALV for the FCB's drive.
-    call select_fcb_drive
+    call setup_select_fcb(de)
     jp c, .rdrand_range
 
     ; Convert random record to EX/CR
@@ -3244,10 +3247,8 @@ bf_f34:
 bf_f35:
     pop de
     pop bc
-    call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
-
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
-    call select_fcb_drive
+    call setup_select_fcb(de)
     jr c, .fsz_bad             ; invalid drive
 
     ; Initialize result to 0
@@ -4622,8 +4623,7 @@ bf_f112:
 bf_f99:
     pop de
     pop bc
-    call setup_fcb(de)
-    call select_fcb_drive
+    call setup_select_fcb(de)
     jp c, .f99_err
     call is_fcb_readonly
     jp nz, .f99_err
