@@ -94,9 +94,13 @@ class Distribution720Image(unittest.TestCase):
 
     def test_has_room_for_a_larger_tool_set(self):
         # The point of the 720K distribution: far more free space than the
-        # 180K one, which is limited to at most 57 free 1K blocks.
+        # 180K one (250+ free 2K blocks).
         self.assertGreaterEqual(free_blocks(DIST720), 250)
-        self.assertLessEqual(free_blocks(DIST), 57)
+        # The 180K disc is nearly full - at most 57 free 1K blocks - but only
+        # with the git-ignored third-party toolkit (BBC BASIC, ED, PIP...) on
+        # it.  A checkout without references/binaries, such as CI, has ~120.
+        if BBC.exists():
+            self.assertLessEqual(free_blocks(DIST), 57)
 
 
 @unittest.skipUnless(TEST.exists(),
