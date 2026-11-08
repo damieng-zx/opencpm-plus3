@@ -4032,19 +4032,98 @@ _lg_clear_strip:
     ld c, a
     ld a, (lg_cs)
     or l
-    ld l, a
-    ld d, h
-    ld e, l
-    inc de
-    ld (hl), 0
-    dec c
-    jr z, .cs_done
-    ld b, 0
-    ldir
-.cs_done:
+    ld e, a
+    ld d, h                    ; DE = start of the strip
+    call _lg_zero_run
     pop hl
     ret
 
+
+; @proc _lg_zero_run
+;   Zero C bytes (0..32) at DE, ascending.  An unrolled run of
+;   "ld (de),a / inc e" entered part-way: 11 T-states a byte against 21 for
+;   LDIR.  The destination is always inside one 32-byte scan line, so
+;   "inc e" never carries.
+;   In: DE = start, C = count.   Out: DE = start + count.
+; @clobbers af,bc,de,hl
+; @end
+_lg_zero_run:
+    ; lint-exempt: stack  ; jp (hl) enters the unrolled run below
+    ld hl, .zr_end
+    ld a, c
+    add a, a                   ; two bytes of code per store
+    ld c, a
+    ld b, 0
+    or a
+    sbc hl, bc                 ; HL = .zr_end - 2 * count
+    xor a
+    jp (hl)
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+    ld (de), a
+    inc e
+.zr_end:
+    ret
 
 ; @proc _lg_row_left0
 ;   Byte-aligned left shift of one text row (32 and 64 columns): on every
@@ -4064,16 +4143,8 @@ _lg_row_left0:
     ld bc, (lg_sn)
     ldir                       ; survivors; DE = start of the strip
     ld a, (lg_bytes)
-    dec a                      ; strip length - 1
-    ld h, d
-    ld l, e
-    ld (hl), 0
-    jr z, .l0_next
-    inc de
-    ld c, a
-    ld b, 0
-    ldir
-.l0_next:
+    ld c, a                    ; strip length
+    call _lg_zero_run
     pop hl
     inc h
     ld a, h
@@ -4101,18 +4172,14 @@ _lg_row_right0:
     sub c
     ld l, a                    ; HL = last survivor (base + 31 - shift)
     ld bc, (lg_sn)
-    lddr                       ; DE = last byte of the strip
+    lddr                       ; survivors moved up
+    pop hl                     ; line base
+    push hl
+    ld d, h
+    ld e, l                    ; the strip is the shift bytes at the base
     ld a, (lg_bytes)
-    dec a
-    ld h, d
-    ld l, e
-    ld (hl), 0
-    jr z, .r0_next
-    dec de
     ld c, a
-    ld b, 0
-    lddr
-.r0_next:
+    call _lg_zero_run
     pop hl
     inc h
     ld a, h

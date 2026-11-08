@@ -351,6 +351,20 @@ class Wide80(unittest.TestCase):
         self.assertIn("cp 18", flip)
         self.assertIn(".fs_generic:", flip)
 
+    def test_strip_clear_uses_the_unrolled_zero_run(self):
+        """11 T-states a byte against LDIR's 21; the run covers the longest
+        possible strip (a whole 32-byte scan line)."""
+        text = source("src/bios/screen.zpa")
+        run = text[text.index("_lg_zero_run:"):text.index("_lg_row_left0:")]
+        self.assertEqual(run.count("ld (de), a"), 32)
+        self.assertEqual(run.count("inc e"), 32)
+        self.assertIn("jp (hl)", run)
+        self.assertIn("lint-exempt: stack", run)
+        for name in ("_lg_clear_strip:", "_lg_row_left0:", "_lg_row_right0:"):
+            body = text[text.index(name):]
+            body = body[:body.index("\n\n")]
+            self.assertIn("call _lg_zero_run", body)
+
     def test_flip_skips_the_per_cell_attribute_stamp(self):
         text = source("src/bios/screen.zpa")
         flip = text[text.index("_lg_flip_shift:"):text.index("_stl_draw:")]
