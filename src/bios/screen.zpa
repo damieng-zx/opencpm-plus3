@@ -1720,6 +1720,35 @@ _lg_row_addr:
 
 
 ; ==========================================================================
+; _clear_char_row - Zero the bitmap of one character row
+;   In:  HL = screen address of the row's first scan line (screen paged in)
+;   Out: HL = H advanced by 8 (the scan line below the row), B = 0
+;   Clobbers: BC, DE, HL
+; ==========================================================================
+; @proc _clear_char_row
+; @param %addr:u16 hl
+; @out   hl
+; @clobbers bc,de,hl
+; @end
+_clear_char_row:
+    ld b, 8
+.scan:
+    push bc
+    push hl
+    ld d, h
+    ld e, l
+    inc de
+    ld (hl), 0
+    ld bc, 31
+    ldir
+    pop hl
+    inc h
+    pop bc
+    djnz .scan
+    ret
+
+
+; ==========================================================================
 ; _render_char — Render one character to the screen bitmap
 ;   In:      B = character code
 ;            C = column (0-50)
@@ -2283,20 +2312,7 @@ _scroll_clear:
     ; Clear the last row's bitmap: 8 scan lines x 32 bytes
     ld a, (_scroll_last)
     call _calc_row_addr
-    ld b, 8
-.clear_scan:
-    push bc
-    push hl
-    ld d, h
-    ld e, l
-    inc de
-    ld (hl), 0
-    ld bc, 31
-    ldir
-    pop hl
-    inc h
-    pop bc
-    djnz .clear_scan
+    call _clear_char_row      ; 8 scan lines of 32 zero bytes from HL
 
     ; Attributes: rows 1..last -> 0..last-1, then clear row last
     ld a, (_scroll_last)
@@ -2436,20 +2452,7 @@ _scroll_down_vis:
     ; Clear the top row's bitmap
     xor a
     call _calc_row_addr         ; HL = row 0, scan 0
-    ld b, 8
-.sd_clear_scan:
-    push bc
-    push hl
-    ld d, h
-    ld e, l
-    inc de
-    ld (hl), 0
-    ld bc, 31
-    ldir
-    pop hl
-    inc h
-    pop bc
-    djnz .sd_clear_scan
+    call _clear_char_row      ; 8 scan lines of 32 zero bytes from HL
 
     ; Attributes: rows 0..last-1 -> 1..last, then clear row 0
     ld a, (_scroll_last)
@@ -2555,20 +2558,7 @@ _clear_row_a:
 
     call _page_in
 
-    ld b, 8
-._cra_scan:
-    push bc                     ; lint: ignore  (only B is used; C pushed/popped as padding)
-    push hl
-    ld d, h
-    ld e, l
-    inc de
-    ld (hl), 0
-    ld bc, 31
-    ldir
-    pop hl
-    inc h
-    pop bc
-    djnz ._cra_scan
+    call _clear_char_row      ; 8 scan lines of 32 zero bytes from HL
 
     jp _page_out
 
@@ -2715,20 +2705,7 @@ _blank_row_direct:
     call _page_in
 
     ; bitmap: eight scan lines of 32 zero bytes
-    ld b, 8
-.bd_scan:
-    push bc
-    push hl
-    ld d, h
-    ld e, l
-    inc de
-    ld (hl), 0
-    ld bc, 31
-    ldir
-    pop hl
-    inc h
-    pop bc
-    djnz .bd_scan
+    call _clear_char_row      ; 8 scan lines of 32 zero bytes from HL
 
     ; attributes: the row's 32 attribute cells take the current colour
     ld a, (_cra_row)
