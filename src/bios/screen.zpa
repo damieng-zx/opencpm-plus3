@@ -318,8 +318,9 @@ scr_putchar:
     jp z, .esc_pb              ; foreground colour
     cp 'c'
     jp z, .esc_pc              ; background colour
-    ; '2' (national charset) and '5' (24x80 auto-flip) are consumed and
-    ; ignored; we have one font and no 24x80 mode.
+    ; Everything else that takes one parameter ('2' national charset,
+    ; unknown commands) is consumed and ignored: we have one font and no
+    ; national variant table.
     xor a
 .esc_set_a:
     ld (esc_state), a

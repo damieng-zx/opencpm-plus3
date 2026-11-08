@@ -28,7 +28,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 | **Microsoft COBOL-80** | 4.65 | `COBOL` compiles `=HELLO`, `L80` links it, `HELLO` prints `HELLO, WORLD` | Full chain on a 720K image: the 4.65 set does not fit the 174 KB data area of a 180K disc, and the 4.01 archive has no `CRTDRV.REL` |
 | **3CLCK** | 2.10 | Extractor writes `CLOCK.FID`/`CLOCK.F64`/`CLOCK.DOC`/`CLOCKCLR.COM`; CLOCKCLR reports the FID state | The clock FID is not loaded at boot; see below |
 | **BDS C** | 1.60 | `CC HELLO.C` compiles to `HELLO.CRL`, `CLINK HELLO` links it, and `HELLO` prints `HELLO, WORLD` | Full chain. `DEFF2.CRL` (the part-II library) must be on the disk or `CLINK` stops at `Missing function(s): PUTCHAR` |
-| **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | ⚠️ VT-100 escapes such as `ESC[?3h`, `ESC[2J`, `ESC[H` remain visible; `supercalc2_80` confirms 24x80 fixes only the width, not the terminal |
+| **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | Its VT-100 output (`ESC[?3h`, `ESC[2J`, `ESC[H`) is consumed by the [CSI subset](ansi-subset.md); SGR attribute switching is still ignored, so colour/reverse requests have no effect |
 | **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
 | **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE wraps on the 51-column screen; TINST+`SCREEN 64` or `turbo3_80` (24x80) fit it, though Kaypro escapes leave stray `1` characters |
 | **WordStar** | 3.0 | Banner and no-file menu appear; `INSTALL` patches terminals and writes `WS.COM` | 80-column layout wraps on the 51-column screen by default; `wordstar30_80` runs it under `SET24X80`, where the menu and right half are readable (Visual 200 escape artifacts remain) |
@@ -53,7 +53,6 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 |---|---|---|
 | **WordStar 3.0 display** | The default run still wraps at 51 columns, but `wordstar30_80` enters `SET24X80` first: the no-file menu fits 80 columns and EXTEND+Enter shows the right half. Visual 200 escape codes leave artifacts at the line starts. | The original crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: terminal escape handling. |
 | **Turbo Pascal display** | The default run wraps; `turbo3_80` fits the IDE in 80 columns. Kaypro terminal escapes leave stray `1` characters in the buffer. | 24x80 solves the width; the remaining work is the Kaypro terminal escape set. |
-| **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. `supercalc2_80` fits the banner and right half in 24x80; the escapes remain. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
 | **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The clock is a FID installed at cold boot. This loader only stages `RAMDISK.FID`; a generic +3 FID loader is needed. |
 | **ZSID / SID / DDT breakpoints** | `G` with a stop address (and `T`/`U` tracing) stops at a random address inside the program instead of at the breakpoint, and a long ZSID command such as a large `F` fill is cut short the same way. Loading, short dumps and `G0` work. | Not fixable without breaking +3 compatibility; see [Debuggers and RST 7](#debuggers-and-rst-7). Automated as `zsid_break` (known issue). |
 | **Sargon (chess)** | Prints nothing after the command line; the CPU spins polling port `2FFD`. | Copy protection. The program issues raw uPD765 `READ DATA` commands against the boot track (`C=1`, `R=1..N`) and waits for the original disk's sector IDs, which never match, so it never reaches its title screen. Not a BIOS bug: no CP/M file or console call is involved. |
@@ -82,6 +81,14 @@ the whole source block.  F20/F21 now apply the count to both sequential
 directions (1..127) and report the records moved in H.  An invalid count
 resets to 1, which is what lets PIP's 128 request fall back cleanly.  The
 real-world suite reports it as `PASS`.
+
+Recently fixed: **SuperCalc2 display**.  Its VT-100 output (`ESC[?3h`,
+`ESC[2J`, `ESC[H`, `ESC[row;colH`) used to appear in the character buffer
+as printable text; the [CSI subset](ansi-subset.md) now parses it, so the
+banner and grid are drawn through the escape sequences instead.  Attribute
+requests (SGR, `ESC [ … m`) are still consumed and ignored, so colour and
+reverse have no effect, and `supercalc2_80` remains the run that fits the
+banner in 80 columns.
 
 ## Debuggers and RST 7
 

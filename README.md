@@ -124,11 +124,10 @@ emulator.
   built for both layouts, and the test image uses the 720K pair.
 
 The known gaps are documented rather than hidden: 3CLCK's clock FID needs a
-generic +3 FID loader, Sargon fails a
-copy-protection check on the boot track, and VT-100 escapes (SuperCalc2) are
-still printed literally.  WordStar, Turbo Pascal, SuperCalc2 and Multiplan
-need the [24x80 screen](#screen-modes) or, for Turbo Pascal, `SCREEN 64` after
-a TINST 64-column install.
+generic +3 FID loader and Sargon fails a copy-protection check on the boot
+track.  WordStar, Turbo Pascal, SuperCalc2 and Multiplan need the
+[24x80 screen](#screen-modes) or, for Turbo Pascal, `SCREEN 64` after a TINST
+64-column install.
 
 Per-package results, the exact checks run and why the failures fail are in the
 [compatibility tables](docs/compatibility.md); the harness is described in the
@@ -204,7 +203,10 @@ for the API references.
   before the copy).
 - **FORMAT options** — no-verify, a bootable system layout and mapping bad
   sectors into a hidden file.
-- **VT-100/CSI parser** — in addition to the VT-52/ADM-3A sequences.
+- **ANSI extras** — the CSI subset (see
+  [docs/ansi-subset.md](docs/ansi-subset.md)) covers cursor motion, erase
+  and save/restore; SGR (`ESC [ … m`) and the private autowrap modes
+  (`ESC [ ? 7 h/l`) are still accepted and ignored.
 - **Larger multi-sector counts** — F44 currently accepts 1..127; 128 (a full
   16K buffer) is rejected so PIP falls back to its compatible path. Larger
   counts may be possible once PIP's buffering is fully understood.

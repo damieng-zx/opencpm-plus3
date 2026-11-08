@@ -570,6 +570,17 @@ The runner then exercises `SET24X80.COM` from the prompt: no argument and
 and `SET24X80 JUNK` must print `SET24X80 [ON|OFF]`.  After each switch it
 reads `mode80` (bank 6, `A8C1h`) and requires the expected state.
 
+The wide-tool pass then checks that the tools actually use the 80 columns.
+Before entering 24x80 it reads `lg_auto` (bank 6, `A8C3h`) and requires 0, so
+auto-flip is off at cold boot; after `SET24X80 ON` it runs `DIR` and requires
+`lg_off` (`A8C2h`) to still be 0, so output past the window did not move the
+page.  It then reads `LG_BUF` (bank 5, `5B00h`) and requires `DIR` to lay out
+five entries per line (four ` : ` separators) with no line longer than 79
+characters, and `DUMP SMOKE.TXT` to show 16 bytes per line: the needle
+`0000: 53 4D 4F 4B 45 20 4F 4B` and a full `0070:` row of 16 `1A` bytes must
+both appear.  `SCREEN` must report 80 columns, and `SET24X80 OFF` must
+restore the F49 console width to 51.
+
 ### BDOS file regression suite
 
 Run:

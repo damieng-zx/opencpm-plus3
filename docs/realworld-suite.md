@@ -108,9 +108,11 @@ issues; the others are history):
   editor for a 64-column terminal (`SCREEN 64`), and the `turbo3_80`
   variant runs the default install after `SET24X80` and checks the right
   half.  Kaypro terminal escapes still leave stray `1` characters.
-- **SuperCalc2 1.00** the `supercalc2_80` variant fits the banner in
-  80 columns and flips to the right half, but its VT-100 escape output is
-  still printed literally; the VT-100 parser is the remaining blocker.
+- **SuperCalc2 1.00** the `supercalc2_80` variant fits the banner and the
+  80-column grid and flips to the right half, and its VT-100 output is
+  consumed by the CSI subset (see [ansi-subset.md](ansi-subset.md)).  SGR
+  attribute requests are still ignored, so the cells carry no colour or
+  reverse video.
 - **Multiplan 1.05** needs the `MP80` data overlay plus `MP.OVR`,
   `MP.HLP`, `DEFAULT.FK` and `RFILE`; `MP.COM` reports
   "no data file present (MP80 or MP40)" without it.  The
@@ -213,9 +215,9 @@ The assembler/compiler packages use fixtures from
 `CHELLO.C`, `HELLO.Z80`).  They are CRLF text files because the CP/M
 tools read them directly (see `.gitattributes`).
 
-SuperCalc2 starts successfully, but its VT-100 escape output is still visible
-in the character buffer (`[?3h[2J[H`), so terminal escape handling remains a
-compatibility area to investigate.
+SuperCalc2 used to leave its VT-100 escape output visible in the character
+buffer (`[?3h[2J[H`); the CSI subset now parses those sequences, so the
+banner and grid are positioned by the escapes rather than by stray text.
 
 ## Adding a package
 

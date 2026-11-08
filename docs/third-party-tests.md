@@ -26,9 +26,18 @@ local `DISCKIT.COM` to that disposable copy, boots it and checks that the
 Locomotive banner appears.  It then follows the first prompt - press a key,
 remove the disc, press a key again - and requires the main menu (Format /
 Verify) to appear, which covers `DD_DRIVE_STATUS` reporting a disc removal
-through SENSE DRIVE STATUS and `KM_KT_GET` delivering ordinary keypresses.  Nothing is written back to `references/` and
-nothing is committed.  Without a local copy the tool prints the notice and
-exits 0, so CI does not need the binary.
+through SENSE DRIVE STATUS and `KM_KT_GET` delivering ordinary keypresses.
+Every menu box must also be a complete rectangle: `_check_menu_boxes` reads
+`char_buffer` raw (the text screen maps non-ASCII bytes to `.`) and walks
+each top-left corner along its horizontal run to the top-right corner, down
+the right edge to the bottom-right corner, back along the bottom edge to the
+bottom-left corner and up the left edge, requiring at least four complete
+boxes.  This pins BS as a pure cursor motion: the menu draws each box
+right-to-left with BC (backspace) between glyphs, so a destructive BS eats
+the glyphs it has just written and loses every box's bottom and left edges.
+Nothing is written back to `references/` and nothing is committed.  Without
+a local copy the tool prints the notice and exits 0, so CI does not need the
+binary.
 
 The same rule applies to any other utility you drop into that folder: the
 test harness may use it locally, but do not add it to the repository, the
