@@ -152,7 +152,7 @@ class WrapControl(unittest.TestCase):
         self.assertIn("scr_wrap:     db 1", text)
         adv = text[text.index("_adv_col:"):text.index("_put_attr:")]
         self.assertIn("ld a, (scr_wrap)", adv)
-        self.assertIn("jp _do_lf", adv)
+        self.assertRegex(adv, r"j[pr] _do_lf")
         self.assertIn(".ac_clamp:", adv)
 
     def test_backspace_honours_wrap(self):
@@ -278,7 +278,7 @@ class Wide80(unittest.TestCase):
         self.assertIn("_lg_redraw", page)       # offset-viewport fallback
         # auto-flip uses the shared page-change helper
         auto = text[text.index("_lg_autoflip:"):text.index("_lg_flip:")]
-        self.assertIn("jp _lg_set_page", auto)
+        self.assertRegex(auto, r"j[pr] _lg_set_page")
         self.assertNotIn("call _lg_redraw", auto)
         # and the manual flip does too
         flip = text[text.index("_lg_flip:"):text.index("_lg_set_page:")]

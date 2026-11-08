@@ -612,9 +612,9 @@ scr_putchar:
     ld (esc_state), a
     ld a, b
     cp 'H'
-    jp z, .csi_cup
+    jr z, .csi_cup
     cp 'f'
-    jp z, .csi_cup
+    jr z, .csi_cup
     cp 'A'
     jp z, .csi_cuu
     cp 'B'
@@ -1386,7 +1386,7 @@ _adv_col:
     jr z, .ac_clamp
     xor a
     ld (cursor_col), a
-    jp _do_lf
+    jr _do_lf
 .ac_clamp:
     call _lg_width
     dec a
@@ -1815,9 +1815,9 @@ _render_char_body:
     ; --- Dispatch on shift value (0..7) ---
     ld a, c
     or a
-    jp z, .shift0
+    jr z, .shift0
     dec a
-    jp z, .shift1
+    jr z, .shift1
     dec a
     jp z, .shift2
     dec a
@@ -2220,7 +2220,7 @@ _scroll_up_vis:
     jr .scroll_row
 
 .su_clear:
-    jp _scroll_clear
+    jr _scroll_clear
 
 _scroll_row_ctr: db 0
 _scroll_last:    db 0
@@ -2616,7 +2616,7 @@ _clear_vp_row_a:
     ld e, a                     ; E = count
     ld a, b                     ; A = row
     ld b, e                     ; B = count
-    jp _blank_render_range
+    jr _blank_render_range
 
 _blank_render_range:
     ; In: A = absolute row, C = absolute start column, B = count
@@ -3570,7 +3570,7 @@ _lg_autoflip:
     cp b
     ret z
     ld a, b
-    jp _lg_set_page
+    jr _lg_set_page
 .laf_ok:
     ret
 
@@ -4234,7 +4234,7 @@ _stl_draw:
     ld b, '>'
     ld a, (scr_cols)
     dec a
-    jp _stl_mark
+    jr _stl_mark
 
 
 ; @proc _stl_mark

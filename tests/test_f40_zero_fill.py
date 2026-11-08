@@ -39,7 +39,7 @@ class ZeroFillWiring(unittest.TestCase):
         # The allocated block stays in HL for .wseq_have_block.
         tail = body[body.index("call zero_fill_block"):]
         self.assertIn(".wseq_alloc_nofill:", tail)
-        self.assertIn("jp .wseq_have_block", tail)
+        self.assertRegex(tail, r"j[pr] \.wseq_have_block")
 
     def test_zero_fill_block_covers_the_whole_block(self):
         text = source("src/bdos/bdos.zpa")

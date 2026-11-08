@@ -17,7 +17,7 @@ class ReadOnlyDelete(unittest.TestCase):
         # Match, then entry[9] bit 7 (the R/O attribute) must bail out.
         self.assertIn("ld de, 9", f19)
         self.assertIn("bit 7, a", f19)
-        self.assertIn("jp nz, .del_ro_err", f19)
+        self.assertRegex(f19, r"j[pr] nz, \.del_ro_err")
         self.assertIn(".del_ro_err:", f19)
         # Error mode decides between a return and the classic message.
         self.assertIn("call ro_error", f19)
@@ -27,7 +27,7 @@ class ReadOnlyDelete(unittest.TestCase):
         f23 = body(source("src/bdos/bdos.zpa"), "bf_f23:", "Random access helpers")
         self.assertIn("ld de, 9", f23)
         self.assertIn("bit 7, a", f23)
-        self.assertIn("jp nz, .ren_ro_err", f23)
+        self.assertRegex(f23, r"j[pr] nz, \.ren_ro_err")
         self.assertIn(".ren_ro_err:", f23)
         self.assertIn("call ro_error", f23)
 

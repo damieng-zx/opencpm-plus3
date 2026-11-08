@@ -1132,7 +1132,7 @@ xbios_handler:
     ld ix, (xbios_ret_ix)
     ld a, ixh
     cp 0xC0
-    jp c, .dri_not_ready          ; XDPB must be in common memory
+    jr c, .dri_not_ready          ; XDPB must be in common memory
     call motor_on
     ld a, (ix + XDPB_SIDES)
     cp 1
@@ -1591,7 +1591,7 @@ xbios_handler:
     ;   Out: HL = dd_results (count + result bytes)
     ; Only CP/M bank 1 (TPA) is supported; other banks return no data.
     call .dd_l_setup
-    jp c, .dd_l_no_xfer         ; unsupported bank: report no data
+    jr c, .dd_l_no_xfer         ; unsupported bank: report no data
     jr z, .ddlr_results         ; command sent, no data phase (e.g. READ ID)
 .ddlr_loop:
     call fdc_read_byte
@@ -2190,7 +2190,7 @@ xbios_handler:
     ld a, (ix + XDPB_PSH)         ; N
     ld hl, deblock_buf
     call fdc_format_track
-    jp nz, .ddf_fail
+    jr nz, .ddf_fail
     scf
     ret
 .ddf_fail:

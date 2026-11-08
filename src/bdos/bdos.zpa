@@ -286,7 +286,7 @@ bdos_efail:
     ld a, 0xFF
     ld l, a
     ld h, 0
-    jp bdos_ret
+    jr bdos_ret
 
 ; @proc bdos_eok
 ; @out   a
@@ -297,7 +297,7 @@ bdos_eok:
     xor a
     ld l, a
     ld h, a
-    jp bdos_ret
+    jr bdos_ret
 
 
 ; ==========================================================================
@@ -322,7 +322,7 @@ bdos_exit:
     ret                        ; back to multi_read/multi_write/F59
 .full:
     pop af
-    jp bdos_ret
+    jr bdos_ret
 
 ; @proc bdos_eok_x
 ; @out   a
@@ -333,7 +333,7 @@ bdos_eok_x:
     xor a
     ld l, a
     ld h, a
-    jp bdos_exit
+    jr bdos_exit
 
 ; @proc bdos_efail_x
 ; @out   a
@@ -344,7 +344,7 @@ bdos_efail_x:
     ld a, 0xFF
     ld l, a
     ld h, 0
-    jp bdos_exit
+    jr bdos_exit
 
 
 ; ==========================================================================
@@ -407,7 +407,7 @@ multi_read:
     ld l, 0xFF
 .mr_status:
     ld a, b
-    jp bdos_ret
+    jr bdos_ret
 
 ; @proc multi_write
 ; @param %fcb:u16 de
@@ -547,7 +547,7 @@ bdos_con_out:
     jp nz, con_out             ; a program is being fed: never page-pause
     ld a, (con_mode)
     and CON_MODE_PAGE
-    jp z, .tick                ; paging disabled → just count and emit
+    jr z, .tick                ; paging disabled → just count and emit
     ld a, (bdos_page_row)
     ld hl, scb_conpage
     cp (hl)                    ; A < conpage (page not full)?
@@ -715,11 +715,11 @@ bf_f06:
     pop bc
     ld a, e
     cp 0xFF
-    jp z, .input
+    jr z, .input
     cp 0xFE
-    jp z, .status
+    jr z, .status
     cp 0xFD
-    jp z, .wait
+    jr z, .wait
     ld c, e
     call con_out               ; direct I/O bypasses BDOS pagination
     jp bdos_ret
@@ -728,7 +728,7 @@ bf_f06:
     ld (bdos_page_row), a
     call con_status
     or a
-    jp z, .none
+    jr z, .none
     call con_in
     jp bdos_ret
 .none:
@@ -799,7 +799,7 @@ bf_f09:
     call bdos_con_out
     pop de
     inc de
-    jp .ploop
+    jr .ploop
 
 ; @proc bf_f10
 ; @param %buf:u16   de
@@ -821,21 +821,21 @@ bf_f10:
     call con_in
     pop bc
     cp 0x0D
-    jp z, .rd_done
+    jr z, .rd_done
     cp 0x08
-    jp z, .rd_bs
+    jr z, .rd_bs
     cp 0x7F
-    jp z, .rd_bs
+    jr z, .rd_bs
     cp 0x03
-    jp z, .rd_ctlc
+    jr z, .rd_ctlc
     cp 0x1B
-    jp z, .rd_esc
+    jr z, .rd_esc
     cp 0x20
-    jp c, .rd_loop
+    jr c, .rd_loop
     push af
     ld a, c
     cp b
-    jp nc, .rd_full
+    jr nc, .rd_full
     pop af
     push bc
     ld hl, (rdbuf_ptr)
@@ -852,14 +852,14 @@ bf_f10:
     ld c, a
     call con_out
     pop bc
-    jp .rd_loop
+    jr .rd_loop
 .rd_full:
     pop af
-    jp .rd_loop
+    jr .rd_loop
 .rd_bs:
     ld a, c
     or a
-    jp z, .rd_loop
+    jr z, .rd_loop
     dec c
     push bc
     ld c, 0x08
@@ -869,7 +869,7 @@ bf_f10:
     ld c, 0x08
     call con_out
     pop bc
-    jp .rd_loop
+    jr .rd_loop
 .rd_ctlc:
     push bc
     ld c, '^'
@@ -887,7 +887,7 @@ bf_f10:
     ld c, 0x1B
     call con_out
     pop bc
-    jp .rd_loop
+    jr .rd_loop
 .rd_done:
     ld hl, (rdbuf_ptr)
     inc hl
@@ -1084,7 +1084,7 @@ bf_f27:
     ; select, so the last file operation may belong to another drive.
     ld a, (cur_disk)
     call select_drive
-    jp c, .f27_err
+    jr c, .f27_err
     ld hl, (cached_alv)
     ld a, l
     jp bdos_ret
@@ -1113,10 +1113,10 @@ bf_f28:
     inc b
 .shift:
     dec b
-    jp z, .done
+    jr z, .done
     sla e
     rl d
-    jp .shift
+    jr .shift
 .done:
     ld hl, (ro_vec)
     ld a, l
@@ -1163,7 +1163,7 @@ bf_f30:
     call select_fcb_drive
     jp c, .f30_not_found       ; invalid drive → not found
     call is_fcb_readonly
-    jp nz, .f30_not_found      ; read-only → not found
+    jr nz, .f30_not_found      ; read-only → not found
 
     ; Scan directory for matching entries
     ld de, 0
@@ -1174,15 +1174,15 @@ bf_f30:
     call read_dir_entry
     pop bc
     pop de
-    jp c, .f30_done
+    jr c, .f30_done
 
     ; Only entries for the current user (0xE5 = deleted).
     ld a, (hl)
     cp 0xE5
-    jp z, .f30_next
+    jr z, .f30_next
     ld a, (cur_user)
     cp (hl)
-    jp nz, .f30_next
+    jr nz, .f30_next
 
     ; Match name (bytes 1-8, ignoring attribute bits)
     push de
@@ -1261,12 +1261,12 @@ bf_f30:
     pop de
 .f30_next:
     inc de
-    jp .f30_scan
+    jr .f30_scan
 
 .f30_done:
     ld a, b
     or a
-    jp z, .f30_not_found
+    jr z, .f30_not_found
     xor a
     ld l, a
     ld h, 0
@@ -1291,7 +1291,7 @@ bf_f31:
     ; Make sure cached_dpb belongs to cur_disk (F14 does not select).
     ld a, (cur_disk)
     call select_drive
-    jp c, .f31_err
+    jr c, .f31_err
     ld hl, (cached_dpb)
     ld a, l
     jp bdos_ret
@@ -1313,7 +1313,7 @@ bf_f32:
     pop bc
     ld a, e
     cp 0xFF
-    jp z, .get
+    jr z, .get
     and 0x0F
     ld (cur_user), a
     push af
@@ -1405,7 +1405,7 @@ select_drive:
     rr l
     djnz .shift
     bit 0, l
-    jp z, .do_login
+    jr z, .do_login
     ld e, 1                    ; Already logged in
 .do_login:
     push bc                    ; save drive in C — sel_disk clobbers BC on first-login
@@ -1438,10 +1438,10 @@ select_drive:
     inc b
 .shift2:
     dec b
-    jp z, .done_shift
+    jr z, .done_shift
     sla e
     rl d
-    jp .shift2
+    jr .shift2
 .done_shift:
     ld hl, (login_vec)
     ld a, l
@@ -1614,7 +1614,7 @@ is_fcb_readonly:
     call drive_ro_status
     or a
     ret z
-    jp ro_error
+    jr ro_error
 
 
 ; ==========================================================================
@@ -1686,7 +1686,7 @@ build_alv:
     ld d, 0                    ; Block counter
 .al_loop:
     rlc b                      ; Rotate AL0 left, bit 7 → carry
-    jp nc, .al_skip0
+    jr nc, .al_skip0
     ld h, 0
     ld l, d
     call set_alloc_bit
@@ -1694,11 +1694,11 @@ build_alv:
     inc d
     ld a, d
     cp 8
-    jp c, .al_loop
+    jr c, .al_loop
 
 .al1_loop:
     rlc c
-    jp nc, .al_skip1
+    jr nc, .al_skip1
     ld h, 0
     ld l, d
     call set_alloc_bit
@@ -1706,7 +1706,7 @@ build_alv:
     inc d
     ld a, d
     cp 16
-    jp c, .al1_loop
+    jr c, .al1_loop
 
     ; Scan directory entries and mark their blocks
     ld de, 0                   ; DE = directory entry index
@@ -1714,12 +1714,12 @@ build_alv:
     push de
     call read_dir_entry        ; Read entry DE into dir_buf, HL = entry addr
     pop de
-    jp c, .dir_done            ; Past end of directory
+    jr c, .dir_done            ; Past end of directory
 
     ; Check if entry is active (user != 0xE5)
     ld a, (hl)
     cp 0xE5
-    jp z, .dir_next
+    jr z, .dir_next
 
     ; Mark allocation blocks as used (8 or 16 slots, 8- or 16-bit each).
     push de
@@ -1751,7 +1751,7 @@ build_alv:
     inc hl                     ; HL = DRM+1 = total entries
     or a                       ; lint: ignore — clear carry for sbc, A value irrelevant
     sbc hl, de
-    jp nz, .dir_scan
+    jr nz, .dir_scan
 
 .dir_done:
     ret
@@ -1972,9 +1972,9 @@ bf_f19:
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call select_fcb_drive
-    jp c, .del_none            ; invalid drive → not found
+    jr c, .del_none            ; invalid drive → not found
     call is_fcb_readonly
-    jp nz, .del_none           ; read-only → not deleted
+    jr nz, .del_none           ; read-only → not deleted
 
     ld de, 0                   ; Directory entry index
     ld b, 0                    ; B = found count
@@ -1984,7 +1984,7 @@ bf_f19:
     call read_dir_entry        ; HL = entry, carry = past end
     pop bc
     pop de
-    jp c, .del_done
+    jr c, .del_done
 
     push de
     push bc
@@ -1996,7 +1996,7 @@ bf_f19:
     pop hl
     pop bc
     pop de
-    jp nz, .del_next
+    jr nz, .del_next
 
     ; A read-only file (bit 7 of the filetype byte, entry offset 9) may
     ; not be deleted.  CP/M reports "File R/O" here and leaves it alone.
@@ -2006,7 +2006,7 @@ bf_f19:
     ld a, (hl)
     pop hl
     bit 7, a
-    jp nz, .del_ro_err
+    jr nz, .del_ro_err
 
     ; Match — free all blocks and mark entry as deleted
     push de
@@ -2040,12 +2040,12 @@ bf_f19:
 
 .del_next:
     inc de
-    jp .del_scan
+    jr .del_scan
 
 .del_done:
     ld a, b
     or a
-    jp z, .del_none
+    jr z, .del_none
     xor a
     ld l, a
     ld h, 0
@@ -2115,8 +2115,8 @@ f20_body:
     ld b, a
     ld a, (ix + 15)            ; RC (record count in extent)
     cp b
-    jp z, .next_extent         ; CR == RC → try next extent
-    jp c, .next_extent
+    jr z, .next_extent         ; CR == RC → try next extent
+    jr c, .next_extent
 
 .do_read:
     ; Calculate which block within extent contains this record
@@ -2180,7 +2180,7 @@ f20_body:
 .next_ext_search:
     ld de, (search_pos)
     call read_dir_entry        ; HL = entry, carry = past end
-    jp c, .eof
+    jr c, .eof
 
     ; Filter: user byte 0xE5 (deleted) or != cur_user
     ld a, (hl)
@@ -2245,7 +2245,7 @@ f20_body:
     ld de, (search_pos)
     inc de
     ld (search_pos), de
-    jp .next_ext_search
+    jr .next_ext_search
 
 .eof:
     pop ix
@@ -2322,13 +2322,13 @@ bf_f21_core:
     jr z, .wseq_writable
     ld a, 2
     call ro_error
-    jp .wseq_ro
+    jr .wseq_ro
 .wseq_writable:
 
     ; If CR == 128 this extent is full — create a new extent first
     ld a, (ix + 32)            ; CR
     cp 128
-    jp z, .wseq_new_extent
+    jr z, .wseq_new_extent
 
 .wseq_do:
     ; Compute block_index = CR >> BSH
@@ -2349,7 +2349,7 @@ bf_f21_core:
     call get_fcb_block         ; HL = block number
     ld a, h
     or l
-    jp z, .wseq_alloc          ; Zero = unallocated, need a new block
+    jr z, .wseq_alloc          ; Zero = unallocated, need a new block
 
 .wseq_have_block:
     ; HL = block number; point the BIOS at this record
@@ -2359,7 +2359,7 @@ bf_f21_core:
     ld c, 0                    ; Write type: normal
     call disk_write
     or a
-    jp nz, .wseq_error
+    jr nz, .wseq_error
 
     ; RC = max(RC, CR+1): record count tracks how many records are in extent
     ld a, (ix + 32)            ; CR (current, before increment)
@@ -2367,7 +2367,7 @@ bf_f21_core:
     ld b, a
     ld a, (ix + 15)            ; RC
     cp b
-    jp nc, .wseq_no_rc         ; RC >= CR+1 already
+    jr nc, .wseq_no_rc         ; RC >= CR+1 already
     ld (ix + 15), b            ; RC = CR + 1
 .wseq_no_rc:
     inc (ix + 32)              ; CR++
@@ -2378,7 +2378,7 @@ bf_f21_core:
 .wseq_alloc:
     ; Slot map_idx is unallocated — allocate a block here.
     call find_free_block       ; HL = free block, carry = disk full
-    jp c, .wseq_diskfull
+    jr c, .wseq_diskfull
     push hl
     call set_alloc_bit         ; Mark block as used in ALV
     pop hl
@@ -2396,9 +2396,9 @@ bf_f21_core:
     call zero_fill_block       ; HL = block
     pop hl                     ; HL = block again
     or a
-    jp nz, .wseq_error         ; A = BIOS WRITE error code
+    jr nz, .wseq_error         ; A = BIOS WRITE error code
 .wseq_alloc_nofill:
-    jp .wseq_have_block        ; HL = block
+    jr .wseq_have_block        ; HL = block
 
 .wseq_full:
     ld a, 1                    ; Directory full
@@ -2419,7 +2419,7 @@ bf_f21_core:
 
 .wseq_error:
     cp 2                       ; BIOS WRITE: 2 = read-only disk
-    jp z, .wseq_ro
+    jr z, .wseq_ro
     jp bdos_efail_x
 
 .wseq_new_extent:
@@ -2434,12 +2434,12 @@ bf_f21_core:
     push de
     call read_dir_entry        ; HL = entry, carry = past end
     pop de
-    jp c, .wseq_full
+    jr c, .wseq_full
 
     push de
     ld a, (hl)
     cp 0xE5
-    jp nz, .wseq_ne_next
+    jr nz, .wseq_ne_next
 
     ; Found a free directory entry — initialise it as new extent
     push hl
@@ -2497,7 +2497,7 @@ bf_f21_core:
 .wseq_ne_next:
     pop de
     inc de
-    jp .wseq_ne_find
+    jr .wseq_ne_find
 
 ; ------------------------------------------------------------------
 ; @proc wseq_close_cur
@@ -2601,9 +2601,9 @@ bf_f22:
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call select_fcb_drive
-    jp c, .mk_full             ; invalid drive → error
+    jr c, .mk_full             ; invalid drive → error
     call is_fcb_readonly
-    jp nz, .mk_full            ; read-only → error
+    jr nz, .mk_full            ; read-only → error
 
     ; Scan directory for a free (E5h) entry
     ld de, 0
@@ -2611,12 +2611,12 @@ bf_f22:
     push de
     call read_dir_entry        ; HL = entry, carry = past end
     pop de
-    jp c, .mk_full
+    jr c, .mk_full
 
     push de
     ld a, (hl)
     cp 0xE5
-    jp nz, .mk_next
+    jr nz, .mk_next
 
     ; Found a free directory slot — initialise it
     push hl
@@ -2669,7 +2669,7 @@ bf_f22:
 .mk_next:
     pop de
     inc de
-    jp .mk_scan
+    jr .mk_scan
 
 .mk_full:
     ld a, 0xFF
@@ -2695,9 +2695,9 @@ bf_f23:
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call select_fcb_drive
-    jp c, .ren_none            ; invalid drive → not found
+    jr c, .ren_none            ; invalid drive → not found
     call is_fcb_readonly
-    jp nz, .ren_none           ; read-only → not renamed
+    jr nz, .ren_none           ; read-only → not renamed
 
     ; Scan directory for entries matching old name (bytes 1-11)
     ld de, 0
@@ -2708,7 +2708,7 @@ bf_f23:
     call read_dir_entry
     pop bc
     pop de
-    jp c, .ren_done
+    jr c, .ren_done
 
     push de
     push bc
@@ -2716,10 +2716,10 @@ bf_f23:
     ; Check user + old name (bytes 1-11)
     ld a, (hl)
     cp 0xE5
-    jp z, .ren_skip
+    jr z, .ren_skip
     ld a, (cur_user)
     cp (hl)
-    jp nz, .ren_skip
+    jr nz, .ren_skip
     ; Compare name bytes 1-11
     push hl
     inc hl
@@ -2730,7 +2730,7 @@ bf_f23:
 .ren_cmp:
     ld a, (de)
     cp '?'
-    jp z, .ren_cmp_ok
+    jr z, .ren_cmp_ok
     ld a, (hl)
     and 0x7F
     push bc
@@ -2738,12 +2738,12 @@ bf_f23:
     ld a, (de)
     cp b
     pop bc
-    jp nz, .ren_cmp_fail
+    jr nz, .ren_cmp_fail
 .ren_cmp_ok:
     inc hl
     inc de
     dec c
-    jp nz, .ren_cmp
+    jr nz, .ren_cmp
     pop hl                     ; HL = entry base
 
     ; A read-only file may not be renamed (filetype bit 7, entry offset 9).
@@ -2753,7 +2753,7 @@ bf_f23:
     ld a, (hl)
     pop hl
     bit 7, a
-    jp nz, .ren_ro_err
+    jr nz, .ren_ro_err
 
     ; Match — copy new name (FCB bytes 17-27) to entry bytes 1-11
     push hl                    ; save entry base
@@ -2774,7 +2774,7 @@ bf_f23:
     pop de
     inc b
     inc de
-    jp .ren_scan
+    jr .ren_scan
 
 .ren_cmp_fail:
     pop hl                     ; balance push hl from cmp setup
@@ -2783,12 +2783,12 @@ bf_f23:
     pop bc
     pop de
     inc de
-    jp .ren_scan
+    jr .ren_scan
 
 .ren_done:
     ld a, b
     or a
-    jp z, .ren_none
+    jr z, .ren_none
     xor a
     ld l, a
     ld h, 0
@@ -2829,7 +2829,7 @@ bf_f23:
 rand_to_seq:
     ld a, (ix + 35)            ; R2 (high byte)
     or a
-    jp nz, .rand_overflow
+    jr nz, .rand_overflow
     ld a, (ix + 34)            ; R1
     ld b, a
     ld a, (ix + 33)            ; R0
@@ -2915,7 +2915,7 @@ bf_f33:
     ld a, (de)
     and 0x7F                   ; mask FCB attribute bit too
     cp c
-    jp nz, .rdrand_cmp_fail
+    jr nz, .rdrand_cmp_fail
     inc hl
     inc de
     djnz .rdrand_cmp
@@ -2930,7 +2930,7 @@ bf_f33:
     ld b, a
     ld a, (ix + 12)            ; target EX
     cp b
-    jp nz, .rdrand_skip
+    jr nz, .rdrand_skip
 
     ; Found! Copy RC + allocation map to FCB
     push hl
@@ -2969,13 +2969,13 @@ bf_f33:
     call get_fcb_block         ; HL = block (8- or 16-bit slot)
     ld a, h
     or l
-    jp z, .rdrand_unwritten2
+    jr z, .rdrand_unwritten2
 
     call map_record
     call disk_read
     pop ix
     or a
-    jp nz, .rdrand_read_err
+    jr nz, .rdrand_read_err
     call writeback_fcb()
     xor a
     ld l, a
@@ -3035,14 +3035,14 @@ find_fcb_extent:
     ld de, (search_pos)
     push de                    ; save search position across read_dir_entry
     call read_dir_entry
-    jp c, .not_found_pop
+    jr c, .not_found_pop
     push hl                    ; save entry pointer
     ld a, (hl)
     cp 0xE5
-    jp z, .skip
+    jr z, .skip
     ld a, (cur_user)
     cp (hl)
-    jp nz, .skip
+    jr nz, .skip
 
     push hl                    ; save entry for the failure path
     inc hl                     ; HL = &entry[1]
@@ -3057,7 +3057,7 @@ find_fcb_extent:
     ld a, (hl)
     and 0x7F
     cp c
-    jp nz, .cmp_fail
+    jr nz, .cmp_fail
     inc hl
     inc de
     djnz .cmp
@@ -3066,7 +3066,7 @@ find_fcb_extent:
     ld b, a
     ld a, (ix + 12)
     cp b
-    jp nz, .cmp_fail
+    jr nz, .cmp_fail
 
     ; Found — HL = &entry[12].
     ld de, 3
@@ -3096,7 +3096,7 @@ find_fcb_extent:
     pop de                     ; discard search position
     inc de
     ld (search_pos), de
-    jp .loop
+    jr .loop
 .not_found_pop:
     pop de                     ; discard search position
 .not_found:
@@ -3194,19 +3194,19 @@ bf_f34:
 
     call rand_to_seq
     or a
-    jp nz, .wrrand_err
+    jr nz, .wrrand_err
 
     ; Look up the target extent; create it when the random record lies
     ; beyond the current end of file.  Without this the write below would
     ; use the current FCB's allocation map and corrupt an earlier extent.
     call select_fcb_drive
-    jp c, .wrrand_range
+    jr c, .wrrand_range
     call is_fcb_readonly
-    jp nz, .wrrand_ro
+    jr nz, .wrrand_ro
     call find_fcb_extent
     jr z, .wrrand_write
     call create_fcb_extent
-    jp c, .wrrand_full
+    jr c, .wrrand_full
 
 .wrrand_write:
     jp bf_f21_core
@@ -3252,7 +3252,7 @@ bf_f35:
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call select_fcb_drive
-    jp c, .fsz_bad             ; invalid drive
+    jr c, .fsz_bad             ; invalid drive
 
     ; Initialize result to 0
     ld (ix + 33), 0
@@ -3265,17 +3265,17 @@ bf_f35:
     push de
     call read_dir_entry
     pop de
-    jp c, .fsz_done
+    jr c, .fsz_done
 
     push de
     push hl
     ; Check user + name match
     ld a, (hl)
     cp 0xE5
-    jp z, .fsz_skip
+    jr z, .fsz_skip
     ld a, (cur_user)
     cp (hl)
-    jp nz, .fsz_skip
+    jr nz, .fsz_skip
 
     push hl
     inc hl
@@ -3289,7 +3289,7 @@ bf_f35:
     ld c, a
     ld a, (de)
     cp c
-    jp nz, .fsz_cmp_fail
+    jr nz, .fsz_cmp_fail
     inc hl
     inc de
     djnz .fsz_cmp
@@ -3333,7 +3333,7 @@ bf_f35:
     or a
     sbc hl, de
     add hl, de                 ; restore HL
-    jp c, .fsz_skip            ; HL < DE, keep current max
+    jr c, .fsz_skip            ; HL < DE, keep current max
     ; HL >= DE, update
     ld (ix + 33), l
     ld (ix + 34), h
@@ -3342,11 +3342,11 @@ bf_f35:
     pop hl
     pop de
     inc de
-    jp .fsz_scan
+    jr .fsz_scan
 
 .fsz_cmp_fail:
     pop hl
-    jp .fsz_skip
+    jr .fsz_skip
 
 .fsz_bad:
     ld a, 0xFF
@@ -3454,15 +3454,15 @@ bf_f40:
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
     call rand_to_seq
     or a
-    jp nz, .wrrand0_err
+    jr nz, .wrrand0_err
     call select_fcb_drive
-    jp c, .wrrand0_range
+    jr c, .wrrand0_range
     call is_fcb_readonly
-    jp nz, .wrrand0_ro
+    jr nz, .wrrand0_ro
     call find_fcb_extent
     jr z, .wrrand0_write
     call create_fcb_extent
-    jp c, .wrrand0_full
+    jr c, .wrrand0_full
 .wrrand0_write:
     ld a, 1
     ld (f40_zfill), a          ; bf_f21_core zero-fills the new block
@@ -3575,18 +3575,18 @@ div_hl_bc:
     ld l, e
     or a
     sbc hl, bc                 ; Try subtract divisor
-    jp c, .no_sub
+    jr c, .no_sub
     ld d, h
     ld e, l                    ; Keep subtracted remainder
     pop hl
     set 0, l                   ; Set quotient bit
     dec a
-    jp nz, .loop
+    jr nz, .loop
     ret
 .no_sub:
     pop hl
     dec a
-    jp nz, .loop
+    jr nz, .loop
     ret
 
 
@@ -3668,7 +3668,7 @@ bf_f46:
     cp 16
     jp nc, .f46_err
     call select_drive
-    jp c, .f46_err
+    jr c, .f46_err
 
     ; Scan ALV bits 0..DSM.  Bit 7 of the first byte is block 0.
     ld hl, (cached_dsm)
@@ -3974,7 +3974,7 @@ bf_f49:
     ; table, so the whole range 0x63+ is invalid.
     ld a, c
     cp 99
-    jp nc, .scb_bad
+    jr nc, .scb_bad
 
     ; Build the SCB value for this offset
     ld a, b
@@ -4650,7 +4650,7 @@ bf_f99:
 .p1_loop:
     ld de, (f99_pos)
     call read_dir_entry
-    jp c, .p1_done
+    jr c, .p1_done
     ex de, hl                   ; DE = entry
     call f99_match_de
     jr nz, .p1_next
@@ -4693,12 +4693,12 @@ bf_f99:
     ld de, (f99_size)
     ld a, h
     cp d
-    jp c, .p2_start
+    jr c, .p2_start
     jp nz, .f99_err
     ld a, l
     cp e
-    jp c, .p2_start
-    jp z, .p2_start
+    jr c, .p2_start
+    jr z, .p2_start
     jp .f99_err
 
     ; --- pass 2: cut the extents ---------------------------------------
@@ -4717,8 +4717,8 @@ bf_f99:
     ld de, (f99_target)
     ld a, h
     cp d
-    jp c, .p2_below
-    jp nz, .p2_above
+    jr c, .p2_below
+    jr nz, .p2_above
     ld a, l
     cp e
     jr c, .p2_below

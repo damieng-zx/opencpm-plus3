@@ -39,6 +39,9 @@ python3 tools\check_layout.py
 if errorlevel 1 goto :fail
 python3 tools\check_ccp.py
 if errorlevel 1 goto :fail
+:: JP instructions that could be JR fail the build
+python3 tools\jp2jr.py --check
+if errorlevel 1 goto :fail
 
 echo   Splitting system image...
 python3 tools\split_sys.py

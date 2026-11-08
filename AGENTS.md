@@ -272,6 +272,13 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `tools/split_sys.py` — Splits the raw BIOS blob into `CPM3.SYS` (head) and `CPM3C.SYS` (common stub)
 - `tools/mkfont64.py` — Builds `font64.bin` from the Compression `.ch8` (`--check` verifies the committed binary)
 - `tools/z80lint.py` — Parser-based Z80 linter (see **Linting**)
+- `tools/jp2jr.py` — Lists every `jp` in `CPM3.SYS`/`CPM3C.SYS` whose target
+  is within `jr` range (from `build/bios.lst`); `--fix` rewrites them in the
+  `.zpa` sources.  The build runs it with `--check`, so any candidate fails
+  the build; after `--fix`, rebuild and rerun until clean, since shrinking
+  code brings more targets into range.  It skips the BIOS
+  jump table, self-modified jumps, pinned common memory before
+  `ccp_run_prog`, and lines marked `; keep jp`
 
 ## Conventions
 

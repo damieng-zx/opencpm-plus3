@@ -464,7 +464,7 @@ class P2WriteReturnCodes(unittest.TestCase):
     def test_f21_disk_full_returns_2(self):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index(".wseq_alloc:"):text.index(".wseq_new_extent:")]
-        self.assertIn("jp c, .wseq_diskfull", body)
+        self.assertRegex(body, r"j[pr] c, \.wseq_diskfull")
         disk = body[body.index(".wseq_diskfull:"):body.index(".wseq_ret:")]
         self.assertIn("ld a, 2", disk)
 
@@ -511,7 +511,7 @@ class P2F49Bounds(unittest.TestCase):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index("bf_f49:"):text.index("scb_read_field:")]
         self.assertIn("cp 99", body)
-        self.assertIn("jp nc, .scb_bad", body)
+        self.assertRegex(body, r"j[pr] nc, \.scb_bad")
         self.assertIn("jp bdos_efail", body)
 
     def test_f48_and_unknown_f49_use_eok(self):
@@ -651,7 +651,7 @@ class P2WriteProtectDetection(unittest.TestCase):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index(".wseq_error:"):text.index(".wseq_new_extent:")]
         self.assertIn("cp 2", body)
-        self.assertIn("jp z, .wseq_ro", body)
+        self.assertRegex(body, r"j[pr] z, \.wseq_ro")
 
 
 class P2DiskChangeInvalidation(unittest.TestCase):

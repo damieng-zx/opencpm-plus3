@@ -1279,7 +1279,7 @@ find_free_block:
     or a
     sbc hl, bc
     pop hl
-    jp c, .full                ; past DSM
+    jr c, .full                ; past DSM
     srl d
     jr nz, .bit_loop
     inc hl
@@ -1297,7 +1297,7 @@ find_free_block:
     or a
     sbc hl, bc
     pop hl
-    jp nc, .byte_loop
+    jr nc, .byte_loop
 .full:
     scf
     ret
@@ -1330,8 +1330,8 @@ read_dir_entry:
     or a
     sbc hl, de
     pop de
-    jp z, .out_of_range
-    jp c, .out_of_range
+    jr z, .out_of_range
+    jr c, .out_of_range
 
     ; Directory sector = entry / 4 (4 entries per 128-byte sector)
     ; Offset within sector = (entry % 4) * 32
@@ -1366,7 +1366,7 @@ read_dir_entry:
     ; Read via BIOS
     call disk_read
     or a
-    jp nz, .read_error_dma
+    jr nz, .read_error_dma
 
     ; Cache is valid only after a successful read.
     pop hl                     ; Saved user DMA (pushed last)
@@ -1481,9 +1481,9 @@ bf_f17:
 
     ; Make sure drive is selected
     call select_fcb_drive
-    jp c, .f17_bad
+    jr c, .f17_bad
 
-    jp search_next_entry
+    jr search_next_entry
 
 .f17_bad:
     ld a, 0xFF
@@ -1515,7 +1515,7 @@ search_next_entry:
     push de
     call read_dir_entry        ; HL = entry, carry if past end
     pop de
-    jp c, .not_found
+    jr c, .not_found
 
     ; Compare entry with search FCB
     push de
@@ -1524,10 +1524,10 @@ search_next_entry:
     call match_fcb             ; Z = match
     pop hl
     pop de
-    jp z, .found
+    jr z, .found
 
     inc de
-    jp .loop
+    jr .loop
 
 .not_found:
     ; Return 0xFF = not found
@@ -1580,7 +1580,7 @@ match_fcb:
     ; should be considered for a normal directory match.
     ld a, (hl)
     cp 16
-    jp nc, .no_match           ; 16+ (labels, deleted, garbage) — skip
+    jr nc, .no_match           ; 16+ (labels, deleted, garbage) — skip
 
     push hl
     push de
@@ -1591,7 +1591,7 @@ match_fcb:
     ld c, a                    ; C = current user
     ld a, (hl)                 ; Entry user
     cp c
-    jp nz, .no_match_pop       ; Different user
+    jr nz, .no_match_pop       ; Different user
 
     ; Compare filename bytes 1-11 (8 name + 3 type)
     inc hl
@@ -1600,13 +1600,13 @@ match_fcb:
 .cmp_loop:
     ld a, (de)                 ; FCB char
     cp '?'
-    jp z, .cmp_next            ; Wildcard matches anything
+    jr z, .cmp_next            ; Wildcard matches anything
     and 0x7F                   ; Mask off attribute bit from FCB
     ld c, a
     ld a, (hl)                 ; Directory char
     and 0x7F                   ; Mask off attribute bit from directory
     cp c
-    jp nz, .no_match_pop
+    jr nz, .no_match_pop
 .cmp_next:
     inc hl
     inc de
@@ -1644,7 +1644,7 @@ bf_f15:
 
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call select_fcb_drive
-    jp c, .not_found           ; invalid drive → treat as "file not found"
+    jr c, .not_found           ; invalid drive → treat as "file not found"
 
     ; Search for the file in the directory
     pop de                     ; DE = fcb_buf
@@ -1658,7 +1658,7 @@ bf_f15:
     push de
     call read_dir_entry
     pop de
-    jp c, .not_found
+    jr c, .not_found
 
     push de
     push hl
@@ -1666,11 +1666,11 @@ bf_f15:
     call match_fcb
     pop hl
     pop de
-    jp z, .found
+    jr z, .found
 
     inc de
     ld (search_pos), de
-    jp .search
+    jr .search
 
 .not_found:
     pop de
@@ -1728,9 +1728,9 @@ bf_f16:
     ; Cache DPB/ALV for the FCB's drive — close_dir_update walks the
     ; directory using cached_*.
     call select_fcb_drive
-    jp c, .f16_err
+    jr c, .f16_err
     call is_fcb_readonly
-    jp nz, .f16_ro
+    jr nz, .f16_ro
 
     call flush_deblock         ; Flush any pending write data
     call close_dir_update
@@ -1765,19 +1765,19 @@ close_dir_update:
     push de
     call read_dir_entry        ; HL = ptr to 32-byte entry, carry = past end
     pop de
-    jp c, .cl_done
+    jr c, .cl_done
 
     push de
     push hl
     ; Check user number
     ld a, (hl)
     cp 0xE5
-    jp z, .cl_skip
+    jr z, .cl_skip
     ld a, (cur_user)
     ld c, a
     ld a, (hl)
     cp c
-    jp nz, .cl_skip
+    jr nz, .cl_skip
     ; Check filename bytes 1-11 (strip attribute bits from directory)
     push hl
     inc hl                     ; HL = &entry[1]
@@ -1792,7 +1792,7 @@ close_dir_update:
     ld a, (de)
     and 0x7F                   ; Mask FCB attribute bit too
     cp c
-    jp nz, .cl_name_fail
+    jr nz, .cl_name_fail
     inc hl
     inc de
     djnz .cl_name
@@ -1804,7 +1804,7 @@ close_dir_update:
     ld c, a
     ld a, (ix + 12)
     cp c
-    jp nz, .cl_skip_from_ex    ; EX mismatch — keep scanning
+    jr nz, .cl_skip_from_ex    ; EX mismatch — keep scanning
     ; Found the right entry — update RC and allocation map in-place
     ; HL = &entry[12], stack: [de_outer, hl_outer]
     ld de, 3
@@ -1836,7 +1836,7 @@ close_dir_update:
     pop hl                     ; Discard hl_outer
     pop de                     ; Restore entry index
     inc de
-    jp .cl_scan
+    jr .cl_scan
 
 .cl_done:
     ret
