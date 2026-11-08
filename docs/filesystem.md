@@ -22,7 +22,7 @@ CP/M does not concern itself directly with the physical geometry. Instead, it wo
 
 ### Reserved Tracks
 
-The first N tracks on the disk are **reserved** (also called "system tracks"). These are not part of the CP/M filesystem at all. On a bootable disk, the reserved tracks contain the boot sector and the loader. The BIOS and BDOS live in `CPM3.SYS` on the CP/M filesystem, and the common memory stub in `CPM3C.SYS` (both are read at cold boot); the CCP (`CCP.COM`), the fonts and the optional RAM disk image are ordinary files on the same disk. On a data-only disk, there may be no reserved tracks.
+The first N tracks on the disk are **reserved** (also called "system tracks"). These are not part of the CP/M filesystem at all. On a bootable disk, the reserved tracks contain the boot sector and the loader. The BIOS and BDOS live in `CPM3.SYS` on the CP/M filesystem, and the bank-5 screen code plus the common memory stub in `CPM3C.SYS` (both are read at cold boot); the CCP (`CCP.COM`), the fonts and the optional RAM disk image are ordinary files on the same disk. On a data-only disk, there may be no reserved tracks.
 
 The number of reserved tracks is specified by the **OFF** parameter in the Disk Parameter Block.
 

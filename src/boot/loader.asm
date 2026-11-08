@@ -127,10 +127,10 @@ SIDED       equ 0             ; single sided
     ld (LF_FLAGS), a
 .no_ccp:
 
-    ; --- CPM3C.SYS → bank 6 at 9C00 ---
-    ; The common stub is a separate file so CPM3.SYS (loaded at C000) can
-    ; use the whole bank-3 window instead of carrying the stub inside it.
-    ; The budget is the gap below the loader's hand-off flags at A860.
+    ; --- CPM3C.SYS → bank 5 at 62C0 ---
+    ; The bank-5 screen code and the common stub are a separate file so
+    ; CPM3.SYS (loaded at C000) can use the whole bank-3 window.  The screen
+    ; code stays where it lands; init copies the common stub to F600.
     ld hl, NAME_SYS2
     ld de, SYS2_STAGE
     ld bc, SYS2_BYTES
@@ -259,8 +259,8 @@ find_extent:
 ;
 ; The block map ends at the first zero slot and the file ends after its
 ; last extent, so a short file stops early.  The budget caps the transfer
-; where a staging area in bank 6 is smaller than a whole block (the
-; common stub); it is truncated down to whole 512-byte sectors so a
+; where a staging area is smaller than a whole block (a font, or the
+; top of bank 5 for CPM3C.SYS); it is truncated down to whole 512-byte sectors so a
 ; partial sector is never read past the target.
 ; ==========================================================================
 load_file:
@@ -415,12 +415,12 @@ font_table:
 ; Hand-off block for the OS: bank 6, outside the image.
 LF_FLAGS    equ 0xA860         ; bit 0=font51, 1=font32, 2=fid, 3=ccp, 4=font64
 LF_CCP_LEN  equ 0xA861         ; word: bytes staged at B000 (0 = no CCP)
-; Bank-6 staging for the common stub (CPM3C.SYS).  Must match SYS2_STAGE in
-; bios.zpa: the first runtime buffer starts at 9C00, and SYS2_BYTES end
-; before the loader's own flags at A860 and the row table at A890.
-SYS2_STAGE  equ 0x9C00
-SYS2_BLOCKS equ 3              ; 1K blocks staged by the +3 180K image
-SYS2_BYTES  equ 0xA860 - SYS2_STAGE
+; Bank-5 staging for CPM3C.SYS (the bank-5 screen code, then the common
+; stub).  Must match SYS2_STAGE in bios.zpa: the screen code runs where it
+; lands, just above the 24x80 buffer (5B00-62BF), and the budget runs to
+; the top of bank 5 (mapped at 4000-7FFF in this mode).
+SYS2_STAGE  equ 0x62C0
+SYS2_BYTES  equ 0x8000 - SYS2_STAGE
 
 
 ; ==========================================================================

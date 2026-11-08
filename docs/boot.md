@@ -75,12 +75,13 @@ DI not yet asserted.
 - Treats a file as missing when an extent's block map ends before the
   records its RC byte claims, so a truncated `CCP.COM` or `CPM3C.SYS` is
   reported instead of booting on whatever its first block holds.
-- Stages the common stub, `CPM3C.SYS`, in bank 6 at `9C00` (max 3K).  That
-  window is free at boot: `FONT64` ends at `9BFF` and the first runtime
-  buffer (`9C00`) only comes into use after `init` has copied the stub out.
+- Stages `CPM3C.SYS` in bank 5 at `62C0` (max 7K, to the top of bank 5).
+  The file is the bank-5 screen code followed by the common stub: the
+  screen code runs right where it lands, above the bitmap, attributes and
+  the 24x80 buffer (`5B00-62BF`), and `init` copies the stub out to `F600`.
   This file is **required**: a missing `CPM3C.SYS` stops the boot.  The
   transfer is capped in bytes and truncated down to whole 512-byte sectors,
-  because on a 2K-block disk the stub is smaller than one block.
+  so the last sector can never spill into bank 6 at `8000`.
 - Records what it staged in `LF_FLAGS`/`LF_CCP_LEN` in bank 6 (`A860h`),
   which survive the system-image copy into bank 4.
 - Finally finds `CPM3    SYS`, walks its allocation map to `BIOS_ADDR`, and
@@ -88,7 +89,7 @@ DI not yet asserted.
   head can use the whole `C000-FFFF` window (see *Image headroom* below).
 
 The head lands in **bank 3** at `C000-FFFF` because that's what mode 2 maps
-there; the common stub waits in bank 6.
+there; the common stub waits in bank 5 behind the screen code.
 
 ### Stage 3 — CPM3.SYS init (`src/bios/bios.zpa`)
 
@@ -97,12 +98,14 @@ real code into the right banks before jumping into bank 4.
 
 ```
    C000 --init--+
-                +--> LDIR  system_image        --> 0000 (bank 4 @ 0000-3FFF, mode 2)
-                +--> LDIR  SYS2_STAGE (9C00)   --> F600 (bank 3)
-                +--> jp cold_boot                 (bank 4)
+                +--> LDIR  system_image                --> 0000 (bank 4 @ 0000-3FFF, mode 2)
+                +--> LDIR  SYS2_STAGE + screen5 size   --> F600 (bank 3)
+                +--> jp cold_boot                         (bank 4)
 ```
 
-`SYS2_STAGE` is the bank-6 copy of `CPM3C.SYS`.  Bank 6 and bank 3 never
+`SYS2_STAGE` (`62C0`, bank 5) is where the loader put `CPM3C.SYS`.  Its
+first part is the bank-5 screen code, assembled for that address, so it
+needs no copy; the common stub follows it.  Bank 5 and bank 3 never
 overlap, so both copies are plain `LDIR`s with no direction or ordering
 constraints.  The system copy must still come first: it overwrites the
 loader in bank 4, so nothing may need the loader afterwards.
@@ -115,8 +118,9 @@ the loader deposited there. Common memory at F600+ is the live copy.
 
 `CPM3.SYS` (init + the bank-4 image) is loaded linearly at `C000`, so it
 must fit the 16K `C000-FFFF` window. The common stub is a **separate boot
-file**, `CPM3C.SYS`, staged in bank 6 and copied to `F600` by `init`; it has
-its own 2,560-byte window. `tools/check_layout.py` enforces both and
+file**, `CPM3C.SYS`, staged in bank 5 behind the bank-5 screen code and
+copied to `F600` by `init`; it has its own 2,560-byte window, and the screen
+code has `62C0-7FFF`. `tools/check_layout.py` enforces both and
 `tools/split_sys.py` cuts the two files out of the raw assembly output.
 The assembly uses `device none` because the raw blob (head + common) can
 run past `0xFFFF`; `build_memory_map.py` unwraps the listing's 16-bit
@@ -124,16 +128,37 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 15,561 | 16,384 (`C000-FFFF`) | 823   |
-| `CPM3C.SYS` common stub | 2,528  | 2,560 (`F600-FFFF`)  | 32    |
+| `CPM3.SYS` head         | 13,567 | 16,384 (`C000-FFFF`) | 2,817 |
+| common stub             | 2,528  | 2,560 (`F600-FFFF`)  | 32    |
+| bank-5 screen code      | 2,564  | 7,488 (`62C0-7FFF`)  | 4,924 |
+| `CPM3C.SYS` (both)      | 5,092  | 7,168 (staging)      | 2,076 |
 | loader (180K)           | 1,399  | 8,704 (17 sectors)   | 7,305 |
 | loader (720K, `-DDS720`)| 1,410  | 8,704 (17 sectors)   | 7,294 |
 
 The build prints both budgets on every run (`tools/check_layout.py`); the
 table is a snapshot.
 
-Total code capacity is `16,384 + 2,560 = 18,944` bytes, up from 16,058
-before the split. The old 326-byte ceiling is gone.
+Total code capacity is `16,384 + 2,560 = 18,944` bytes plus whatever
+screen code runs from bank 5, up from 16,058 before the split. The old
+326-byte ceiling is gone.
+
+The **bank-5 screen code** (`src/bios/screen5.zpa`) is every screen routine,
+or routine tail, that runs with the screen paged in: glyph rendering, the
+scroll and clear fast paths, the 24x80 buffer edits and the page flip.  The
+24x80 work in early November 2026 left the head with 243 bytes spare;
+moving this code freed about 2.5K.  Bank 4 keeps the entry points as short
+stubs (`call _page_in / jp X_b5`), so callers did not change, and the
+escape parser and cursor logic, which run paged out, stay in bank 4.  It
+costs no speed: banks 4-7 are all contended on the +2A/+3, so instruction
+fetches cost the same in either bank, and the stubs keep the single
+page-in/page-out pair each operation already had.  Two rules keep it safe,
+and `tools/check_bank5.py` fails the build on either: bank-4 code may only
+name a bank-5 label after `call _page_in`, and bank-5 code may only leave
+with a final `jp _page_out`, never by calling something that switches
+banks.  The smoke test checks that bank 5 still matches `CPM3C.SYS` byte
+for byte after the application tests.  Programs that page bank 5 in
+themselves (`SCR_RUN_ROUTINE` callers) must not write above `5AFF`, which
+was already true of the 24x80 buffer.
 
 The BDOS directory/FCB block (`find_free_block`, `read_dir_entry`,
 `write_dir_entry`, `dir_sector_to_bios`, `search_next_entry`, `match_fcb`,
@@ -183,10 +208,11 @@ Remaining strategies, in order:
    (74%), i.e. ~4.7K more free disk, and the decoder fits in the loader.
    It also costs one extra disk block today because the 1K-block split would
    move `CPM3C.SYS` past 2K.
-3. **Do not spend image space on screen RAM.** Bank 5 is only mapped while
-   the screen is paged in and has `5B00-7FFF` (9,472 bytes) free after the
-   bitmap/attributes. The 24×80 virtual buffer (1,920 bytes) belongs there,
-   not in bank 6 or the TPA, so 80-column mode costs code space only.
+3. **Use bank 5 for screen work.** Bank 5 is only mapped while the screen
+   is paged in and has `5B00-7FFF` (9,472 bytes) free after the
+   bitmap/attributes.  The 24×80 virtual buffer (1,920 bytes) lives there,
+   and so does the paged-in screen code (`62C0` up, about 4.9K still free).
+   New screen code that runs paged in belongs in `screen5.zpa`.
 
 The status line, the 24×80 virtual screen and the fast page flip are
 implemented; together they cost about 1,850 bytes.  The 24×80 buffer lives
@@ -276,8 +302,20 @@ and trampolines. `scb_tpa` is patched to `TPA_TOP` too.
 `B000-BFFF`. |
 | `F600-FFFF` | Common stub (bank 3). Same content as in mode 0 — that's the point. |
 
-During boot only, bank 6 `9C00-A7FF` also holds the staged `CPM3C.SYS`
-(common stub); `init` copies it to `F600` before those buffers are used.
+### Mode 2 (screen access — banks 4,5,6,3)
+
+| Range       | Contents                                                  |
+|-------------|-----------------------------------------------------------|
+| `0000-3FFF` | Bank 4, as in mode 3.                                     |
+| `4000-5AFF` | Bank 5. Screen bitmap and attributes.                     |
+| `5B00-62BF` | Bank 5. 24x80 logical screen (`LG_BUF`).                  |
+| `62C0-`     | Bank 5. Screen code that runs paged in (`screen5.zpa`), staged in place by the loader as the head of `CPM3C.SYS`; the stale boot copy of the common stub follows it. |
+| `8000-BFFF` | Bank 6, as in mode 3.                                     |
+| `F600-FFFF` | Common stub (bank 3).                                     |
+
+Mode 2 is entered only through `_page_in` and left through `_page_out`
+(both keep the motor bit), so screen code never runs while bank 7, the RAM
+disk, is mapped at `4000`.
 
 ---
 
@@ -424,8 +462,9 @@ wrote in `start_tpa`.
 | Inter-bank `MOVE` returns wrong data           | xmove banks set with `xmove_active=0`, or copying with stale `_ibm_*_bank` | `bios_xmove`, `interbank_move` |
 | Mallard BASIC hangs probing XBIOS              | Unknown XBIOS ID returns 0xFF; TE IDs are handled                           | `xbios_handler` in `bios.zpa` |
 | `SCR_RUN_ROUTINE` does nothing or crashes      | Routine is outside common memory; screen mode pages the TPA out             | put the routine in `C000-F5FF` |
-| Red border after green flicker (boot dies)     | `CPM3C.SYS` missing, or `SYS2_STAGE` != loader's `0x9C00`                    | `loader.asm` `SYS2_STAGE`, `bios.zpa` `SYS2_STAGE`, disk directory |
-| Boots but the prompt never appears             | Common stub staged too high (overwrote `LF_FLAGS`/row table) or not copied   | staging `9C00-A7FF`, `init` copy source |
+| Red border after green flicker (boot dies)     | `CPM3C.SYS` missing, or `SYS2_STAGE` != loader's `0x62C0`                    | `loader.asm` `SYS2_STAGE`, `bios.zpa` `SYS2_STAGE`, disk directory |
+| Boots but the prompt never appears             | Common stub not copied, or copied from the wrong offset in the staged file   | `init` copy source (`SYS2_STAGE + (common_image - screen5_image)`) |
+| Screen output crashes or corrupts drive C:     | Bank-5 code reached with bank 7 mapped, or it paged itself out mid-call     | `tools/check_bank5.py`, the `_b5` stubs in `screen.zpa` |
 
 ---
 

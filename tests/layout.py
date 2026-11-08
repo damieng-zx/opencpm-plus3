@@ -13,6 +13,12 @@ def source(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
+def screen_source() -> str:
+    """The screen driver: screen.zpa (bank 4) followed by screen5.zpa (the
+    routines that run from bank 5)."""
+    return source("src/bios/screen.zpa") + "\n" + source("src/bios/screen5.zpa")
+
+
 def labels() -> dict:
     """Return {label_name: Label} from build/bios.lst, or {} if not built."""
     listing = ROOT / "build" / "bios.lst"

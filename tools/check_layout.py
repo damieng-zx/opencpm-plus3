@@ -8,7 +8,9 @@ Runs after `build_memory_map.py` has parsed `build/bios.lst`. Checks that:
   - Critical sized buffers have the expected byte count.
   - Critical buffers sit inside the common memory range.
   - The CPM3.SYS head (init + bank-4 image) fits the C000..FFFF window.
-  - The CPM3C.SYS common stub fits its F600..FFFF window and boot staging.
+  - The common stub fits its F600..FFFF window.
+  - The bank-5 screen code fits 62C0..7FFF, and CPM3C.SYS (screen code +
+    common stub) fits its bank-5 boot staging area.
 
 These invariants are already asserted by sjasmplus at assembly time for the
 sizes that are statically known. This checker gives us a single place to look
@@ -73,7 +75,7 @@ def _first_active_source_line(path: Path, needle: str) -> int | None:
 def check(sections: list[Section]) -> list[str]:
     errors: list[str] = []
     labels = _labels_by_name(sections)
-    file_section, system_section, common_section = sections
+    file_section, system_section, common_section, screen5_section = sections
 
     # --- Section fit ---------------------------------------------------------
     system_end = labels.get("system_end")
@@ -97,20 +99,28 @@ def check(sections: list[Section]) -> list[str]:
     if bdos_stack_top and bdos_stack_top > 0x10000:
         errors.append(f"bdos_stack top 0x{bdos_stack_top:04X} exceeds 0xFFFF")
 
+    screen5_image = labels.get("screen5_image")
     common_image = labels.get("common_image")
     common_image_end = labels.get("common_image_end")
-    if common_image and common_image_end:
-        head = common_image.addr - file_section.base
+    if screen5_image and common_image and common_image_end:
+        head = screen5_image.addr - file_section.base
+        screen5 = common_image.addr - screen5_image.addr
         common = common_image_end.addr - common_image.addr
         if head > 0x10000 - file_section.base:
             errors.append(
                 f"CPM3.SYS head is {head} bytes - overflows the C000-FFFF window")
         if common > 0x10000 - common_section.base:
             errors.append(
-                f"CPM3C.SYS is {common} bytes - overflows the F600-FFFF window")
-        if common > 0xC00:
+                f"common stub is {common} bytes - overflows the F600-FFFF window")
+        if screen5 > screen5_section.limit - screen5_section.base:
             errors.append(
-                f"CPM3C.SYS is {common} bytes - overflows its 3-block boot staging area")
+                f"bank-5 screen code is {screen5} bytes - overflows 62C0-7FFF")
+        # The loader truncates its byte budget to whole 512-byte sectors.
+        budget = (screen5_section.limit - screen5_section.base) & ~0x1FF
+        if screen5 + common > budget:
+            errors.append(
+                f"CPM3C.SYS is {screen5 + common} bytes - overflows its "
+                f"{budget}-byte bank-5 staging area")
 
     # --- Buffer sizes (expected fixed layout) --------------------------------
     expected_sizes = [
@@ -152,7 +162,8 @@ def check_listing_invariants(sections: list[Section], listing: Path) -> list[str
     errors: list[str] = []
     labels = _labels_by_name(sections)
 
-    required = ("system_image", "system_image_end", "common_image", "common_image_end")
+    required = ("system_image", "system_image_end", "screen5_image",
+                "common_image", "common_image_end")
     if not all(name in labels for name in required):
         return errors
 
@@ -169,7 +180,7 @@ def check_listing_invariants(sections: list[Section], listing: Path) -> list[str
 def summary(sections: list[Section]) -> list[str]:
     rows: list[str] = []
     labels = _labels_by_name(sections)
-    file_section, system_section, common_section = sections
+    file_section, system_section, common_section, screen5_section = sections
 
     def _pct(used: int, total: int) -> str:
         return f"{used} / {total} bytes ({100.0 * used / total:.1f}%)"
@@ -180,12 +191,17 @@ def summary(sections: list[Section]) -> list[str]:
     if "bdos_stack_base" in labels:
         used = labels["bdos_stack_base"].addr + 128 - common_section.base
         rows.append(f"  common used: {_pct(used, 0x10000 - common_section.base)}")
-    if "common_image" in labels and "common_image_end" in labels:
-        head = labels["common_image"].addr - file_section.base
+    if all(n in labels for n in ("screen5_image", "common_image", "common_image_end")):
+        head = labels["screen5_image"].addr - file_section.base
+        screen5 = labels["common_image"].addr - labels["screen5_image"].addr
         common = labels["common_image_end"].addr - labels["common_image"].addr
+        budget = (screen5_section.limit - screen5_section.base) & ~0x1FF
         rows.append(f"  CPM3.SYS head: {head} bytes (C000..{file_section.base + head - 1:04X}),"
                     f" slack {0x10000 - file_section.base - head} bytes")
-        rows.append(f"  CPM3C.SYS: {common} bytes, slack {0x10000 - common_section.base - common} bytes")
+        rows.append(f"  common stub: {common} bytes, slack {0x10000 - common_section.base - common} bytes")
+        rows.append(f"  bank-5 screen code: {screen5} bytes ({screen5_section.base:04X}.."
+                    f"{screen5_section.base + screen5 - 1:04X}),"
+                    f" CPM3C.SYS {screen5 + common} of {budget} staging bytes")
     return rows
 
 

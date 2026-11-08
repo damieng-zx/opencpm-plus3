@@ -58,11 +58,16 @@ LF_CCP_LEN  equ 0xA861            ; loader: staged CCP length word (bank 6)
 CCP_MAX_BLK equ 4                 ; 1K blocks staged (the whole B000-BFFF window)
 JMP_OPCODE  equ 0xC3              ; JP instruction
 COMMON_BASE equ 0xF600            ; Start of bank-3 common memory
-; The loader stages CPM3C.SYS (the common stub) here, at the bottom of the
-; bank-6 window that the FDC/screen buffers use at run time.  It is free
-; during boot: FONT64 ends at 9BFF and the first runtime buffer is 9C00.
-SYS2_STAGE  equ 0x9C00            ; Staged common stub (bank 6)
-SYS2_BLOCKS equ 3                 ; 2.5K max: 9C00-A7FF
+; Screen code that only runs with bank 5 paged in lives in bank 5 itself,
+; above the bitmap, attributes and the 24x80 buffer (LG_BUF, 5B00-62BF).
+; See src/bios/screen5.zpa.
+SCREEN5_BASE equ 0x62C0           ; bank-5 screen code (mode 2, 4000-7FFF)
+; The loader stages CPM3C.SYS - the bank-5 screen code followed by the
+; common stub - straight into bank 5 at SCREEN5_BASE, so the screen code is
+; already in place and init only copies the common stub out to F600.  The
+; staging copy of the stub is dead once init has run.
+SYS2_STAGE  equ SCREEN5_BASE      ; Staged CPM3C.SYS (bank 5)
+SYS2_BYTES  equ 0x8000 - SYS2_STAGE ; loader budget (to the top of bank 5)
 TPA_TOP     equ COMMON_BASE       ; First byte of common memory = top of TPA
 RAMDISK_MSG equ 0x93E0            ; Status string embedded in RAMDISK.FID
 
@@ -92,13 +97,14 @@ _copy_sys_size equ system_image_end - system_image
     ldir
 
     ; ---- Install common memory stub at COMMON_BASE (bank 3) ----
-    ; The loader staged CPM3C.SYS in bank 6 at SYS2_STAGE.  Bank 6 is
-    ; mapped here (mode 2), bank 6 and bank 3 never overlap, so a plain
-    ; LDIR is safe and the old source/destination direction dance is gone.
+    ; The loader staged CPM3C.SYS in bank 5 at SYS2_STAGE: the bank-5 screen
+    ; code (already where it runs) and then the common stub.  Bank 5 is
+    ; mapped here (mode 2) and never overlaps bank 3, so a plain LDIR is
+    ; safe.
 _copy_common_size equ common_image_end - common_image
     assert _copy_common_size <= 0x10000 - COMMON_BASE, "common stub overflows bank 3"
-    assert _copy_common_size <= SYS2_BLOCKS * 1024, "common stub overflows its boot staging area"
-    ld hl, SYS2_STAGE
+    assert common_image_end - screen5_image <= (SYS2_BYTES & 0xFE00), "CPM3C.SYS overflows its bank-5 staging area"
+    ld hl, SYS2_STAGE + (common_image - screen5_image)
     ld de, COMMON_BASE
     ld bc, _copy_common_size
     ldir
@@ -2471,12 +2477,33 @@ system_end:
 system_image_end:
 
 ; ######################################################################
+; BANK-5 SCREEN CODE - Lives at SCREEN5_BASE (bank 5, screen mode only)
+; ######################################################################
+;
+; Routines that only ever run with the screen paged in (mode 2).  They are
+; the first part of CPM3C.SYS, which the loader stages at SCREEN5_BASE, so
+; nothing copies them at boot.  tools/check_bank5.py keeps bank-4 code from
+; reaching them unpaged and keeps them from paging themselves out.
+
+screen5_image:
+    PHASE SCREEN5_BASE
+
+    include "screen5.asm"
+
+screen5_end:
+    assert screen5_end <= 0x8000, "bank-5 screen code exceeds bank 5!"
+    assert SCREEN5_BASE >= LG_BUF + 80 * 24, "bank-5 screen code overlaps LG_BUF"
+
+    DEPHASE
+screen5_image_end:
+
+; ######################################################################
 ; COMMON MEMORY STUB - Lives at F600-FFFF (bank 3, always visible)
 ; ######################################################################
 ;
 ; Assembled with PHASE COMMON_BASE so labels resolve to common memory addresses.
-; The loader stages these bytes as CPM3C.SYS in bank 6; init copies them to
-; COMMON_BASE.
+; The loader stages these bytes in bank 5 as the tail of CPM3C.SYS; init
+; copies them to COMMON_BASE.
 
 common_image:
     PHASE COMMON_BASE
@@ -2491,8 +2518,9 @@ common_image_end:
 ; End of the assembled image
 ; ######################################################################
 
-; The raw output is split into CPM3.SYS (everything up to common_image) and
-; CPM3C.SYS (the common stub) by tools/split_sys.py.  CPM3.SYS is loaded at
-; C000, so the head still has to fit the bank-3 window; the common stub has
-; its own F600-FFFF window and staging space.
-    assert common_image <= 0x10000, "CPM3.SYS head overflows bank 3!"
+; The raw output is split into CPM3.SYS (everything up to screen5_image) and
+; CPM3C.SYS (bank-5 screen code + common stub) by tools/split_sys.py.
+; CPM3.SYS is loaded at C000, so the head still has to fit the bank-3 window;
+; the common stub has its own F600-FFFF window, and CPM3C.SYS as a whole has
+; to fit its bank-5 staging area.
+    assert screen5_image <= 0x10000, "CPM3.SYS head overflows bank 3!"

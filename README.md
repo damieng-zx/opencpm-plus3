@@ -223,7 +223,9 @@ for the API references.
 | F600–FFFF | Common stub (bank 3) | Common stub (bank 3) |
 
 `CPM3.SYS` is loaded at `C000` and can run past `F600` during the load; `init`
-copies it to bank 4, then copies the common stub from bank 6 to `F600–FFFF`.
+copies it to bank 4, then copies the common stub to `F600–FFFF` from
+`CPM3C.SYS`, which the loader stages in bank 5 at `62C0` behind the screen
+code that runs from there.
 
 Banking is controlled via port `0x1FFD`. See [AGENTS.md](AGENTS.md) for the
 full architecture and [docs/boot.md](docs/boot.md) for the boot sequence.

@@ -33,6 +33,7 @@ SOURCES = {
     'bios.asm': 'src/bios/bios.zpa',
     'common.asm': 'src/bios/common.zpa',
     'screen.asm': 'src/bios/screen.zpa',
+    'screen5.asm': 'src/bios/screen5.zpa',
     'keyboard.asm': 'src/bios/keyboard.zpa',
     'fdc765.asm': 'src/bios/fdc765.zpa',
     'bdos.asm': 'src/bdos/bdos.zpa',

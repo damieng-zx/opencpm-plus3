@@ -34,6 +34,7 @@ python3 tools/build_memory_map.py
 python3 tools/check_layout.py
 python3 tools/check_ccp.py
 python3 tools/jp2jr.py --check      # JP that could be JR fails the build
+python3 tools/check_bank5.py         # bank-5 screen code paging discipline
 
 echo "  Splitting system image..."
 python3 tools/split_sys.py

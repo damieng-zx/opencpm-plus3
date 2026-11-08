@@ -491,6 +491,23 @@ class Smoke:
         if clen != 4 * 1024:
             raise SmokeError(
                 f"loader LF_CCP_LEN {clen}, expected {4 * 1024}")
+        self.check_bank5_code("staged")
+
+    def check_bank5_code(self, when: str) -> None:
+        """The screen code that runs from bank 5 is the head of CPM3C.SYS,
+        staged in place by the loader.  It is pure code, so it must match
+        the file byte for byte for the whole run: a difference means
+        something wrote into it (or the loader staged it wrongly)."""
+        base = label_address("SCREEN5_BASE")
+        size = label_address("screen5_end") - base
+        want = (ROOT / "build" / "CPM3C.SYS").read_bytes()[:size]
+        got = self.memory(5, base, size)
+        if got != want:
+            bad = next(i for i, (a, b) in enumerate(zip(got, want)) if a != b)
+            raise SmokeError(
+                f"bank-5 screen code differs from CPM3C.SYS ({when}) at "
+                f"{base + bad:04X}: {got[bad]:02X}, expected {want[bad]:02X}")
+        self.log(f"bank-5 screen code intact ({when}, {size} bytes)")
 
     # Free bank-6 gaps.  Nothing should touch these once the loader has
     # handed over, so a sentinel across the app tests catches accidental
@@ -1535,7 +1552,8 @@ class Smoke:
             # Let the CCP take over again before typing the next command.
             self.mcp.call("run", {"frames": 2000})
             self.command("STAT B:CPM3.SYS", 800)
-            self.expect("SYSGEN CPM3.SYS", "CPM3.SYS", "16K", "1 file(s)")
+            sys_k = -(-(ROOT / "build" / "CPM3.SYS").stat().st_size // 1024)
+            self.expect("SYSGEN CPM3.SYS", "CPM3.SYS", f"{sys_k}K", "1 file(s)")
             self.command("STAT B:CCP.COM", 600)
             self.expect("SYSGEN CCP.COM", "CCP.COM", "4K", "1 file(s)")
             # The target was the distribution image: its own files survive.
@@ -1563,7 +1581,7 @@ class Smoke:
             self.check_boot_track(boot, drive=0)
             self.mcp.call("run", {"frames": 2000})
             self.command("STAT CPM3.SYS", 600)
-            self.expect("SYSGEN A: CPM3.SYS", "CPM3.SYS", "16K")
+            self.expect("SYSGEN A: CPM3.SYS", "CPM3.SYS", f"{sys_k}K")
         finally:
             self.dsk = old_dsk
             for path in (src, dst):
@@ -2390,6 +2408,7 @@ class Smoke:
         self.run_stat()
         # Check before the scratch-image format test reboots the machine.
         self.check_bank6_sentinels()
+        self.check_bank5_code("after the app tests")
         self.run_profile()
         self.run_submit_input()
         self.run_setdef()

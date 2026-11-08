@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 import unittest
 
-from .layout import ROOT, source
+from .layout import ROOT, source, screen_source
 
 TOOLS = str(ROOT / "tools")
 if TOOLS not in sys.path:
@@ -22,11 +22,11 @@ import mkfont64  # noqa: E402
 
 class ScreenDriver(unittest.TestCase):
     def test_buffer_holds_the_widest_mode(self):
-        text = source("src/bios/screen.zpa")
+        text = screen_source()
         self.assertIn("SCR_COLS_MAX equ 64", text)
 
     def test_set_cols_accepts_64_and_selects_its_font(self):
-        text = source("src/bios/screen.zpa")
+        text = screen_source()
         body = text[text.index("scr_set_cols:"):text.index("; Font data is NOT embedded")]
         self.assertIn("cp 64", body)
         self.assertIn("ld hl, 0x9400", body)
@@ -37,7 +37,7 @@ class ScreenDriver(unittest.TestCase):
         self.assertIn("and 0x10", body)
 
     def test_renderer_has_two_phases_and_no_spill(self):
-        text = source("src/bios/screen.zpa")
+        text = screen_source()
         body = text[text.index(".render64:"):text.index("; --- Shift-specialised")]
         # byte_col = col >> 1, phase = col & 1
         self.assertIn("srl a", body)
@@ -52,8 +52,8 @@ class ScreenDriver(unittest.TestCase):
         self.assertNotIn("inc l", body)
 
     def test_attributes_map_two_characters_per_cell(self):
-        text = source("src/bios/screen.zpa")
-        body = text[text.index("_put_attr:"):text.index("_do_cr:")]
+        text = screen_source()
+        body = text[text.index("_put_attr:"):text.index("_lg_cur_row_addr:")]
         self.assertIn(".pa_64:", body)
         self.assertIn("srl a", body[body.index(".pa_64:"):])
 
@@ -61,7 +61,7 @@ class ScreenDriver(unittest.TestCase):
         text = source("src/bios/fdc765.zpa")
         self.assertIn("deblock_buf equ 0x9C00", text)
         # 0xA500 would sit inside 64x24 = 1536 bytes of char_buffer at A000.
-        self.assertIn("char_buffer equ 0xA000", source("src/bios/screen.zpa"))
+        self.assertIn("char_buffer equ 0xA000", screen_source())
 
 
 class Loader(unittest.TestCase):
@@ -73,7 +73,7 @@ class Loader(unittest.TestCase):
         self.assertIn("db 2048 & 0xFF, 2048 >> 8, 0x10", loader)
         # The loader reports what it staged; the OS reads that byte.
         self.assertIn("LF_FLAGS    equ 0xA860", loader)
-        os_text = source("src/bios/screen.zpa")
+        os_text = screen_source()
         self.assertIn("ld a, (LF_FLAGS)", os_text)
         self.assertIn("and 0x10", os_text)
 

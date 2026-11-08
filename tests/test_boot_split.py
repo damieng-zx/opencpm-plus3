@@ -1,16 +1,22 @@
-"""Boot image split: CPM3.SYS (head) + CPM3C.SYS (common stub).
+"""Boot image split: CPM3.SYS (head) + CPM3C.SYS (bank-5 code + common stub).
 
 CPM3.SYS is loaded at C000 and is relocated by `init`, so it must fit the
 16K bank-3 window.  The common stub used to live in the tail of the same
-file, which capped the whole system at 16K; it is now staged separately in
-bank 6 and copied to F600.  These tests pin the split and the headroom.
+file, which capped the whole system at 16K; it is now a separate file.  That
+file also carries the screen code that runs from bank 5: the loader stages
+it in bank 5 at 62C0, where that code runs, and init copies the common stub
+from behind it to F600.  These tests pin the split and the headroom.
 """
 
 from __future__ import annotations
 
+import sys
 import unittest
+from collections import namedtuple
 
 from .layout import ROOT, labels, source
+
+Label = namedtuple("Label", "name addr")
 
 
 class BootSplit(unittest.TestCase):
@@ -29,26 +35,50 @@ class BootSplit(unittest.TestCase):
         table = labels()
         if not table:
             self.skipTest("build/bios.lst not present; run build.cmd first")
-        head = table["common_image"].addr - 0xC000
+        head = table["screen5_image"].addr - 0xC000
+        screen5 = table["common_image"].addr - table["screen5_image"].addr
         common = table["common_image_end"].addr - table["common_image"].addr
         self.assertGreater(head, 0)
+        self.assertGreater(screen5, 0)
         self.assertGreater(common, 0)
         self.assertLessEqual(head, 0x10000 - 0xC000)
         self.assertLessEqual(common, 0x10000 - 0xF600)
+        # CPM3C.SYS fits the loader's bank-5 budget, cut to whole sectors.
+        self.assertLessEqual(screen5 + common, (0x8000 - 0x62C0) & ~0x1FF)
+
+    def test_bank5_code_sits_above_the_24x80_buffer(self):
+        listing = ROOT / "build" / "bios.lst"
+        if not listing.exists():
+            self.skipTest("build/bios.lst not present; run build.cmd first")
+        tools = str(ROOT / "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import check_bank5  # type: ignore
+        _, addrs, sections = check_bank5.parse(listing)
+        table = {n: Label(n, addrs[n]) for n in addrs if sections[n] == "bank5"}
+        self.assertRegex(source("src/bios/screen.zpa"), r"LG_BUF\s+equ 0x5B00")
+        for name in ("_render_char", "_render_char_body", "_lg_flip_shift",
+                     "_scroll_up_b5", "_clear_screen_b5"):
+            self.assertIn(name, table)
+            self.assertGreaterEqual(table[name].addr, 0x5B00 + 80 * 24, name)
+            self.assertLess(table[name].addr, 0x8000, name)
 
     def test_loader_stages_the_common_boot_file(self):
         text = source("src/boot/loader.asm")
         self.assertIn('db "CPM3C   SYS"', text)
-        self.assertRegex(text, r"SYS2_STAGE\s+equ 0x9C00")
-        self.assertRegex(text, r"SYS2_BLOCKS\s+equ 3")
+        self.assertRegex(text, r"SYS2_STAGE\s+equ 0x62C0")
+        self.assertRegex(text, r"SYS2_BYTES\s+equ 0x8000 - SYS2_STAGE")
 
     def test_init_copies_from_the_staging_area(self):
         text = source("src/bios/bios.zpa")
-        self.assertRegex(text, r"SYS2_STAGE\s+equ 0x9C00")
-        self.assertRegex(text, r"ld hl, SYS2_STAGE")
+        self.assertRegex(text, r"SCREEN5_BASE\s+equ 0x62C0")
+        self.assertRegex(text, r"SYS2_STAGE\s+equ SCREEN5_BASE")
+        # The common stub sits behind the bank-5 code in the staged file.
+        self.assertRegex(text, r"ld hl, SYS2_STAGE \+ \(common_image - screen5_image\)")
         self.assertNotRegex(text, r"ld hl, common_image")
-        # 3 blocks fit below the loader's LF_FLAGS at A860 and row table A890.
-        self.assertLessEqual(0x9C00 + 3 * 1024, 0xA860)
+        # The bank-5 code is emitted between the head and the common stub.
+        self.assertLess(text.index("screen5_image:"), text.index("common_image:"))
+        self.assertGreater(text.index("screen5_image:"), text.index("system_image_end:"))
 
 
 class Headroom(unittest.TestCase):
@@ -70,7 +100,7 @@ class Headroom(unittest.TestCase):
         table = labels()
         if not table:
             self.skipTest("build/bios.lst not present; run build.cmd first")
-        head = table["common_image"].addr - 0xC000
+        head = table["screen5_image"].addr - 0xC000
         # The head is a static, load-time image: it never grows at runtime,
         # so this guard exists to catch runaway growth, not to leave room for
         # anything dynamic.  It was 256 before the CP/M 3 character-device
@@ -98,7 +128,6 @@ class Headroom(unittest.TestCase):
             self.skipTest("build/bios.lst not present; run build.cmd first")
         common = table["common_image_end"].addr - table["common_image"].addr
         self.assertLessEqual(common, 0x10000 - 0xF600)
-        self.assertLessEqual(common, 0xC00)          # 3-block staging area
 
 
 if __name__ == "__main__":

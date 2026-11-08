@@ -3,13 +3,14 @@
 
 The raw assembly output is one linear blob:
 
-    [ init ][ bank-4 system image ][ common stub ]
+    [ init ][ bank-4 system image ][ bank-5 screen code ][ common stub ]
 
-The stage-2 loader loads the common stub separately (to bank 6 at 9C00), so
-the blob is split at `common_image`:
+The stage-2 loader loads the last two as one file, to bank 5 at 62C0 where
+the screen code runs, so the blob is split at `screen5_image`:
 
-    build/CPM3.SYS   init + bank-4 image   (loaded at C000)
-    build/CPM3C.SYS  common stub           (loaded to bank 6, copied to F600)
+    build/CPM3.SYS   init + bank-4 image          (loaded at C000)
+    build/CPM3C.SYS  screen code + common stub    (loaded to bank 5; init
+                                                   copies the stub to F600)
 
 Splitting the file is what lets CPM3.SYS use the whole C000-FFFF window: the
 common stub no longer has to be staged inside it.  See docs/boot.md.
@@ -43,13 +44,13 @@ def main(argv: list[str]) -> int:
 
     sections = parse_listing(args.lst)
     labels = {label.name: label.addr for label in sections[0].labels}
-    for name in ("common_image", "common_image_end"):
+    for name in ("screen5_image", "common_image", "common_image_end"):
         if name not in labels:
             print(f"error: {name} not found in {args.lst}", file=sys.stderr)
             return 2
 
-    head_size = labels["common_image"] - FILE_BASE
-    common_size = labels["common_image_end"] - labels["common_image"]
+    head_size = labels["screen5_image"] - FILE_BASE
+    common_size = labels["common_image_end"] - labels["screen5_image"]
     data = args.src.read_bytes()
 
     if head_size <= 0 or common_size <= 0:
@@ -68,7 +69,7 @@ def main(argv: list[str]) -> int:
     args.head.write_bytes(data[:head_size])
     args.common.write_bytes(data[head_size:])
     print(f"  CPM3.SYS:  {head_size} bytes (C000..{FILE_BASE + head_size - 1:04X})")
-    print(f"  CPM3C.SYS: {common_size} bytes (common stub)")
+    print(f"  CPM3C.SYS: {common_size} bytes (bank-5 screen code + common stub)")
     return 0
 
 

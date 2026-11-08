@@ -7,6 +7,7 @@ top-level label with its logical address. Groups them into sections:
   - Init           : physical file addresses before the first PHASE
   - System bank 4  : PHASE 0x0000 .. DEPHASE (logical 0x0000..0x3FFF)
   - Common stub    : PHASE 0xF600 .. DEPHASE (logical 0xF600..0xFFFF)
+  - Screen bank 5  : PHASE SCREEN5_BASE .. DEPHASE (logical 0x62C0..0x7FFF)
   - Image tail     : physical addresses after the last DEPHASE
 
 Each section is printed with label, logical address, span-to-next-label,
@@ -29,6 +30,9 @@ from pathlib import Path
 LINE_RE = re.compile(r"^\s*\d+\+*\s+([0-9A-Fa-f]{4,8})\b")
 LABEL_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):")
 SOURCE_COL = 24
+# Bank-5 screen code (SCREEN5_BASE in bios.zpa): above the bitmap, the
+# attributes and the 24x80 buffer, up to the top of bank 5.
+SCREEN5_BASE = 0x62C0
 
 
 @dataclass
@@ -60,6 +64,8 @@ def _match_directive(rest: str) -> tuple[str, int | None] | None:
         except ValueError:
             if num.upper() == "COMMON_BASE":
                 base = 0xF600
+            elif num.upper() == "SCREEN5_BASE":
+                base = SCREEN5_BASE
             else:
                 return None
         return ("phase", base)
@@ -69,17 +75,19 @@ def _match_directive(rest: str) -> tuple[str, int | None] | None:
 
 
 def parse_listing(path: Path) -> list[Section]:
-    """Return [file, system, common] sections from a bios.lst.
+    """Return [file, system, common, screen5] sections from a bios.lst.
 
     - file:   physical raw blob layout (split into CPM3.SYS + CPM3C.SYS)
     - system: PHASE 0x0000 block (bank 4 runtime labels)
     - common: PHASE 0xF600 block (common memory stub runtime labels)
+    - screen5: PHASE SCREEN5_BASE block (bank-5 screen code)
     """
     # The raw blob now runs past 0xFFFF because the common stub is split
     # into CPM3C.SYS after assembly (tools/split_sys.py).  Keep the labels.
     file_section = Section("CPM3.SYS file layout", base=0xC000, limit=0x20000, labels=[])
     system_section = Section("System bank 4", base=0x0000, limit=0x4000, labels=[])
     common_section = Section("Common memory", base=0xF600, limit=0x10000, labels=[])
+    screen5_section = Section("Screen bank 5", base=SCREEN5_BASE, limit=0x8000, labels=[])
 
     section_stack: list[Section] = [file_section]
     file_wrap = 0
@@ -102,6 +110,8 @@ def parse_listing(path: Path) -> list[Section]:
                     section_stack.append(system_section)
                 elif base == 0xF600:
                     section_stack.append(common_section)
+                elif base == SCREEN5_BASE:
+                    section_stack.append(screen5_section)
                 else:
                     raise SystemExit(f"Unexpected PHASE base 0x{base:04X}")
             else:  # dephase
@@ -135,7 +145,7 @@ def parse_listing(path: Path) -> list[Section]:
             continue
         current.labels.append(Label(name=name, addr=addr, section=current.name, file_line=0))
 
-    return [file_section, system_section, common_section]
+    return [file_section, system_section, common_section, screen5_section]
 
 
 def _format_section(section: Section) -> list[str]:
