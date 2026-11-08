@@ -142,6 +142,15 @@ lg_mode:     equ 0xA8DD
 lg_sn:       equ 0xA8DE
 LG_BUF       equ 0x5B00         ; 80*24 bytes in bank 5, after the attributes
 
+; --- Status-line clock (bank 6, outside the image) ---
+; The status row shows "HH:MM" from scb_minute when the status line is on.
+; clk_shown is the minute last drawn (0xFFFF = nothing yet), so the tick is
+; a 16-bit compare and the row is only re-rendered when it changes.
+clk_shown:   equ 0xA8E0
+clk_text:    equ 0xA8E2         ; 5 bytes: "HH:MM"
+clk_col:     equ 0xA8E7         ; first column of the clock on row 23
+clk_i:       equ 0xA8E8         ; loop index while rendering it
+
 ; --- XBIOS colour state ---
 scr_ink:      db 7             ; Ink colour 0-7 (Spectrum GRB)
 scr_paper:    db 1             ; Paper colour 0-7
@@ -2687,12 +2696,101 @@ _lg_flip_go:
 
 
 ; ==========================================================================
-; Status line drawing (row 23) and 80-column page markers
+; Status-line clock (row 23)
 ; ==========================================================================
-; @proc _stl_draw
-;   Blank the status row and, in 24x80 mode with the status line on,
-;   place '<' when text is hidden to the left and '>' when it is hidden
-;   to the right.
+; The status row shows HH:MM from the software clock the ISR keeps in
+; scb_minute (minutes since midnight).  The machine has no RTC, so this is
+; elapsed time since cold boot, seeded by DATE/SET if the user sets it.
+;
+; _clk_tick is cheap to call from the console paths: when the status line
+; is off it is two instructions, and when it is on but the minute has not
+; changed it is a 16-bit compare.  It preserves every register so callers
+; that promise not to clobber (scr_status, kbd_status) keep that promise.
+;
+; @proc _clk_tick
+;   Redraw the status-row clock if the minute changed.
+; @clobbers
+; @end
+_clk_tick:
+    push af
+    ld a, (stl_on)
+    or a
+    jr z, .tick_out
+    push bc
+    push de
+    push hl
+    push ix
+    ld hl, (scb_minute)
+    ld de, (clk_shown)
+    or a                        ; clear carry for the compare
+    sbc hl, de
+    jr z, .tick_keep
+    call _clk_draw
+.tick_keep:
+    pop ix
+    pop hl
+    pop de
+    pop bc
+.tick_out:
+    pop af
+    ret
+
+
+; @proc _clk_draw
+;   Build "HH:MM" from scb_minute and paint it on the status row.
+; @clobbers af,bc,de,hl,ix
+; @end
+_clk_draw:
+    ld hl, (scb_minute)
+    ld (clk_shown), hl
+    call div_hl_60              ; A = hour 0-23, L = minute 0-59
+    ld c, l                     ; C = minute
+    ld de, clk_text
+    call _clk_two               ; hour digits, DE += 2
+    ld a, ':'
+    ld (de), a
+    inc de
+    ld a, c
+    call _clk_two               ; minute digits, DE += 2
+
+    ; Right-align on the row, leaving the last cell for the '>' marker.
+    ld a, (scr_cols)
+    sub 6
+    ld (clk_col), a
+    call _page_in
+    jp _clk_draw_b5
+
+
+; @proc _clk_two
+;   Write A (0-99) as two decimal digits at DE, advancing DE.
+; @param %val:u8  a
+; @param %dst:u16 de
+; @out   de
+; @clobbers af,b,de
+; @end
+_clk_two:
+    ld b, 0
+.tens:
+    cp 10
+    jr c, .units
+    sub 10
+    inc b
+    jr .tens
+.units:
+    push af
+    ld a, b
+    add a, '0'
+    ld (de), a
+    inc de
+    pop af
+    add a, '0'
+    ld (de), a
+    inc de
+    ret
+
+
+; ==========================================================================
+; _stl_draw - Blank the status row, then draw what belongs on it
 ; @clobbers af,bc,de,hl,ix
 ; @end
 _stl_draw:
@@ -2705,6 +2803,7 @@ _stl_draw:
     ld a, (stl_on)
     or a
     ret z
+    call _clk_draw
     ld a, (mode80)
     or a
     ret z

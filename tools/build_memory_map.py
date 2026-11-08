@@ -136,10 +136,13 @@ def parse_listing(path: Path) -> list[Section]:
             # The raw blob can run past 0xFFFF (the common stub is split
             # out); the listing wraps those addresses modulo 64K.  Labels
             # are monotonic, so a lower address means another 0x10000 chunk.
+            # Compare the *raw* addresses: file_last is unwrapped, so using
+            # it here would count a second wrap for every label once the
+            # blob passes 64K.
             if file_last >= 0 and addr < file_last:
                 file_wrap += 0x10000
-            addr += file_wrap
             file_last = addr
+            addr += file_wrap
         if not (current.base <= addr < current.limit):
             # An EQU or alias outside this section's address window.
             continue

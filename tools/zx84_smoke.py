@@ -456,6 +456,88 @@ class Smoke:
         if self.memory(4, self.scr_cols, 1)[0] != 51:
             raise SmokeError("ESC tests left the screen at the wrong width")
 
+        self.check_status_clock()
+
+    def check_status_clock(self) -> None:
+        """The status row shows HH:MM from scb_minute, right-aligned.
+
+        The machine has no RTC, so the time is the software clock the ISR
+        keeps; writing scb_minute and polling the keyboard (which calls
+        _clk_tick) must show the new time within a frame.
+        """
+        self.log("status-line clock")
+        minute_addr = label_address("scb_minute")
+        clk_col = label_address("clk_col")
+
+        def showed(value: int) -> bytes:
+            self.mcp.call("write_memory", {
+                "address": "%04X" % minute_addr,
+                "hex_bytes": "%02X%02X" % (value & 0xFF, value >> 8),
+                "bank": 3})
+            self.mcp.call("run", {"frames": 120})
+            cols = self.memory(4, self.scr_cols, 1)[0]
+            data = self.memory(self.cb_bank, self.cb, cols * 24)
+            return bytes(data[23 * cols:24 * cols])
+
+        # Off at cold boot, so nothing may appear until ESC 1.
+        if self.memory(6, label_address("stl_on"), 1)[0] != 0:
+            raise SmokeError("the status line is on at cold boot")
+
+        self.esc("1")
+        self.finish_prompt()
+        if self.memory(6, label_address("stl_on"), 1)[0] != 1:
+            raise SmokeError("ESC 1 did not enable the status line")
+
+        for minute, want in ((0, "00:00"), (59, "00:59"), (60, "01:00"),
+                             (725, "12:05"), (1439, "23:59")):
+            row = showed(minute)
+            if want.encode() not in row:
+                raise SmokeError(
+                    f"clock at minute {minute} should show {want}: {row!r}")
+            if row.rstrip().endswith(want.encode()) is False:
+                raise SmokeError(
+                    f"clock is not right-aligned at minute {minute}: {row!r}")
+
+        # The right-hand page marker shares the last cell, so the clock has
+        # to stop one short of it in 24x80.
+        self.command("SET24X80 ON", 900)
+        row = showed(725)
+        cols = self.memory(4, self.scr_cols, 1)[0]
+        if row[cols - 1:cols] != b">":
+            raise SmokeError(
+                f"24x80 page marker missing from the status row: {row!r}")
+        if not row.rstrip().endswith(b"12:05>"):
+            raise SmokeError(
+                f"clock and marker overlap in 24x80: {row!r}")
+        self.command("SET24X80 OFF", 900)
+
+        # Every width must keep it on the row.  ESC 3 n is 32/51 columns and
+        # the 24x80 mode; 64 columns comes from SCREEN.COM.
+        for esc, cols in (("30", 32), ("31", 51)):
+            self.esc(esc)
+            self.finish_prompt()
+            row = showed(725)
+            if b"12:05" not in row:
+                raise SmokeError(f"clock missing at {cols} columns: {row!r}")
+            if len(row) != cols:
+                raise SmokeError(
+                    f"status row is {len(row)} cells at {cols} columns")
+        self.command("SCREEN 64", 900)
+        row = showed(725)
+        if b"12:05" not in row or len(row) != 64:
+            raise SmokeError(f"clock missing at 64 columns: {row!r}")
+        self.command("SCREEN 51", 900)
+
+        self.esc("0")
+        self.finish_prompt()
+        if self.memory(6, label_address("stl_on"), 1)[0] != 0:
+            raise SmokeError("ESC 0 did not disable the status line")
+        row = showed(725)
+        if b"12:05" in row:
+            raise SmokeError(f"clock still drawn with the status line off: {row!r}")
+        if self.memory(6, clk_col, 1)[0] == 0:
+            raise SmokeError("clk_col was not recorded")
+
     def boot(self) -> None:
         self.log(f"booting {self.dsk}")
         self.mcp.call("model", {"target": "zx128kplus3"})
@@ -516,8 +598,11 @@ class Smoke:
     # around it.
     # A880-A881 is f111_addr, A890-A8BF is the loader-staged row table and
     # A8C0 is the status-line flag, so the old A870-A8FF gap is split.
+    # A8E0-A8E8 is the status-line clock's state (clk_shown, clk_text,
+    # clk_col, clk_i), which the clock rewrites twice a minute, so the
+    # sentinel starts after it.
     BANK6_GAPS = ((0xA6FC, 4), (0xA83D, 3), (0xA870, 0x10),
-                  (0xA882, 0x0E), (0xA8E0, 0x20), (0xADA4, 0x25C))
+                  (0xA882, 0x0E), (0xA8E9, 0x17), (0xADA4, 0x25C))
 
     def run_bank6_sentinels(self) -> None:
         self.sentinels: list[tuple[int, bytes]] = []

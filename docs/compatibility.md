@@ -53,7 +53,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 |---|---|---|
 | **WordStar 3.0 display** | The default run still wraps at 51 columns, but `wordstar30_80` enters `SET24X80` first: the no-file menu fits 80 columns and EXTEND+Enter shows the right half. Visual 200 escape codes leave artifacts at the line starts. | The original crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: terminal escape handling. |
 | **Turbo Pascal display** | The default run wraps; `turbo3_80` fits the IDE in 80 columns. Kaypro terminal escapes leave stray `1` characters in the buffer. | 24x80 solves the width; the remaining work is the Kaypro terminal escape set. |
-| **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | Not a gap to close: `CLOCK.FID` and `SERIAL.FID` are built for Locomotive's private common-memory ABI (they `CALL` fixed addresses such as `FF04`/`FF05`/`FF08`/`FF09`, which land inside this system's `close_dir_update`) and carry a different header format, so loading them would mean reserving those addresses and reimplementing an undocumented interface. A native status-line clock would use `scb_date`/`scb_minute`/`scb_sec`, which the ISR already maintains. |
+| **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The FID is not loaded, and is not a gap to close: `CLOCK.FID` and `SERIAL.FID` are built for Locomotive's private common-memory ABI (they `CALL` fixed addresses such as `FF04`/`FF05`/`FF08`/`FF09`, which land inside this system's `close_dir_update`) and carry a different header format, so loading them would mean reserving those addresses and reimplementing an undocumented interface. The status line now shows `HH:MM` natively instead (see `docs/API.md`, *Status line*), from the `scb_date`/`scb_minute`/`scb_sec` the ISR maintains. |
 | **ZSID / SID / DDT breakpoints** | `G` with a stop address (and `T`/`U` tracing) stops at a random address inside the program instead of at the breakpoint, and a long ZSID command such as a large `F` fill is cut short the same way. Loading, short dumps and `G0` work. | Not fixable without breaking +3 compatibility; see [Debuggers and RST 7](#debuggers-and-rst-7). Automated as `zsid_break` (known issue). |
 | **Sargon (chess)** | Prints nothing after the command line; the CPU spins polling port `2FFD`. | Copy protection. The program issues raw uPD765 `READ DATA` commands against the boot track (`C=1`, `R=1..N`) and waits for the original disk's sector IDs, which never match, so it never reaches its title screen. Not a BIOS bug: no CP/M file or console call is involved. |
 
@@ -216,8 +216,8 @@ It does not help WordStar, whose 80-column layout is unchanged.
 
 - [ ] Kaypro 2X application bundle
 - [ ] Mallard BASIC / LocoScript CP/M suite
-- [x] +3 3CLCK clock - extractor/CLOCKCLR work; the clock FID itself needs
-  Locomotive's private ABI, so a native status-line clock is the plan instead
+- [x] +3 3CLCK clock - extractor/CLOCKCLR work; the FID itself needs
+  Locomotive's private ABI, but the status line shows the time natively
 - [ ] +3 3SAVR screensaver
 - [ ] +3 P3CPM utilities
 - [ ] +3 P3GIF viewer

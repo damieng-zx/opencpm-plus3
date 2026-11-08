@@ -239,6 +239,11 @@ kbd_getchar:
 ; @clobbers af,bc,de,hl
 ; @end
 _kbd_scan:
+    ; Keep the status-line clock current.  _clk_tick preserves every
+    ; register, and does nothing at all unless the status line is on and
+    ; the minute changed.  The CCP blocks in kbd_getchar, whose wait loop
+    ; calls this once per frame, so the row also ticks while idle.
+    call _clk_tick
     ; Track frame changes, but always scan the matrix. BIOS CONST users
     ; such as BBC BASIC may poll from TPA so briefly that no system-mode
     ; interrupt lands inside the BIOS call; skipping same-tick scans would

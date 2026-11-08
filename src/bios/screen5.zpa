@@ -2066,6 +2066,52 @@ _lg_flip_shift:
     jp _page_out
 
 
+; @proc _clk_draw_b5
+;   Paint clk_text on row 23 from clk_col.  Screen paged in; returns
+;   paged out.
+; @clobbers af,bc,de,hl,ix
+; @end
+_clk_draw_b5:
+    ; Write the five cells into char_buffer first, then render them.
+    ld a, SCR_ROWS - 1
+    call _row_buf_addr          ; HL = row 23 in char_buffer
+    ld a, (clk_col)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld de, clk_text
+    ld b, 5
+.lb_copy:
+    ld a, (de)
+    ld (hl), a
+    inc hl
+    inc de
+    djnz .lb_copy
+
+    xor a
+    ld (clk_i), a
+.lb_render:
+    ld a, (clk_i)
+    ld e, a
+    ld d, 0
+    ld hl, clk_text
+    add hl, de
+    ld a, (hl)
+    ld b, a                     ; B = character
+    ld a, (clk_col)
+    add a, e                    ; C = clk_col + i
+    ld c, a
+    ld a, SCR_ROWS - 1
+    ld d, a                     ; D = row 23
+    call _render_char
+    ld a, (clk_i)
+    inc a
+    ld (clk_i), a
+    cp 5
+    jr nz, .lb_render
+    jp _page_out
+
+
 ; @proc _stl_mark_b5
 ;   Body of _stl_mark (lg_vis/lg_char set).  Screen paged in; returns
 ;   paged out.

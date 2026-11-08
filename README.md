@@ -31,9 +31,10 @@ Beyond that, this system offers:
 - **Display** — 32, 51 and 64 columns plus the paged 24x80 virtual screen; see
   [Screen modes](#screen-modes).
 - **Status line**: `ESC 0`/`ESC 1` toggle the bottom row for BIOS messages
-  (23 text rows while it is on).  In 24x80 it carries the `<`/`>`
-  hidden-column markers; `TE_STL_ASK` reports it as disabled in 24x80,
-  as the +3 manual specifies.
+  (23 text rows while it is on).  It shows the time as `HH:MM` from the
+  software clock the ISR keeps, right-aligned so the 24x80 `<`/`>`
+  hidden-column markers keep the edge cells; `TE_STL_ASK` reports it as
+  disabled in 24x80, as the +3 manual specifies.
 - **Terminal**: VT52/ADM-3A cursor and erase sequences, colour and BRIGHT via
   `ESC b`/`ESC c`, wrap control (`ESC v`/`ESC w`), a settable viewport
   (`ESC X`), and the `ESC 3`/`ESC 4` screen-size and page-mode controls from
@@ -200,12 +201,6 @@ for the API references.
 
 ## Wishlist / TODO
 
-- **A status-line clock** — the machine has no real-time clock, but the ISR
-  already keeps `scb_date`/`scb_minute`/`scb_sec` from the frame counter and
-  `DATE.COM` reads them, so a `HH:MM` renderer on row 23 would give the
-  status line the same information 3CLCK's `CLOCK.FID` displayed.  The
-  third-party FID is not a route to this: it is built for Locomotive's
-  private common-memory ABI, not a documented interface.
 - **FORMAT bad-sector mapping** — a sector that fails to format or read back
   is reported and the disc abandoned; mapping it into a hidden file (so a
   slightly damaged disc still yields a CP/M volume) is not implemented.

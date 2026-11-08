@@ -537,7 +537,8 @@ run 1200
 sequences (`ESC Y`, `ESC H`, `ESC A/B/C/D` including clamping, `ESC j/k`),
 the widths (`ESC 3 0/1/2`, `ESC y`), page mode (`ESC 4`, and `ESC 3`
 cancelling it), the status line (`ESC 0/1`, `TE_STL_ASK` and the 23-row
-viewport), wrapping (`ESC v/w`), the erase/edit sequences (`ESC E`, `J`,
+viewport; the row's `HH:MM` clock is checked by the runner, below),
+wrapping (`ESC v/w`), the erase/edit sequences (`ESC E`, `J`,
 `K`, `d`, `l`, `o`, `L`, `M`, `N`, `I`) and 24x80 (`ESC x/y`, `TE_ASK`
 width 80, `LG_BUF` writes, auto-flip and the visible-window mapping).
 
@@ -572,6 +573,14 @@ The runner then exercises `SET24X80.COM` from the prompt: no argument and
 `ON` must enter 24x80, `OFF` must leave it, the prompt must still appear,
 and `SET24X80 JUNK` must print `SET24X80 [ON|OFF]`.  After each switch it
 reads `mode80` (bank 6, `A8C1h`) and requires the expected state.
+
+The status-line clock is checked by the runner as part of the escape group,
+not by `TERMTEST`: `scb_minute` (bank 3) is written through `write_memory`,
+the keyboard is polled so `_clk_tick` runs, and row 23 of `char_buffer` must
+show `HH:MM` for minutes 0, 59, 60, 725 and 1439 — right-aligned, and one
+cell short of the edge so 24x80's `>` marker still lands in the last column.
+The row is then read back at 32, 51 and 64 columns and in 24x80, and must be
+blank once `ESC 0` disables the line.
 
 The wide-tool pass then checks that the tools actually use the 80 columns.
 Before entering 24x80 it reads `lg_auto` (bank 6, `A8C3h`) and requires 0, so

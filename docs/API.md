@@ -751,9 +751,21 @@ returns the new state the same way.  The status line is **off** at cold
 boot; `ESC 1` enables it from the prompt.
 
 The status row is outside the viewport, so scrolling, erase and the fast
-scroll path leave it alone.  It is drawn blank for now: BIOS messages and
-the 80-column `<`/`>` markers land there once the FDC message and 24×80
-paths exist.  The flag lives in bank 6 (`A8C0h`), outside the image.
+scroll path leave it alone.  With the line enabled the row shows the time
+as `HH:MM`, right-aligned and stopping one cell short of the edge so the
+`<`/`>` page markers keep the first and last columns in 24×80.  The flag
+lives in bank 6 (`A8C0h`), outside the image, and so does the clock's state
+(`A8E0h`).
+
+The time comes from `scb_minute`, the 16-bit minutes-since-midnight field
+the ISR advances every 50 frames and `F105` reads back.  The +3 has no
+real-time clock, so this is elapsed time since cold boot unless a program
+sets it — `DATE.COM` uses `F104`, and `scb_date`/`scb_minute`/`scb_sec` are
+the only source.  The row is re-rendered when the minute changes, and the
+check costs a 16-bit compare on the console paths that poll the keyboard
+(`_kbd_scan`, reached from both `kbd_status` and `kbd_getchar`), so the
+clock also advances while a program sits waiting for a key.  Nothing is
+drawn while the status line is off.
 
 #### 24×80 mode — `ESC x`, `ESC y`, `ESC 3 2`, `ESC 5 n`
 
