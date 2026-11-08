@@ -102,7 +102,8 @@ stl_on:     equ 0xA8C0
 ; --- 24x80 mode (bank 6, outside the image) ---
 ; mode80   : 0 = physical screen, 1 = 80-column logical screen
 ; lg_off   : first logical column shown on the physical screen
-; lg_auto  : 1 = follow the cursor (ESC 5 1), 0 = manual only (ESC 5 0)
+; lg_auto  : 1 = follow the cursor (ESC 5 0), 0 = manual only (ESC 5 1,
+;            the cold-boot default: pages change only on EXTEND+Enter)
 ; lg_step  : logical columns between pages (32->24, 51->29, 64->16)
 ; lg_savecols: physical width to restore when leaving 24x80
 mode80:      equ 0xA8C1
@@ -2193,6 +2194,8 @@ scr_set_cols:
 ; The manual flip chord is EXTEND+Enter (CAPS+SYMB+Enter, since EXTEND is
 ; CAPS+SYMB).  Auto-flip follows the cursor when it leaves the window, and
 ; is turned on by ESC 5 0 / off by ESC 5 1, as the +3 manual specifies.
+; Unlike the +3 it starts off (cold boot), because following the cursor
+; flickers between pages whenever output crosses the edge.
 
 ; @proc _lg_step_for_cols
 ;   Page step from the physical width: 32 -> 24, 51 -> 29, 64 -> 16.

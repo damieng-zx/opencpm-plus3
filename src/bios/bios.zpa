@@ -242,7 +242,9 @@ cold_boot:
     ld (stl_on), a
     ld (mode80), a
     ld (lg_off), a
-    ld a, 1
+    ; 24x80 pages only on EXTEND+Enter by default: following the cursor
+    ; flips the window whenever output passes the edge, which flickers.
+    ; A program can still ask for it with ESC 5 0.
     ld (lg_auto), a
     call scr_init                  ; Screen: clear, set attributes
     call kbd_init                  ; Keyboard: reset state

@@ -1846,8 +1846,14 @@ class Smoke:
         window shows a part of each line, so the check reads LG_BUF.
         """
         self.log("DIR/DUMP/SCREEN at 80 columns")
+        # Auto-flip is off by default (TERMTEST turns it on and restores it
+        # on exit), so output past the window must not move the page.
+        if self.memory(6, label_address("lg_auto"), 1)[0] != 0:
+            raise SmokeError("24x80 auto-flip is on; the default is off")
         self.command("SET24X80 ON", 900)
         self.command("DIR", 700)
+        if self.memory(6, label_address("lg_off"), 1)[0] != 0:
+            raise SmokeError("DIR at 80 columns moved the 24x80 window")
         rows = self.lg_text()
         dir_rows = [r for r in rows if r.startswith("A: ")]
         if not dir_rows or max(r.count(" : ") for r in dir_rows) != 4:

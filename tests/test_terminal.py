@@ -263,6 +263,23 @@ class Wide80(unittest.TestCase):
         self.assertIn("call _set_conwidth", set_cols)
         self.assertNotIn("ld (scb_conwidth)", set_cols)
 
+    def test_auto_flip_is_off_at_cold_boot(self):
+        """24x80 pages only on EXTEND+Enter unless a program sends ESC 5 0.
+
+        Following the cursor flips the window whenever output crosses its
+        edge, which flickers.  Cold init seeds lg_auto with the zero it
+        already stored in mode80/lg_off, and TERMTEST, which turns it on,
+        restores it on both of its exits.
+        """
+        bios = source("src/bios/bios.zpa")
+        init = bios[bios.index("ld (mode80), a"):bios.index("call scr_init")]
+        self.assertIn("ld (lg_auto), a", init)
+        self.assertNotIn("ld a, 1", init)
+        term = source("src/test/termtest.asm")
+        restore = term[term.index("restore:"):term.index("warm:")]
+        self.assertIn("ld a, '5'", restore)
+        self.assertIn("ld b, '1'", restore)
+
     def test_dump_caps_its_line_at_the_buffer(self):
         """80 columns would give (80-8)/4 = 18 bytes; lnbuf holds 16."""
         dump = source("src/tools/dump.asm")

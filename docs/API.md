@@ -699,7 +699,7 @@ the viewport and leaves the rest of the screen alone.
 | `ESC 1` | Status line on: reserves the bottom row for BIOS messages; the text viewport becomes 23 rows and the row is cleared. |
 | `ESC 3 n` | Screen size: n = `0` → 24×32, `1` → 24×51, `2` → 24×80 (enters the virtual 80-column mode). Also clears the screen, resets the viewport and **cancels page mode**. Typed at the prompt as `ESC 3 0`/`ESC 3 1`. Any other parameter is consumed and ignored (old WordStar Z19 drivers use `ESC 3`/`ESC 4` with a space parameter as attribute controls). |
 | `ESC 4 n` | Page mode: `0` disables, `1` enables (the `con_mode` bit used by `F109`). Other parameters are ignored. |
-| `ESC 5 n` | Auto-flip in 24x80 mode: `0` enables, `1` disables (enabled by default), as the +3 manual specifies. |
+| `ESC 5 n` | Auto-flip in 24x80 mode: `0` enables, `1` disables, as the +3 manual specifies.  Disabled by default: pages change on EXTEND+Enter only. |
 | `ESC x` | Enter 24x80 mode; clears the screen. |
 | `ESC y` | Leave 24x80 mode; clears the screen and restores the physical width. |
 | `ESC v` | Enable wrapping at the right edge (default). |
@@ -778,13 +778,18 @@ So 51 columns need one flip to reach every column, while 64 columns need
 only a 16-column scroll — less paging than the original +3.  32 columns
 need three pages to cover all 80.
 
-`ESC 5 n` controls automatic paging: `0` enables it, `1` disables it
-(the default is enabled).  This is the +3 manual's polarity (Appendix III),
-and Locomotive's CP/M Plus follows it: `0` turns auto-flip on, `1` off.
-With it on, output, cursor motion and line feeds keep the
-window on the cursor's page.  With it off, the half is changed manually
-with **EXTEND+Enter** (or CAPS SHIFT+SYMBOL SHIFT+Enter, which is the
-same EXTEND state).  The `<`/`>` markers on the status line show whether
+`ESC 5 n` controls automatic paging: `0` enables it, `1` disables it.
+This is the +3 manual's polarity (Appendix III), and Locomotive's CP/M
+Plus follows it: `0` turns auto-flip on, `1` off.  With it on, output,
+cursor motion and line feeds keep the window on the cursor's page.  With
+it off, the half is changed only with **EXTEND+Enter** (or CAPS
+SHIFT+SYMBOL SHIFT+Enter, which is the same EXTEND state).
+
+Unlike the +3, auto-flip is **off** from cold boot.  Following the
+cursor flips the window every time output crosses the edge, so a DIR
+listing or a full-screen redraw flickers between the pages.  The window
+stays where the user put it until EXTEND+Enter; a program that wants the
+cursor followed asks for it with `ESC 5 0`.  The `<`/`>` markers on the status line show whether
 columns are hidden to the left/right; they are not drawn when the status
 line is off.
 

@@ -72,9 +72,9 @@ Beyond that, this system offers:
 All modes are 24 rows high.  The 80x24 buffer lives in bank 5 at
 `5B00-62BF`, outside the image and the visible character buffer, so it costs no
 TPA or bank-6 space.  `SET24X80` / `ESC x` enters it, `ESC y` leaves, `ESC 3 2`
-enters at the current width and `ESC 5 n` selects automatic or manual paging.
-Automatic paging follows the cursor; otherwise EXTEND+Enter (or CAPS
-SHIFT+SYMBOL SHIFT+Enter) flips.  The window steps by 24, 29 or 16 columns at
+enters at the current width.  The window changes page on EXTEND+Enter (or
+CAPS SHIFT+SYMBOL SHIFT+Enter), not when output crosses its edge, which
+would flicker; a program can ask for automatic paging with `ESC 5 0`.  The window steps by 24, 29 or 16 columns at
 32/51/64 columns.  A flip shifts the bitmap and re-renders only the exposed
 columns; `<`/`>` on the status line mark hidden text.
 

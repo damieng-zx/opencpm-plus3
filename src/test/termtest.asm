@@ -957,14 +957,7 @@ phase_flip:
     call pstr
     call wait_key
     ; Back to a sane prompt after the runner's flip-back checks.
-    ld a, 'y'
-    call esc_cmd
-    ld a, '3'
-    ld b, '1'
-    call esc_1p
-    ld a, '0'
-    call esc_cmd
-    jp warm
+    jp restore
 
 ; --------------------------------------------------------------------------
 ; Helpers
@@ -1289,6 +1282,9 @@ fail:
     ld de, s_fail_line
     call pstr
     call wait_key
+; restore - leave 24x80 at 51 columns, status line off and auto-flip back
+; at its cold-boot default (off; t_m80 turns it on), then warm boot
+restore:
     ld a, 'y'
     call esc_cmd
     ld a, '3'
@@ -1296,6 +1292,9 @@ fail:
     call esc_1p
     ld a, '0'
     call esc_cmd
+    ld a, '5'
+    ld b, '1'
+    call esc_1p
 warm:
     jp 0x0000
 
