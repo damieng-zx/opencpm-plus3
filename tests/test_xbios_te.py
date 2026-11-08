@@ -74,7 +74,7 @@ class TeReset(unittest.TestCase):
 
     def test_handler_calls_scr_reset(self):
         body = handler_body(".te_reset:", ".dd_drive_status:")
-        self.assertIn("call scr_reset", body)
+        self.assertRegex(body, r"(?:call|j[pr]) scr_reset\b")
 
     def test_reset_restores_defaults_then_clears(self):
         text = source("src/bios/screen.zpa")
@@ -87,7 +87,7 @@ class TeReset(unittest.TestCase):
         self.assertIn("ld a, DEFAULT_ATTR", body)
         self.assertIn("ld (scr_wrap), a", body)
         self.assertIn("call _cancel_paging", body)
-        self.assertIn("call scr_init", body)
+        self.assertRegex(body, r"(?:call|j[pr]) scr_init\b")
 
     def test_reset_keeps_screen_width(self):
         text = source("src/bios/screen.zpa")
@@ -226,7 +226,7 @@ class DiscPhase1(unittest.TestCase):
 
     def test_dd_init_resets_driver(self):
         body = handler_body(".dd_init:", ".dd_sel_format:")
-        self.assertIn("call fdc_init", body)
+        self.assertRegex(body, r"(?:call|j[pr]) fdc_init\b")
 
     def test_dd_sel_format_copies_standard_xdpb(self):
         body = handler_body(".dd_sel_format:", ".dd_read_id:")
@@ -262,7 +262,7 @@ class DiscPhase1(unittest.TestCase):
 
     def test_dd_off_motor(self):
         body = handler_body(".dd_off_motor:", ".dd_l_seek:")
-        self.assertIn("call motor_off", body)
+        self.assertRegex(body, r"(?:call|j[pr]) motor_off\b")
 
     def test_dd_l_seek_maps_unit_and_head(self):
         body = handler_body(".dd_l_seek:", ".dd_drive_status:")
@@ -430,7 +430,7 @@ class DdSetup(unittest.TestCase):
         self.assertIn("ldir", body)
         self.assertIn("(dd_setup_pb + 1)", body)   # motor-off timeout
         self.assertIn("(motor_off_ticks), a", body)
-        self.assertIn("call fdc_specify", body)
+        self.assertRegex(body, r"(?:call|j[pr]) fdc_specify\b")
 
     def test_fdc_specify_builds_srt_hut_hlt(self):
         text = source("src/bios/fdc765.zpa")

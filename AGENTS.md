@@ -122,6 +122,16 @@ Checks:
    needs); pre-shadow/ISR contexts carry `; lint-exempt: 1ffd`.
 7. **Duplicate labels** — a non-local label defined twice in the same binary
    makes call resolution ambiguous.
+8. **Tail calls** — `call X` followed directly by an unlabelled `ret` must be
+   `jp X` (a byte and 17 T-states shorter).  The two differ only when `X`
+   reads or drops its own return address, or pages out the memory holding
+   the `ret`; mark such a call (or its `ret`, since ZPA drops comments on
+   `call proc(args)` lines) `; keep call`.  The three in common memory below
+   `ccp_run_prog` are kept because shrinking them would move pinned
+   addresses.
+
+`jp` that could be `jr` is checked after assembly by `tools/jp2jr.py`
+(it needs real addresses), and also fails the build.
 
 Every routine documents In/Out/Clobbers (see Conventions). In `.zpa` sources
 the machine-readable form is the `@param`/`@out`/`@clobbers` block, which ZPA

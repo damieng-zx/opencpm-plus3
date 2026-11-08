@@ -234,8 +234,7 @@ fdc_init:
     call motor_on
     call fdc_recalibrate
     call motor_off             ; Don't leave drive spinning after init
-    call fdc_specify
-    ret
+    jr fdc_specify
 
 
 ; ------------------------------------------------------------------
@@ -284,8 +283,7 @@ fdc_specify:
     ld a, (fdc_spec1)
     call fdc_send_byte
     ld a, (fdc_spec2)
-    call fdc_send_byte
-    ret
+    jp fdc_send_byte
 
 
 ; ==========================================================================
@@ -465,8 +463,7 @@ fdc_login_body:
     ; B = disc type (0-3). Copy xdpb_std_table[B] to the drive's XDPB.
     ld a, b
     ld (fdc_login_type), a
-    call .copy_template
-    ret
+    jr .copy_template
 
 .apply_and_patch:
     ld a, b
@@ -672,8 +669,7 @@ fdc_write_body:
     ld a, 1
     ld (deblock_dirty), a
 
-    call flush_deblock_body
-    ret
+    jp flush_deblock_body
 
 
 ; ==========================================================================

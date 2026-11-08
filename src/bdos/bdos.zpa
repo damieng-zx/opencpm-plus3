@@ -519,8 +519,7 @@ sync_page0_du:
     and 0x0F
     or b
     ld de, 0x0004
-    call write_user_byte
-    ret
+    jp write_user_byte
 
 
 ; ==========================================================================
@@ -557,8 +556,7 @@ bdos_con_out:
     ; written when the prompt is erased.
     ld c, 0x0A
     call con_out
-    call bdos_page_pause       ; page full → pause (resets counter)
-    ret
+    jr bdos_page_pause       ; page full → pause (resets counter)
 .tick:
     ld a, (bdos_page_row)
     inc a
@@ -1557,8 +1555,7 @@ select_fcb_drive:
     inc a
 .has_drive:
     dec a                      ; A = 0-based drive
-    call select_drive
-    ret
+    jp select_drive
 
 
 ; ==========================================================================
@@ -2519,8 +2516,7 @@ wseq_close_cur:
 
     ; Reload FCB again (close may have changed fcb_buf)
     ld de, (fcb_user_addr)
-    call setup_fcb(de)         ; IX = fcb_buf
-    ret
+    jp setup_fcb               ; DE = FCB; IX = fcb_buf
 
 ; zero_fill_block — Fill a newly allocated data block with zeros
 ;   Writes every record in the block from the common zero buffer, so the

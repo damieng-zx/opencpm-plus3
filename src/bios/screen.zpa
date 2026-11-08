@@ -237,8 +237,7 @@ scr_init:
     jr z, .si_no_lg
     call _lg_clear_all
 .si_no_lg:
-    call _page_out             ; Clobbers AF, BC
-    ret
+    jp _page_out             ; Clobbers AF, BC
 
 
 ; ==========================================================================
@@ -275,8 +274,7 @@ scr_reset:
     ld (scr_wrap), a
 
     call _cancel_paging
-    call scr_init
-    ret
+    jp scr_init
 
 
 ; ==========================================================================
@@ -1026,14 +1024,12 @@ scr_putchar:
     ld (cursor_row), a
     ret
 .do_scroll_down:
-    call _scroll_down
-    ret
+    jp _scroll_down
 
 ; ------- clear operations -------
 .esc_E:
     ; Clear the viewport, cursor unchanged
-    call _clear_viewport
-    ret
+    jp _clear_viewport
 
 .esc_J:
     ; Erase from cursor to the bottom of the viewport (inclusive).
@@ -1064,8 +1060,7 @@ scr_putchar:
 
 .esc_K:
     ; Erase from cursor to end of line (inclusive)
-    call _erase_line_from_cursor
-    ret
+    jp _erase_line_from_cursor
 
 .esc_d:
     ; Erase from the top of the viewport to the cursor (inclusive).
@@ -1086,8 +1081,7 @@ scr_putchar:
     djnz .esc_d_loop
 .esc_d_cur:
     ; Erase the cursor row from the viewport's left edge to the cursor
-    call _erase_line_to_cursor
-    ret
+    jp _erase_line_to_cursor
 
 .esc_l:
     ; Erase the current line inside the viewport
@@ -1095,30 +1089,25 @@ scr_putchar:
     ld b, a
     ld a, (cursor_row)
     add a, b
-    call _clear_vp_row_a
-    ret
+    jp _clear_vp_row_a
 
 .esc_o:
     ; Erase from start of line to cursor (inclusive)
-    call _erase_line_to_cursor
-    ret
+    jp _erase_line_to_cursor
 
 ; ------- line operations -------
 .esc_L:
     ; Insert line at cursor row: push cursor row and below DOWN by one,
     ; losing the last row; cursor row becomes blank
-    call _insert_line
-    ret
+    jp _insert_line
 
 .esc_M:
     ; Delete cursor row: pull rows below UP, blank last row
-    call _delete_line
-    ret
+    jp _delete_line
 
 .esc_N:
     ; Delete char under cursor; shift rest of row left; fill last col space
-    call _delete_char
-    ret
+    jp _delete_char
 
 ; ------- save / restore cursor -------
 .esc_j:
@@ -2325,8 +2314,7 @@ _scroll_clear:
     ld bc, 31
     ldir
 
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; ==========================================================================
@@ -2485,8 +2473,7 @@ _scroll_down_vis:
     ld bc, 31
     ldir
 
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; ==========================================================================
@@ -2528,8 +2515,7 @@ _clear_screen:
     jr z, .cs_no_lg
     call _lg_clear_all
 .cs_no_lg:
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; ==========================================================================
@@ -2580,8 +2566,7 @@ _clear_row_a:
     pop bc
     djnz ._cra_scan
 
-    call _page_out
-    ret
+    jp _page_out
 
 _cra_row: db 0                  ; scratch for _clear_row_a row value
 
@@ -2641,8 +2626,7 @@ _blank_render_range:
     cp (hl)
     jr nz, .brr_generic
     ld a, (_brr_row)
-    call _blank_row_direct
-    ret
+    jr _blank_row_direct
 
 .brr_generic:
     ld a, (_brr_row)
@@ -2682,8 +2666,7 @@ _blank_render_range:
     pop bc
     inc c
     djnz .brr_loop
-    call _page_out
-    ret
+    jp _page_out
 
 _brr_row: db 0
 _brr_col: db 0
@@ -2759,8 +2742,7 @@ _blank_row_direct:
     inc hl
     djnz .bd_attr
 
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; ==========================================================================
@@ -2945,8 +2927,7 @@ _delete_char:
     pop hl
     inc c
     djnz .dc_col
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; ==========================================================================
@@ -3006,8 +2987,7 @@ _insert_line:
 
     call _page_in
     call _redraw_all_screenpaged
-    call _page_out
-    ret
+    jp _page_out
 
 _il_row: db 0
 
@@ -3065,8 +3045,7 @@ _delete_line:
 
     call _page_in
     call _redraw_all_screenpaged
-    call _page_out
-    ret
+    jp _page_out
 
 _dl_row: db 0
 _dl_count: dw 0
@@ -3315,8 +3294,7 @@ _lg_clear_viewport:
     inc a
     ld (lg_loop), a
     djnz .lcv_loop
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; @proc _lg_scroll_up
@@ -3337,8 +3315,7 @@ _lg_scroll_up:
     ld a, (vp_height)
     dec a
     call _lg_clear_row
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; @proc _lg_scroll_down
@@ -3365,8 +3342,7 @@ _lg_scroll_down:
 .lsd_blank:
     xor a
     call _lg_clear_row         ; row 0
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; @proc _lg_render_row
@@ -3418,8 +3394,7 @@ _lg_render_row:
     ld a, (scr_cols)
     cp b
     jr nz, .lrr_loop
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; @proc _lg_redraw
@@ -3494,8 +3469,7 @@ _lg_store_char:
     ld d, a
     call _render_char
 .lsc_done:
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; @proc _put80
@@ -3776,8 +3750,7 @@ _lg_delete_line:
     ld a, (lg_row)
     call _lg_clear_row
 .ldl_done:
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; @proc _lg_insert_line
@@ -3815,8 +3788,7 @@ _lg_insert_line:
 .lil_blank:
     ld a, (lg_row)
     call _lg_clear_row
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; @proc _lg_delete_char
@@ -4192,8 +4164,7 @@ _lg_flip_shift:
     ld a, (vp_height)
     cp b
     jp nz, .fs_row
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; ==========================================================================
@@ -4265,8 +4236,7 @@ _stl_mark:
     ld a, (lg_char)
     ld b, a
     call _render_char
-    call _page_out
-    ret
+    jp _page_out
 
 
 ; Font data is NOT embedded here.  All three fonts are loaded from disk at

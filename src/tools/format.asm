@@ -799,8 +799,7 @@ progress:
     ld de, msg_gap
     call pstr
     ld de, (status_ptr)
-    call pstr
-    ret
+    jp pstr
 
 ; calc_pct - percentage of the disc done, counting the current track
 ;   Out:      A = 0-100
@@ -959,8 +958,7 @@ print_hex:
     rrca
     call .nibble
     pop af
-    call .nibble
-    ret
+    jp .nibble
 .nibble:
     and 0x0F
     add a, '0'

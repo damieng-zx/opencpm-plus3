@@ -377,8 +377,7 @@ set_attribute:
     jr .call
 .wild:
     ld de, msg_wild
-    call pstr
-    ret
+    jp pstr
 
 .call:
     ld de, fcb
@@ -390,14 +389,12 @@ set_attribute:
     ld de, FCB1 + 1
     call print_name11
     ld de, (attr_msg)
-    call pstr
-    ret
+    jp pstr
 .not_found:
     ld de, FCB1 + 1
     call print_name11
     ld de, msg_not_found
-    call pstr
-    ret
+    jp pstr
 
 ; ==========================================================================
 ; Helpers

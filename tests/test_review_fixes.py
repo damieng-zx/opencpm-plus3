@@ -181,7 +181,7 @@ class Issue08AlvSize(unittest.TestCase):
     def test_16bit_drives_are_supported(self):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index("select_fcb_drive:"):text.index("; @proc drive_ro_status")]
-        self.assertIn("call select_drive", body)
+        self.assertRegex(body, r"(?:call|j[pr]) select_drive\b")
         # DSM > 255 no longer rejects the drive; the map width is cached.
         self.assertNotIn("scf", body)
         self.assertIn("cached_blk16", text)

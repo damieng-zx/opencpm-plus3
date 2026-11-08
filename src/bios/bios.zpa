@@ -929,8 +929,7 @@ xbios_handler:
     ; TE_RESET (0x00C2): re-initialise the terminal emulator.
     ; Clears the screen, homes the cursor and restores the default
     ; palette/wrap/page-mode state.  The screen width is left unchanged.
-    call scr_reset
-    ret
+    jp scr_reset
 
 .te_set_ink:
     ; TE_SET_INK (0x00CB): set the colour of ink 0 or ink 1.
@@ -990,8 +989,7 @@ xbios_handler:
     ld (scr_ink_br), a
 
 .tsi_done:
-    call _set_attr
-    ret
+    jp _set_attr
 
 .te_set_border:
     ; TE_SET_BORDER (0x00CE): set the screen border colour.
@@ -1032,13 +1030,8 @@ xbios_handler:
     ld (xbios_tmp_hl), hl          ; save caller HL (XBIOS argument)
     ld (.srr_call + 1), bc         ; patch the call target
     ld hl, (xbios_tmp_hl)          ; restore caller HL before it starts
-    call .srr_call
-    jr .srr_after
 .srr_call:
     call 0                         ; patched to the routine address
-    ret
-
-.srr_after:
     ld (xbios_ret_ix), ix          ; capture the routine's IX/IY results
     ld (xbios_ret_iy), iy
     push af
@@ -1055,8 +1048,7 @@ xbios_handler:
 .dd_init:
     ; DD_INIT (0x0080): reset the disc driver, motor off.
     ;   Out: AF BC DE HL corrupt
-    call fdc_init
-    ret
+    jp fdc_init
 
 .dd_setup:
     ; DD_SETUP (0x0083): set disc timings.
@@ -1085,8 +1077,7 @@ xbios_handler:
     xor a
     ld (motor_off_ticks), a
 .dsu_specify:
-    call fdc_specify
-    ret
+    jp fdc_specify
 
 .dd_sel_format:
     ; DD_SEL_FORMAT (0x0095): load a standard XDPB.
@@ -1541,8 +1532,7 @@ xbios_handler:
 .dd_off_motor:
     ; DD_OFF_MOTOR (0x00AA): stop the motor now.
     ;   Out: AF BC DE HL corrupt
-    call motor_off
-    ret
+    jp motor_off
 
 .dd_l_seek:
     ; DD_L_SEEK (0x00B3): seek to a physical track.

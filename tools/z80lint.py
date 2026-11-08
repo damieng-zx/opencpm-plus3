@@ -36,6 +36,12 @@ Checks:
   7. Duplicate labels: a non-local label defined twice inside the same
      binary makes call resolution ambiguous and is an error.  Separate
      binaries (tools) may reuse names.
+  8. Tail calls: `call X` followed directly by an unlabelled `ret` is
+     `jp X` with one byte and 17 T-states wasted.  They differ only if X
+     reads or discards its own return address, or pages out the memory
+     holding the `ret`; mark such a call (or its `ret`, which survives ZPA's
+     argument expansion) `; keep call`.  A labelled `ret`
+     is a jump target and is left alone.
 
 Routine header format:
     ; routine_name - Description
@@ -1885,6 +1891,41 @@ def check_duplicate_labels(routine_list):
             if len(rs) > 1]
 
 
+KEEP_CALL_RE = re.compile(r';.*\bkeep call\b', re.I)
+
+
+def check_tail_calls(routine):
+    """
+    Find `call X` / `ret` pairs that could be a single `jp X`.
+
+    Only an unconditional call qualifies (`call z, X / ret` returns on the
+    not-taken path too), and the `ret` must carry no label: a labelled
+    `ret` is reached from elsewhere.  Blank and comment lines between the
+    two are skipped.  `; keep call` on either line exempts the pair.
+
+      In:       routine (parsed)
+      Out:      list of (lineno, target) tail calls
+      Clobbers: none
+    """
+    issues = []
+    lines = routine.lines
+    for i, (lineno, raw) in enumerate(lines):
+        if KEEP_CALL_RE.search(raw) or 'lint: ignore' in raw.lower():
+            continue
+        mnemonic, ops, raw_ops = parse_instruction(raw)
+        if mnemonic != 'call' or len(raw_ops) != 1:
+            continue
+        for _, nxt in lines[i + 1:]:
+            label, mn, _, nops, is_dir, _ = parse_line(nxt)
+            if label is None and mn is None:
+                continue                    # blank or comment
+            if (label is None and mn == 'ret' and not nops
+                    and not KEEP_CALL_RE.search(nxt)):
+                issues.append((lineno, raw_ops[0]))
+            break
+    return issues
+
+
 def binary_group(filepath):
     """Which binary a file assembles into (tools are separate programs)."""
     f = filepath.replace('\\', '/').lower()
@@ -2159,6 +2200,22 @@ def main():
     if dup_count == 0:
         print("  OK -- no duplicate labels within any binary.")
     total += dup_count
+
+    print()
+
+    # ---- Check 8: tail calls ----
+    print("=== Tail Calls (call X / ret -> jp X) ===")
+    tail_count = 0
+    for fp in files:
+        for routine in file_routines.get(fp, []):
+            for lineno, target in check_tail_calls(routine):
+                print(f"  TAIL   {fp}:{lineno}: {routine.name}: "
+                      f"call {target} / ret -> jp {target} "
+                      f"(or mark '; keep call')")
+                tail_count += 1
+    if tail_count == 0:
+        print("  OK -- no call/ret pairs.")
+    total += tail_count
 
     print()
     if total:

@@ -235,8 +235,7 @@ parse_cmd:
     sub 'A'
     ld e, a
     ld c, 14                   ; F14: Select Disk
-    call BDOS
-    ret
+    jp BDOS
 
 .check_builtins:
     ; Check against built-in commands
@@ -535,14 +534,12 @@ parse_cmd:
     ; Final newline
     ld de, msg_crlf
     ld c, F_PSTR
-    call BDOS
-    ret
+    jp BDOS
 
 .dir_empty:
     ld de, msg_no_files
     ld c, F_PSTR
-    call BDOS
-    ret
+    jp BDOS
 
 .do_type:
     ; Skip past "TYPE" in the command buffer to find the filename
@@ -612,26 +609,22 @@ parse_cmd:
     call BDOS
     ld e, 0x0A
     ld c, 2
-    call BDOS
-    ret
+    jp BDOS
 
 .type_no_arg:
     ld de, msg_type_usage
     ld c, F_PSTR
-    call BDOS
-    ret
+    jp BDOS
 
 .type_not_found:
     ld de, msg_type_nf
     ld c, F_PSTR
-    call BDOS
-    ret
+    jp BDOS
 
 .do_help:
     ld de, msg_help
     ld c, F_PSTR
-    call BDOS
-    ret
+    jp BDOS
 
 
 ; ==========================================================================
@@ -896,8 +889,7 @@ parse_cmd:
     jp nc, .user_usage
     ld e, a
     ld c, 32                   ; F32: Set User
-    call BDOS
-    ret
+    jp BDOS
 
 .user_query:
     ld e, 0xFF
@@ -1465,8 +1457,7 @@ parse_cmd:
 .com_unknown:
     ld de, msg_unknown
     ld c, F_PSTR
-    call BDOS
-    ret
+    jp BDOS
 
 
 
@@ -1850,8 +1841,7 @@ try_sub:
 restore_dma:
     ld de, 0x0080
     ld c, 26                   ; F26: Set DMA
-    call BDOS
-    ret
+    jp BDOS
 
 
 ; ==========================================================================

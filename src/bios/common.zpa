@@ -634,7 +634,7 @@ writeback_fcb:
     ld de, (fcb_user_addr)         ; dest: TPA
     ld bc, 33                      ; stop before R0/R1/R2 (caller-owned)
     call copy_to_user(hl, de, bc)
-    ret
+    ret                            ; keep call: shrinking would move the pinned common addresses
 
 
 ; ==========================================================================
@@ -812,7 +812,7 @@ copy_xfer_done:
     ; Leave the system banks mapped: the last TO_USER chunk ran in TPA mode.
     ld a, (motor_flag)
     or BANK1_1FFD
-    call write_1ffd
+    call write_1ffd   ; keep call: shrinking would move the pinned common addresses
     ret
 
 _cfu_src:   dw 0
@@ -930,7 +930,7 @@ interbank_move:
     ; Restore system bank
     ld a, 1
     call bank_sel(a)
-    ret
+    ret                            ; keep call: shrinking would move the pinned common addresses
 
 _ibm_src_bank: db 0
 _ibm_dst_bank: db 0
@@ -1421,8 +1421,7 @@ write_dir_entry:
     call dir_sector_to_bios
     ld bc, dirbuf
     call set_dma
-    call disk_write
-    ret
+    jp disk_write
 
 
 ; @proc dir_sector_to_bios
@@ -1453,8 +1452,7 @@ dir_sector_to_bios:
     call set_trk               ; BIOS set track
 
     pop bc                     ; BC = sector
-    call set_sec               ; BIOS set sector
-    ret
+    jp set_sec               ; BIOS set sector
 
 
 ; ==========================================================================

@@ -201,8 +201,7 @@ conmode_set:
     ld l, a
     ex de, hl
     ld c, F_CONMODE
-    call BDOS
-    ret
+    jp BDOS
 
 
 ; conmode_clear — AND ~mask in A into con_mode.
@@ -217,8 +216,7 @@ conmode_clear:
     ld l, a
     ex de, hl
     ld c, F_CONMODE
-    call BDOS
-    ret
+    jp BDOS
 
 
 ; set_temporary — Parse "X:" or "0:" at HL and write to scb_tempdrv.
@@ -257,8 +255,7 @@ set_temporary:
     ld (scb_pb_set_tempdrv + 2), a
     ld de, scb_pb_set_tempdrv
     ld c, F_GETSCB
-    call BDOS
-    ret
+    jp BDOS
 
 
 ; set_order — Parse "(tok[,tok])" at HL and set bdos_order via F121.

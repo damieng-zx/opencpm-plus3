@@ -96,11 +96,9 @@ header:
 
 ; --- Helper stubs (hardcoded; common.zpa asserts addresses match) -------
 helper_to_tpa:
-    call COPY_RECORD_TO_TPA
-    ret
+    jp COPY_RECORD_TO_TPA
 helper_from_tpa:
-    call COPY_RECORD_FROM_TPA
-    ret
+    jp COPY_RECORD_FROM_TPA
 
 ; --- rd_init: validate magic, cold-init directory if absent --------------
 rd_init:

@@ -215,14 +215,12 @@ show_drive:
     call print_freeze_name
     ld e, ')'         : ld c, F_CONOUT : call BDOS
     call crlf
-    call crlf
-    ret
+    jp crlf
 
 .missing:
     ld de, msg_missing
     ld c, F_PRINT
-    call BDOS
-    ret
+    jp BDOS
 
 
 ; ===========================================================================

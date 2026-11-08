@@ -297,8 +297,7 @@ count_lines:
     ld a, b
     or a
     ret z
-    call inc_total
-    ret
+    jp inc_total
 
 ; ---------------------------------------------------------------------------
 ; inc_total - total = total + 1, preserving the scan registers.
@@ -369,8 +368,7 @@ write_lines:
     or a
     ret z
     ld (line_len), a
-    call emit_line
-    ret
+    jp emit_line
 
 ; ---------------------------------------------------------------------------
 ; append_char - Append A to out_rec, enforcing the 126-character limit.

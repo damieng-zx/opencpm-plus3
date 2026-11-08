@@ -234,8 +234,7 @@ display_tod:
     ld c, F_CWRITE
     call BDOS_ENTRY
     ld a, (tod_buf + 4)
-    call print_bcd2
-    ret
+    jp print_bcd2
 
 ; ============================================================
 ; print_year4 — print 4-digit year from year_v (78=1978, 126=2026)
@@ -254,8 +253,7 @@ print_year4:
     call print_d2
     pop bc                  ; restore B = year mod 100
     ld a, b
-    call print_d2
-    ret
+    jp print_d2
 
 ; ============================================================
 ; compute_date — convert 16-bit days in HL to
@@ -556,8 +554,7 @@ print_d2:
     add a, '0'
     ld e, a
     ld c, F_CWRITE
-    call BDOS_ENTRY
-    ret
+    jp BDOS_ENTRY
 
 ; ============================================================
 ; print_bcd2 — print BCD byte A as two decimal digits
@@ -582,8 +579,7 @@ print_bcd2:
     add a, '0'
     ld e, a
     ld c, F_CWRITE
-    call BDOS_ENTRY
-    ret
+    jp BDOS_ENTRY
 
 ; ============================================================
 ; Separator helpers

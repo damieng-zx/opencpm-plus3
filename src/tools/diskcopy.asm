@@ -705,8 +705,7 @@ progress:
     ld de, msg_line_gap
     call pstr
     ld de, (status_ptr)
-    call pstr
-    ret
+    jp pstr
 
 ; div_buffer - how many tracks fit in the buffer
 ;   In:       track_bytes
@@ -1028,8 +1027,7 @@ print_hex:
     rrca
     call .nibble
     pop af
-    call .nibble
-    ret
+    jp .nibble
 .nibble:
     and 0x0F
     add a, '0'

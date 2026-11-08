@@ -440,8 +440,7 @@ _kbd_scan:
     ld a, (mode80)
     or a
     jr z, .emit_map
-    call _flip_chord
-    ret
+    jp _flip_chord
 
 .emit_map:
     ; Map raw key E + modifiers D to ASCII
