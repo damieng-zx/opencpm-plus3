@@ -333,8 +333,27 @@ load_file:
     jr .lf_block
 
 .lf_next_extent:
-    ; The map ran out of blocks: the file continues in the next extent,
-    ; unless that entry does not exist (then the file simply ended here).
+    ; The map ran out of blocks.  Those blocks must hold every record the
+    ; extent's RC claims, or the map was cut short and the file is
+    ; truncated: report it as missing rather than boot on a partial CCP or
+    ; common stub.  Each map byte is 8 records on both layouts (one 1K
+    ; block, or half of a 16-bit 2K block number).
+    push ix
+    pop hl
+    ld de, (entry_ptr)
+    or a
+    sbc hl, de                 ; L = map bytes used (at most 16)
+    ld a, l
+    add a, a
+    add a, a
+    add a, a                   ; A = records the map covers (at most 128)
+    ex de, hl
+    ld de, 15
+    add hl, de                 ; HL -> RC
+    cp (hl)
+    jr c, .lf_missing          ; fewer records than RC: truncated
+    ; The file continues in the next extent, unless that entry does not
+    ; exist (then the file simply ended here).
     ld a, (want_ext)
     inc a
     ld (want_ext), a

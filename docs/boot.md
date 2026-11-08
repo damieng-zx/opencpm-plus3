@@ -72,6 +72,9 @@ DI not yet asserted.
 - Walks further directory extents when a file runs past one extent's block
   map (a 2K-block disk holds only eight block numbers per entry, so
   `CPM3.SYS` needs more than one).
+- Treats a file as missing when an extent's block map ends before the
+  records its RC byte claims, so a truncated `CCP.COM` or `CPM3C.SYS` is
+  reported instead of booting on whatever its first block holds.
 - Stages the common stub, `CPM3C.SYS`, in bank 6 at `9C00` (max 3K).  That
   window is free at boot: `FONT64` ends at `9BFF` and the first runtime
   buffer (`9C00`) only comes into use after `init` has copied the stub out.

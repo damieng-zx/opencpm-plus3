@@ -11,7 +11,8 @@ reach the CP/M prompt:
   badsum     boot-sector checksum corrupted
   noccp      CCP.COM directory entry marked deleted (signon + diagnostic)
   emptyccp   CCP.COM allocation map empty (diagnostic, no prompt)
-  shortccp   CCP.COM keeps only its first 1K block
+  shortccp   CCP.COM keeps only its first 1K block (the loader sees a map
+             shorter than RC and treats it as missing: diagnostic)
   shortsys2  CPM3C.SYS keeps only its first 1K block
   badccpblock CCP.COM points at a block past the end of the disk
   badsys2block CPM3C.SYS points at a block past the end of the disk
@@ -202,18 +203,18 @@ class Negative:
             raise SmokeError(f"{name}: unexpectedly booted:\n{screen}")
         print(f"[negative] {name}: no boot (ok)")
 
-    def no_ccp(self, path: Path) -> None:
-        """No CCP.COM: signon, a clear diagnostic, and no prompt."""
+    def no_ccp(self, path: Path, name: str = "noccp") -> None:
+        """No usable CCP.COM: signon, a clear diagnostic, and no prompt."""
         self.reset()
         self.mcp.call("load", {"file": str(path)})
         self.mcp.call("disk_boot", {})
         self.mcp.call("run", {"frames": 1500})
         screen = self.screen()
         if "A>" in screen:
-            raise SmokeError(f"noccp: reached a prompt without CCP.COM:\n{screen}")
+            raise SmokeError(f"{name}: reached a prompt without CCP.COM:\n{screen}")
         if "CCP.COM missing" not in screen:
-            raise SmokeError(f"noccp: no diagnostic on screen:\n{screen}")
-        print("[negative] noccp: reports missing CCP.COM, no prompt (ok)")
+            raise SmokeError(f"{name}: no diagnostic on screen:\n{screen}")
+        print(f"[negative] {name}: reports missing CCP.COM, no prompt (ok)")
 
     def boots(self, name: str, path: Path) -> None:
         """An optional file is missing: boot must still reach the prompt."""
@@ -321,8 +322,8 @@ def main() -> int:
         try:
             neg = Negative(mcp)
             for name, path in images.items():
-                if name == "noccp":
-                    neg.no_ccp(path)
+                if name in ("noccp", "shortccp"):
+                    neg.no_ccp(path, name)
                 elif name == "emptyccp":
                     neg.ccp_empty(path)
                 elif name == "nofont64":
@@ -333,7 +334,7 @@ def main() -> int:
                     neg.boots(name, path)
                 elif name in ("nofid", "badfid"):
                     neg.c_absent(name, path)
-                elif name in ("shortccp", "shortsys2",
+                elif name in ("shortsys2",
                               "badccpblock", "badsys2block"):
                     neg.no_prompt(name, path)
                 else:
