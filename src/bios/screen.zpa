@@ -204,12 +204,6 @@ scr_init:
     dec a
     jr nz, .rbt_loop
 
-    ld hl, char_buffer
-    ld de, char_buffer + 1
-    ld (hl), 0x20
-    ld bc, SCR_COLS_MAX * SCR_ROWS - 1
-    ldir
-
     xor a
     ld (cursor_col), a
     ld (cursor_row), a
@@ -217,27 +211,9 @@ scr_init:
     ld a, BORDER_COL
     out (PORT_ULA), a
 
-    call _page_in              ; Clobbers AF, BC
-
-    ld hl, SCR_BASE
-    ld de, SCR_BASE + 1
-    ld (hl), 0
-    ld bc, 6143
-    ldir
-
-    ld a, (scr_attr)
-    ld hl, SCR_ATTR
-    ld de, SCR_ATTR + 1
-    ld (hl), a
-    ld bc, 767
-    ldir
-
-    ld a, (mode80)
-    or a
-    jr z, .si_no_lg
-    call _lg_clear_all
-.si_no_lg:
-    jp _page_out             ; Clobbers AF, BC
+    ; Clear char_buffer, the bitmap, the attributes and (in 24x80 mode)
+    ; the logical screen: exactly what _clear_screen does.
+    jp _clear_screen
 
 
 ; ==========================================================================
@@ -274,7 +250,7 @@ scr_reset:
     ld (scr_wrap), a
 
     call _cancel_paging
-    jp scr_init
+    jr scr_init
 
 
 ; ==========================================================================
