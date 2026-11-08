@@ -73,6 +73,7 @@ separate, explicitly triggered workflow.
 | `aplz` | APL/Z 1.1 | APL vector/arithmetic expressions, 30 KB workspace | Pass |
 | `z80asm` | SLR Z80ASM 1.32 | Direct-to-`.COM` macro assembler (F44 multi-sector read) | Pass |
 | `zsid` | Microsoft ZSID 1.4 | Debugger: load, memory dump, `G0` | Pass |
+| `zsid_break` | ZSID 1.4 breakpoint | `F100,CFFF,0` then `G100,D000` must stop at `*D000` | Known issue (IM 1 tick shares RST 7; same on Locomotive's +3 CP/M) |
 | `zork2` | Zork II | Large `.DAT`, save-file write | Pass |
 | `zork3` | Zork III | Paged intro, large `.DAT`, save-file write | Pass |
 | `wordmaster` | MicroPro WordMaster 1.07A | Full-screen edit, BREAK/ESC, save, TYPE | Pass |
@@ -355,7 +356,7 @@ need conversion first.
 | M80 + L80 | [M80.COM](http://www.retroarchive.org/cpm/lang/m80.com), [L80.COM](http://www.retroarchive.org/cpm/lang/l80.com) |
 | Microsoft MACRO-80 package | [MASM-80.ZIP](http://www.retroarchive.org/cpm/lang/MASM-80.ZIP) - automated as `m80l80` |
 | SLR Z80 assembler | [Z80ASM.ZIP](http://www.retroarchive.org/cpm/lang/Z80ASM.ZIP) - automated as `z80asm` |
-| ZSID debugger | [zsid.zip](http://www.retroarchive.org/cpm/lang/zsid.zip) - automated as `zsid` |
+| ZSID debugger | [zsid.zip](http://www.retroarchive.org/cpm/lang/zsid.zip) - automated as `zsid` and `zsid_break` |
 
 ### Word processing and text
 

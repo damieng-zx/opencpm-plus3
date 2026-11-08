@@ -1140,7 +1140,11 @@ start_tpa:
     ; Install the common tick/motor ISR at bank 0's 0x0038.  It lives in
     ; common memory (visible in TPA mode), so the clock and keyboard repeat
     ; keep running while a TPA program executes.  Programs that need their
-    ; own RST 38 handler can overwrite these three bytes.
+    ; own RST 38 handler can overwrite these three bytes.  Debuggers do:
+    ; ZSID/SID/DDT put their breakpoint handler here, so the IM 1 tick then
+    ; lands in it and stops a G/T run at a random address.  Locomotive's
+    ; +3 CP/M Plus does the same (IM 1 through 0038h), so this stays IM 1;
+    ; see docs/compatibility.md, "Debuggers and RST 7".
     ld a, JMP_OPCODE
     ld (0x0038), a
     ld hl, isr_handler

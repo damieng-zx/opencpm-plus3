@@ -510,6 +510,42 @@
       "notes": "ZSID 1.4 debugger: loads a .COM, dumps memory at 0100h and warm-boots with G0. Exercises file loading, console output and the warm-boot path."
     },
     {
+      "id": "zsid_break",
+      "title": "ZSID 1.4 breakpoint (G with a stop address)",
+      "url": "http://www.retroarchive.org/cpm/lang/zsid.zip",
+      "archive": "zip",
+      "members": [
+        "ZSID.COM"
+      ],
+      "command": "ZSID",
+      "expect": [
+        "ZSID VERS 1.4"
+      ],
+      "frames": 1500,
+      "steps": [
+        {
+          "text": "F100,CFFF,0",
+          "frames": 600
+        },
+        {
+          "text": "G100,D000",
+          "frames": 900,
+          "expect": [
+            "*D000"
+          ]
+        },
+        {
+          "text": "G0",
+          "frames": 1200,
+          "expect": [
+            "A>"
+          ]
+        }
+      ],
+      "known_issue": "ZSID stops at a random address instead of *D000. The 50 Hz tick is IM 1, which shares 0038h with RST 7; ZSID puts its breakpoint handler there and enables interrupts when it starts the program, so the first tick looks like a breakpoint (the long F fill is cut short the same way, inside ZSID). Locomotive's own +3 CP/M Plus behaves the same way, so the system keeps IM 1 for compatibility.",
+      "notes": "Fills 0100-CFFF with NOPs (about three frames of execution) and runs to a breakpoint at D000h. Exercises RST 7 breakpoints while the system tick is live."
+    },
+    {
       "id": "zork2",
       "title": "Zork II",
       "url": "http://www.retroarchive.org/cpm/games/zork123_80.zip",

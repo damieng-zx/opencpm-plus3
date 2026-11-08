@@ -55,6 +55,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 | **Turbo Pascal display** | The default run wraps; `turbo3_80` fits the IDE in 80 columns. Kaypro terminal escapes leave stray `1` characters in the buffer. | 24x80 solves the width; the remaining work is the Kaypro terminal escape set. |
 | **SuperCalc2 display** | Program logic works, but VT-100 escape sequences are treated as printable text. `supercalc2_80` fits the banner and right half in 24x80; the escapes remain. | Add VT-100 (`ESC[...`) handling to `screen.zpa`, or install SuperCalc for a VT52/ADM-3A terminal. |
 | **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The clock is a FID installed at cold boot. This loader only stages `RAMDISK.FID`; a generic +3 FID loader is needed. |
+| **ZSID / SID / DDT breakpoints** | `G` with a stop address (and `T`/`U` tracing) stops at a random address inside the program instead of at the breakpoint, and a long ZSID command such as a large `F` fill is cut short the same way. Loading, short dumps and `G0` work. | Not fixable without breaking +3 compatibility; see [Debuggers and RST 7](#debuggers-and-rst-7). Automated as `zsid_break` (known issue). |
 | **Sargon (chess)** | Prints nothing after the command line; the CPU spins polling port `2FFD`. | Copy protection. The program issues raw uPD765 `READ DATA` commands against the boot track (`C=1`, `R=1..N`) and waits for the original disk's sector IDs, which never match, so it never reaches its title screen. Not a BIOS bug: no CP/M file or console call is involved. |
 
 Recently fixed: **DRI ED/SET/SETKEYS**.  ED's `E` command corrupted page
@@ -81,6 +82,33 @@ the whole source block.  F20/F21 now apply the count to both sequential
 directions (1..127) and report the records moved in H.  An invalid count
 resets to 1, which is what lets PIP's 128 request fall back cleanly.  The
 real-world suite reports it as `PASS`.
+
+## Debuggers and RST 7
+
+The system tick is an IM 1 interrupt, so every 50 Hz frame the Z80 executes
+the equivalent of `RST 38h`: in TPA mode it jumps through page-zero `0038h`,
+where `start_tpa` installs `JP isr_handler`.  CP/M reserves `0008h-003Ah`
+for restarts 1-7 (CP/M 3 Programmer's Guide, Table 2-11), and DRI's
+debuggers use RST 7 (`0038h`) for breakpoints: ZSID replaces our jump with
+one to its own handler when it loads, and it enables interrupts when `G`
+starts the program.  The first tick after that enters ZSID's handler, which
+reports it as a breakpoint at whatever address was running.  Making the
+BDOS leave interrupts off while `0038h` is not ours does not help, because
+ZSID turns them back on itself.
+
+Locomotive's own +3 CP/M Plus behaves identically: it also runs IM 1 with
+`JP FB75` at `0038h`, ZSID overwrites it with `JP E086`, and `G100,10C` on
+a three-second loop stops at `*0105`.  Programs written for that system may
+rely on the IM 1 call through `0038h`, so this implementation keeps it.
+Moving the tick to IM 2 would free RST 7 for debuggers, at the cost of that
+compatibility and of relying on the +3 data bus reading `FFh` during the
+interrupt acknowledge.
+
+What the suite shows still working under ZSID: loading a file, a short `D`
+dump and `G0`.  Anything that runs for longer than about a frame with
+interrupts on is exposed, including ZSID's own commands: `F100,CFFF,0` was
+cut short with `*E517`, an address inside ZSID.  Warm boot restores our
+vector, so leaving the debugger returns the system to normal.
 
 ## WordStar 3.0 display width
 
@@ -144,7 +172,8 @@ It does not help WordStar, whose 80-column layout is unchanged.
 - [x] Microsoft M80 / L80 - works (automated)
 - [x] Microsoft MACRO-80 package - same binaries as M80 / L80 (automated)
 - [x] SLR Z80 assembler - works (multi-sector F20; automated)
-- [x] ZSID debugger - works (automated)
+- [x] ZSID debugger - loads, dumps and exits (automated as `zsid`); breakpoints
+  do not work, as on Locomotive's +3 CP/M (`zsid_break`, known issue)
 
 ### Spreadsheets, business and databases
 
