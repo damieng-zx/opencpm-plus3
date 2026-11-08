@@ -614,7 +614,8 @@ jump table directly:
 
 Switch modes with `SCREEN.COM` (`SCREEN 51`, `SCREEN 32` or `SCREEN 64`), or
 BIOS fn 32 directly.  64 columns is an extension: the +3 manual's `ESC 3` only
-defines 32, 51 and 80, and 80 is still unimplemented.
+defines 32, 51 and 80; `ESC 3 2` (80) selects the 24×80 mode described
+below.
 
 Default: 51 columns.
 
@@ -626,7 +627,9 @@ with the text.  Characters outside ASCII are blank in this mode; 51 and
 32 columns keep the full Amstrad graphics set.
 
 The current column count minus 1 is stored in the SCB at offset 0x1A
-(`conwidth`).
+(`conwidth`, read with BDOS F49).  In 24×80 mode it is 79 whatever the
+physical width, so programs that size their output from it lay out for
+the 80-column logical screen; see 24×80 below.
 
 ### Control Codes
 
@@ -798,6 +801,11 @@ row was stamped in one pass first.  If the viewport is not the full
 window (`ESC X` moved it or narrowed it), it falls back to a full redraw.
 At 51 columns the 256th screen pixel lies outside the 51×5 = 255-pixel
 text area, so it is cleared after the shift.
+
+In 24×80 mode the SCB console width (`conwidth`, offset 0x1A, BDOS F49)
+is 79, so DIR lists five entries a line, DUMP shows sixteen bytes a line
+and `SCREEN` reports 80 columns; leaving 24×80 restores the physical
+width.  (Locomotive's utilities assume 51 columns throughout.)
 
 In 24×80 mode `TE_ASK` reports width − 1 = 79, the cursor column is
 logical (0-79), the line/erase sequences work on the 80-column line, and

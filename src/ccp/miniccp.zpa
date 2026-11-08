@@ -383,10 +383,11 @@ parse_cmd:
 .dir_ddrv_set:
     ld (dir_display_drive), a
 
-    ; Compute columns from screen width (query SCB offset 0x1A = conwidth = cols-1)
-    ; Each column = "FILENAME TYP" (13) + " : " (3) = 16 chars
-    ; Plus "A: " prefix (3). Line = 3 + N*13 + (N-1)*3 = 16*N.
-    ; So N = floor(SCR_WIDTH / 16).
+    ; Compute columns from the console width (SCB 0x1A = conwidth = cols-1;
+    ; the BIOS reports 80 in 24x80 mode).  Each entry is "FILENAME TYP"
+    ; (12) with " : " (3) between entries and "A: " (3) in front, so a line
+    ; of N entries is 15*N characters.  N = floor(width / 16) keeps a spare
+    ; column: 2 at 32, 3 at 51, 4 at 64 and 5 (75 characters) at 80.
     ld de, scr_query_pb
     ld c, F_SCB
     call BDOS

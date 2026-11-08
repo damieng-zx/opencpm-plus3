@@ -219,11 +219,12 @@ class PrintBlock(unittest.TestCase):
 
 class DiskTestScreenWidth(unittest.TestCase):
     def test_t18_accepts_every_supported_width(self):
-        # conwidth is columns - 1, so 31/50/63 for the 32/51/64 modes.  The
-        # suite must not fail just because the screen is not 51 columns.
+        # conwidth is columns - 1, so 31/50/63 for the 32/51/64 modes and
+        # 79 in 24x80.  The suite must not fail just because the screen is
+        # not 51 columns.
         text = source("src/test/disktest.asm")
         body = text[text.index("test18:"):text.index("test19:")]
-        for value in ("cp 31", "cp 50", "cp 63"):
+        for value in ("cp 31", "cp 50", "cp 63", "cp 79"):
             self.assertIn(value, body)
         self.assertIn("t18_conwidth", body)
         self.assertIn("msg_t18_cw", text)

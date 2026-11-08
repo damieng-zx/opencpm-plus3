@@ -1,7 +1,9 @@
 ; DUMP.COM — Hex/ASCII file viewer
 ; Usage: DUMP filename.ext
 ; Displays file contents as hex bytes and ASCII.
-; Bytes per line adapts to screen width: (width-8)/4
+; Bytes per line adapts to the console width (F49, SCB 0x1A):
+; (width-8)/4, at most 16 -- 6 at 32 columns, 10 at 51, 14 at 64 and
+; 16 in 24x80, where the BIOS reports 80 columns.
 ; Paging is handled system-wide by BDOS when SETDEF [PAGE] is on.
 ;
 ; Build: sjasmplus --raw=build/dump.com src/tools/dump.asm
@@ -39,6 +41,10 @@ start:
     sub 8
     srl a
     srl a
+    cp 17                      ; at most 16 (80 columns would give 18, and
+    jr c, .bpl_ok              ; lnbuf holds 16; 16 keeps offsets round)
+    ld a, 16
+.bpl_ok:
     ld (bpl), a
 
     ld de, dmbuf

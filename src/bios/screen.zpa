@@ -2148,8 +2148,7 @@ scr_set_cols:
     ret                         ; ignore unavailable values silently
 .valid:
     ld (scr_cols), a            ; update runtime column count
-    dec a
-    ld (scb_conwidth), a        ; update SCB offset 0x1A (cols - 1)
+    call _set_conwidth          ; SCB 0x1A: 79 in 24x80, else cols - 1
     ld hl, 0x8000               ; default: 51-col font (5px) in bank 6
     ld a, (scr_cols)
     cp 32
@@ -2232,10 +2231,32 @@ _enter80:
     call _lg_step_for_cols
     ld a, 1
     ld (mode80), a
+    call _set_conwidth         ; programs now see an 80-column console
     xor a
     ld (lg_off), a
     call scr_init              ; clears the visible screen and LG_BUF
     jp _stl_draw
+
+
+; @proc _set_conwidth
+;   Store the console width programs see (SCB 0x1A, F49) as width - 1:
+;   80 columns in 24x80 mode, the physical width otherwise.  DIR, DUMP
+;   and any program that sizes its output from F49 then lay out for the
+;   80-column logical screen; the window follows the cursor.  Every
+;   change of mode80 or scr_cols ends here: _enter80 directly, and ESC 3,
+;   ESC y, BIOS fn 32 and _exit80 through scr_set_cols.
+; @clobbers af
+; @end
+_set_conwidth:
+    ld a, (mode80)
+    or a
+    ld a, 80
+    jr nz, .scw_store
+    ld a, (scr_cols)
+.scw_store:
+    dec a
+    ld (scb_conwidth), a
+    ret
 
 
 ; @proc _exit80

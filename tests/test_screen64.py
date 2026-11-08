@@ -30,7 +30,7 @@ class ScreenDriver(unittest.TestCase):
         body = text[text.index("scr_set_cols:"):text.index("; Font data is NOT embedded")]
         self.assertIn("cp 64", body)
         self.assertIn("ld hl, 0x9400", body)
-        self.assertIn("ld (scb_conwidth), a", body)
+        self.assertIn("call _set_conwidth", body)
         # Without FONT64.BIN on the boot disk the mode is refused rather
         # than drawing from uninitialised bank-6 RAM.
         self.assertIn("ld a, (LF_FLAGS)", body)

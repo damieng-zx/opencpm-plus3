@@ -1617,8 +1617,8 @@ test18:
     or a
     jp nz, .t18_fail
 
-    ; F49 get conwidth (offset 0x1A) -> columns-1: 31, 50 or 63.
-    ; DISKTEST must work at any supported screen width, so accept all three.
+    ; F49 get conwidth (offset 0x1A) -> columns-1: 31, 50, 63 or 79 (24x80).
+    ; DISKTEST must work at any supported screen width, so accept all four.
     ld hl, scb_pb
     ld (hl), 0x1A
     inc hl
@@ -1632,6 +1632,8 @@ test18:
     cp 31
     jr z, .t18_width_ok
     cp 63
+    jr z, .t18_width_ok
+    cp 79
     jr z, .t18_width_ok
     ; Report the value we got: it is the only width-dependent check here.
     ld de, msg_t18_cw

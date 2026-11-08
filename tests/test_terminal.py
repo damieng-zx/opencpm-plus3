@@ -241,6 +241,36 @@ class Wide80(unittest.TestCase):
         self.assertIn("call _lg_step_for_cols", body)
         self.assertIn("ld (lg_off), a", body)
 
+    def test_console_width_is_80_in_24x80(self):
+        """F49 conwidth (SCB 0x1A) is 79 in 24x80, else the physical width.
+
+        DIR and DUMP size their output from it, so in 24x80 they must see
+        the 80-column logical screen, not the physical window.  Entering
+        24x80 sets it, and every width change (ESC 3, ESC y, fn 32) goes
+        through scr_set_cols, which must keep it at 79 while mode80 is on.
+        """
+        text = screen_source()
+        body = text[text.index("_set_conwidth:"):]
+        body = body[:body.index("\n; @proc", 1) if "\n; @proc" in body else None]
+        self.assertIn("ld a, (mode80)", body)
+        self.assertIn("ld a, 80", body)
+        self.assertIn("ld a, (scr_cols)", body)
+        self.assertIn("ld (scb_conwidth), a", body)
+        enter = text[text.index("_enter80:"):text.index("_exit80:")]
+        self.assertIn("call _set_conwidth", enter)
+        set_cols = text[text.index("scr_set_cols:"):text.index(
+            "; 24x80 mode", text.index("scr_set_cols:"))]
+        self.assertIn("call _set_conwidth", set_cols)
+        self.assertNotIn("ld (scb_conwidth)", set_cols)
+
+    def test_dump_caps_its_line_at_the_buffer(self):
+        """80 columns would give (80-8)/4 = 18 bytes; lnbuf holds 16."""
+        dump = source("src/tools/dump.asm")
+        self.assertIn("lnbuf:  ds 16", dump)
+        width = dump[dump.index("ld c, F_GETSCB"):dump.index("ld (bpl), a")]
+        self.assertIn("cp 17", width)
+        self.assertIn("ld a, 16", width)
+
     def test_page_step_is_derived_from_the_width(self):
         """The step is 80-cols except at 32 columns, where it is 24."""
         text = screen_source()

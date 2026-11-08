@@ -1824,8 +1824,52 @@ class Smoke:
             if got != want:
                 raise SmokeError(f"{label}: mode80={got}, expected {want}")
             self.expect(label + " prompt", "A>")
+            width = self.memory(3, label_address("scb_conwidth"), 1)[0] + 1
+            if width != (80 if want else 51):
+                raise SmokeError(f"{label}: F49 console width {width}")
         self.command("SET24X80 JUNK", 700)
         self.expect("SET24X80 usage", "SET24X80 [ON|OFF]")
+        self.run_wide_tools()
+
+    def lg_text(self) -> list[str]:
+        """The 80x24 logical screen (LG_BUF, bank 5) as text rows."""
+        data = self.memory(5, 0x5B00, 80 * ROWS)
+        return ["".join(chr(b) if 32 <= b < 127 else "."
+                        for b in data[r * 80:(r + 1) * 80]).rstrip()
+                for r in range(ROWS)]
+
+    def run_wide_tools(self) -> None:
+        """In 24x80 the console is 80 columns wide, and the tools use it.
+
+        The BIOS reports 80 columns through F49 (SCB 0x1A) while 24x80 is
+        on, so DIR lays out five entries a line and DUMP sixteen bytes; the
+        window shows a part of each line, so the check reads LG_BUF.
+        """
+        self.log("DIR/DUMP/SCREEN at 80 columns")
+        self.command("SET24X80 ON", 900)
+        self.command("DIR", 700)
+        rows = self.lg_text()
+        dir_rows = [r for r in rows if r.startswith("A: ")]
+        if not dir_rows or max(r.count(" : ") for r in dir_rows) != 4:
+            raise SmokeError("DIR at 80 columns: expected 5 entries a line"
+                             " -- LG_BUF:\n" + "\n".join(rows))
+        if max(len(r) for r in dir_rows) > 79:
+            raise SmokeError("DIR at 80 columns: line too long")
+        self.command("DUMP SMOKE.TXT", 1000)
+        rows = self.lg_text()
+        screen = "\n".join(rows)
+        for needle in ("0000: 53 4D 4F 4B 45 20 4F 4B",
+                       "0070: " + " ".join(["1A"] * 16)):
+            if needle not in screen:
+                raise SmokeError(f"DUMP at 80 columns: missing {needle!r}"
+                                 " -- LG_BUF:\n" + screen)
+        self.command("SCREEN", 600)
+        if "80 columns" not in "\n".join(self.lg_text()):
+            raise SmokeError("SCREEN in 24x80 does not report 80 columns")
+        self.command("SET24X80 OFF", 900)
+        if self.memory(3, label_address("scb_conwidth"), 1)[0] != 50:
+            raise SmokeError("SET24X80 OFF: console width not back to 51")
+        self.expect("SET24X80 OFF after the wide tools", "A>")
 
     def run_disktest(self) -> None:
         self.log("DISKTEST")
