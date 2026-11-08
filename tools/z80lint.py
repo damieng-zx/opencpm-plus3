@@ -13,7 +13,8 @@ Checks:
      conflicting depths are reported as ambiguous. `ld sp, …` is treated as
      a stack rebase (depth resets to 0 from that point); `inc sp`/`dec sp`
      and `jp (hl/ix/iy)` mark the routine unanalysable and require
-     `; lint-exempt: stack`.
+     `; lint-exempt: stack`.  Labels named in a `dw` table inside the
+     routine are extra entry points at depth 0 (jump-table handlers).
   2. Register clobber: reads of registers known clobbered by a preceding CALL
      without intervening restore.
   3. Dead stores: writes between push/pop that are discarded by the pop.
@@ -889,6 +890,28 @@ def _cfg_entries(routine):
     return out
 
 
+def _cfg_table_targets(routine):
+    """
+    Labels named in a `dw` table inside the routine.  They are dispatch
+    entry points, reached through a patched or indirect jump the CFG cannot
+    follow, so the stack check seeds each at depth 0 like the routine entry
+    instead of skipping it as unreachable.
+
+      In:       routine (parsed)
+      Out:      set of label names
+      Clobbers: none
+    """
+    out = set()
+    for _, raw in routine.lines:
+        _, mnemonic, opstr, _, is_directive, _ = parse_line(raw)
+        if is_directive and mnemonic in ('dw', 'defw'):
+            for tok in opstr.split(','):
+                tok = tok.strip()
+                if re.match(r'^\.?[A-Za-z_]\w*$', tok):
+                    out.add(tok)
+    return out
+
+
 def _cfg_build_blocks(entries):
     if not entries:
         return []
@@ -1035,9 +1058,15 @@ def check_stack_balance_cfg(routine):
         })
         return issues
 
-    # Fixed-point entry-depth solver.
+    # Fixed-point entry-depth solver.  Jump-table targets are entry points
+    # too (see _cfg_table_targets).
     entry_depth = {0: 0}
     worklist = [0]
+    for lbl in _cfg_table_targets(routine):
+        bi = label_to_block.get(lbl)
+        if bi is not None and bi not in entry_depth:
+            entry_depth[bi] = 0
+            worklist.append(bi)
     while worklist:
         bi = worklist.pop()
         b = blocks[bi]

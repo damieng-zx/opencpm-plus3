@@ -20,12 +20,26 @@ def handler_body(label: str, next_label: str) -> str:
     return text[start:text.index(next_label, start)]
 
 
+def xbios_dispatch() -> dict[int, str]:
+    """XBIOS ID -> handler label, read from the dispatcher's .xb_table.
+
+    Slot n of the table serves ID 0x80 + 3 * n (the +3 jump block).
+    """
+    text = source("src/bios/bios.zpa")
+    start = text.index(".xb_table:")
+    end = text.index("assert $ - .xb_table", start)
+    labels = []
+    for line in text[start:end].splitlines():
+        code = line.split(";", 1)[0].strip()
+        if code.startswith("dw "):
+            labels.extend(t.strip() for t in code[3:].split(","))
+    return {0x80 + 3 * i: label for i, label in enumerate(labels)}
+
+
 class TeAsk(unittest.TestCase):
     def test_dispatch_uses_jumpblock_entry(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xBF", dispatch)
-        self.assertRegex(dispatch, r"j[pr] z, \.te_ask")
+        self.assertEqual(xbios_dispatch()[0xBF], ".te_ask")
 
     def test_returns_viewport_and_cursor(self):
         body = handler_body(".te_ask:", ".dd_drive_status:")
@@ -68,9 +82,7 @@ class TeAsk(unittest.TestCase):
 class TeReset(unittest.TestCase):
     def test_dispatch_uses_jumpblock_entry(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xC2", dispatch)
-        self.assertRegex(dispatch, r"j[pr] z, \.te_reset")
+        self.assertEqual(xbios_dispatch()[0xC2], ".te_reset")
 
     def test_handler_calls_scr_reset(self):
         body = handler_body(".te_reset:", ".dd_drive_status:")
@@ -98,9 +110,7 @@ class TeReset(unittest.TestCase):
 class TeSetInk(unittest.TestCase):
     def test_dispatch_uses_jumpblock_entry(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xCB", dispatch)
-        self.assertRegex(dispatch, r"j[pr] z, \.te_set_ink")
+        self.assertEqual(xbios_dispatch()[0xCB], ".te_set_ink")
 
     def test_userf_preserves_caller_a(self):
         text = source("src/bios/common.zpa")
@@ -141,9 +151,7 @@ class TeSetInk(unittest.TestCase):
 class TeSetBorder(unittest.TestCase):
     def test_dispatch_uses_jumpblock_entry(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xCE", dispatch)
-        self.assertRegex(dispatch, r"j[pr] z, \.te_set_border")
+        self.assertEqual(xbios_dispatch()[0xCE], ".te_set_border")
 
     def test_handler_sets_border_only(self):
         body = handler_body(".te_set_border:", ".dd_drive_status:")
@@ -159,8 +167,8 @@ class TeSetBorder(unittest.TestCase):
 class TeSetSpeed(unittest.TestCase):
     def test_dispatch_accepts_and_ignores(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertRegex(dispatch, r"cp 0xD1\s*\n\s*ret z")
+        self.assertEqual(xbios_dispatch()[0xD1], ".xb_ret")
+        self.assertRegex(text, r"\.xb_ret:\s*\n\s*ret\b")
 
     def test_tester_calls_it(self):
         text = source("src/test/xtetest.asm")
@@ -171,9 +179,7 @@ class TeSetSpeed(unittest.TestCase):
 class ScrRunRoutine(unittest.TestCase):
     def test_dispatch_uses_jumpblock_entry(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xE9", dispatch)
-        self.assertIn("jp z, .scr_run_routine", dispatch)
+        self.assertEqual(xbios_dispatch()[0xE9], ".scr_run_routine")
 
     def test_handler_pages_screen_and_restores(self):
         body = handler_body(".scr_run_routine:", ".dd_drive_status:")
@@ -211,7 +217,6 @@ class ScrRunRoutine(unittest.TestCase):
 class DiscPhase1(unittest.TestCase):
     def test_dispatch_ids(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
         for entry, target in (
             ("0x80", ".dd_init"),
             ("0x95", ".dd_sel_format"),
@@ -221,8 +226,7 @@ class DiscPhase1(unittest.TestCase):
             ("0xAA", ".dd_off_motor"),
             ("0xB3", ".dd_l_seek"),
         ):
-            self.assertIn(f"cp {entry}", dispatch)
-            self.assertIn(f"jp z, {target}", dispatch)
+            self.assertEqual(xbios_dispatch()[int(entry, 16)], target)
 
     def test_dd_init_resets_driver(self):
         body = handler_body(".dd_init:", ".dd_sel_format:")
@@ -300,7 +304,6 @@ class DiscPhase1(unittest.TestCase):
 class DiscPhase2(unittest.TestCase):
     def test_dispatch_ids(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
         for entry, target in (
             ("0x86", ".dd_read_sector"),
             ("0x89", ".dd_write"),
@@ -308,8 +311,7 @@ class DiscPhase2(unittest.TestCase):
             ("0x8F", ".dd_format"),
             ("0x92", ".dd_login"),
         ):
-            self.assertIn(f"cp {entry}", dispatch)
-            self.assertIn(f"jp z, {target}", dispatch)
+            self.assertEqual(xbios_dispatch()[int(entry, 16)], target)
 
     def test_dd_login_forces_detection_and_sizes(self):
         body = handler_body(".dd_login:", ".dd_read_sector:")
@@ -419,9 +421,7 @@ class DiscPhase2(unittest.TestCase):
 class DdSetup(unittest.TestCase):
     def test_dispatch_uses_jumpblock_entry(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0x83", dispatch)
-        self.assertIn("jp z, .dd_setup", dispatch)
+        self.assertEqual(xbios_dispatch()[0x83], ".dd_setup")
 
     def test_handler_copies_and_scales(self):
         body = handler_body(".dd_setup:", ".dd_sel_format:")
@@ -470,9 +470,7 @@ class DdSetup(unittest.TestCase):
 class DdLDpb(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0x9E", dispatch)
-        self.assertIn("jp z, .dd_l_dpb", dispatch)
+        self.assertEqual(xbios_dispatch()[0x9E], ".dd_l_dpb")
 
     def test_handler_selects_17_or_27_bytes(self):
         body = handler_body(".dd_l_dpb:", ".dd_l_on_motor:")
@@ -504,9 +502,7 @@ class DdLDpb(unittest.TestCase):
 
     def test_xdpb_dispatch_and_length(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xA1", dispatch)
-        self.assertIn("jp z, .dd_l_xdpb", dispatch)
+        self.assertEqual(xbios_dispatch()[0xA1], ".dd_l_xdpb")
         body = handler_body(".dd_l_xdpb:", ".dd_l_build:")
         self.assertIn("ld a, 27", body)
         self.assertIn("DD_L_XDPB", body)
@@ -532,9 +528,7 @@ class DdLDpb(unittest.TestCase):
 class DdLRead(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xAD", dispatch)
-        self.assertIn("jp z, .dd_l_read", dispatch)
+        self.assertEqual(xbios_dispatch()[0xAD], ".dd_l_read")
 
     def test_handler_parses_and_reads(self):
         # The parameter block is unpacked by .dd_l_setup, which DD_L_WRITE
@@ -580,9 +574,7 @@ class DdLRead(unittest.TestCase):
 class DdLWrite(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xB0", dispatch)
-        self.assertIn("jp z, .dd_l_write", dispatch)
+        self.assertEqual(xbios_dispatch()[0xB0], ".dd_l_write")
 
     def test_handler_writes_from_user(self):
         body = handler_body(".dd_l_write:", "; --- Phase-2 disc calls ---")
@@ -612,9 +604,7 @@ class DdLWrite(unittest.TestCase):
 class KmSetSpeed(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xE0", dispatch)
-        self.assertIn("jp z, .km_set_speed", dispatch)
+        self.assertEqual(xbios_dispatch()[0xE0], ".km_set_speed")
 
     def test_handler_zero_means_256_and_preserves(self):
         body = handler_body(".km_set_speed:", "; --- Phase-2 disc calls ---")
@@ -661,9 +651,7 @@ class KmSetSpeed(unittest.TestCase):
 class KmKtPut(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xDD", dispatch)
-        self.assertIn("jp z, .km_kt_put", dispatch)
+        self.assertEqual(xbios_dispatch()[0xDD], ".km_kt_put")
 
     def test_handler_queues_shift_and_key(self):
         body = handler_body(".km_kt_put:", ".km_set_speed:")
@@ -699,9 +687,7 @@ class KmKtPut(unittest.TestCase):
 class KmKtGet(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xDA", dispatch)
-        self.assertIn("jp z, .km_kt_get", dispatch)
+        self.assertEqual(xbios_dispatch()[0xDA], ".km_kt_get")
 
     def test_handler_pops_and_updates_lock_state(self):
         body = handler_body(".km_kt_get:", ".km_kt_put:")
@@ -730,9 +716,7 @@ class KmKtGet(unittest.TestCase):
 class KmSetKey(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xD7", dispatch)
-        self.assertIn("jp z, .km_set_key", dispatch)
+        self.assertEqual(xbios_dispatch()[0xD7], ".km_set_key")
 
     def test_handler_validates_and_rewrites(self):
         body = handler_body(".km_set_key:", ".km_kt_get:")
@@ -784,9 +768,7 @@ class KmSetKey(unittest.TestCase):
 class KmSetExpand(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xD4", dispatch)
-        self.assertIn("jp z, .km_set_expand", dispatch)
+        self.assertEqual(xbios_dispatch()[0xD4], ".km_set_expand")
 
     def test_handler_validates_and_copies(self):
         body = handler_body(".km_set_expand:", ".km_set_key:")
@@ -910,9 +892,7 @@ class Bank6Scratch(unittest.TestCase):
 class CdVersion(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xE3", dispatch)
-        self.assertIn("jp z, .cd_version", dispatch)
+        self.assertEqual(xbios_dispatch()[0xE3], ".cd_version")
 
     def test_handler_returns_machine_and_version(self):
         body = handler_body(".cd_version:", ".cd_info:")
@@ -930,9 +910,7 @@ class CdVersion(unittest.TestCase):
 class CdInfo(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0xE6", dispatch)
-        self.assertIn("jp z, .cd_info", dispatch)
+        self.assertEqual(xbios_dispatch()[0xE6], ".cd_info")
 
     def test_handler_reports_machine_and_common_buffer_table(self):
         body = handler_body(".cd_info:", ".te_stl_ask:")
@@ -956,9 +934,7 @@ class CdInfo(unittest.TestCase):
 class DdDriveStatus(unittest.TestCase):
     def test_dispatch(self):
         text = source("src/bios/bios.zpa")
-        dispatch = text[text.index("xbios_handler:"):text.index(".cd_version:")]
-        self.assertIn("cp 0x98", dispatch)
-        self.assertIn("jp z, .dd_drive_status", dispatch)
+        self.assertEqual(xbios_dispatch()[0x98], ".dd_drive_status")
 
     def test_handler_asks_the_controller(self):
         # A constant ST3 leaves programs waiting for a disc swap: DISCKIT
@@ -982,9 +958,8 @@ class DdDriveStatus(unittest.TestCase):
 
 class XbiosCoverage(unittest.TestCase):
     def test_every_dispatch_id_has_a_tester_case(self):
-        bios = source("src/bios/bios.zpa")
-        dispatch = bios[bios.index("xbios_handler:"):bios.index(".cd_version:")]
-        ids = set(re.findall(r"cp 0x([0-9A-F]{2})", dispatch))
+        ids = {f"{i:02X}" for i, label in xbios_dispatch().items()
+               if label != ".xb_unknown"}
         self.assertGreaterEqual(len(ids), 30, "dispatch parse found too few IDs")
 
         tester = source("src/test/xtetest.asm")

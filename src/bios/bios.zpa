@@ -765,74 +765,59 @@ bios_time:
 ; @clobbers
 ; @end
 xbios_handler:
-    cp 0xBF
-    jp z, .te_ask
-    cp 0xC2
-    jp z, .te_reset
-    cp 0xE3
-    jp z, .cd_version
-    cp 0xE6
-    jp z, .cd_info
-    cp 0xC5
-    jp z, .te_stl_ask
-    cp 0xC8
-    jp z, .te_stl_on_off
-    cp 0xCB
-    jp z, .te_set_ink
-    cp 0xCE
-    jp z, .te_set_border
-    cp 0xD1
-    ret z                          ; TE_SET_SPEED — +3 flash is hardware-only
-    cp 0xE9
-    jp z, .scr_run_routine
-    cp 0x98
-    jp z, .dd_drive_status
-    cp 0x80
-    jp z, .dd_init
-    cp 0x83
-    jp z, .dd_setup
-    cp 0x95
-    jp z, .dd_sel_format
-    cp 0x9B
-    jp z, .dd_read_id
-    cp 0x9E
-    jp z, .dd_l_dpb
-    cp 0xA1
-    jp z, .dd_l_xdpb
-    cp 0xA4
-    jp z, .dd_l_on_motor
-    cp 0xA7
-    jp z, .dd_l_t_off_motor
-    cp 0xAA
-    jp z, .dd_off_motor
-    cp 0xAD
-    jp z, .dd_l_read
-    cp 0xB0
-    jp z, .dd_l_write
-    cp 0xB3
-    jp z, .dd_l_seek
-    cp 0x86
-    jp z, .dd_read_sector
-    cp 0x89
-    jp z, .dd_write
-    cp 0x8C
-    jp z, .dd_check
-    cp 0x8F
-    jp z, .dd_format
-    cp 0x92
-    jp z, .dd_login
-    cp 0xD4
-    jp z, .km_set_expand
-    cp 0xD7
-    jp z, .km_set_key
-    cp 0xDA
-    jp z, .km_kt_get
-    cp 0xDD
-    jp z, .km_kt_put
-    cp 0xE0
-    jp z, .km_set_speed
+    ; IDs run 0x80..0xE9 in steps of 3 (the +3 XBIOS jump block).  Turn
+    ; the ID into a table slot without touching BC/DE/HL, which carry the
+    ; call's arguments: L counts the steps of 3 and the remainder must be
+    ; 0, so an ID between two entry points is rejected like any unknown one.
+    sub 0x80
+    jr c, .xb_unknown
+    cp 0xE9 + 3 - 0x80
+    jr nc, .xb_unknown
+    push hl
+    ld l, 0xFF
+.xb_third:
+    inc l
+    sub 3
+    jr nc, .xb_third
+    add a, 3                       ; remainder of (ID - 0x80) / 3
+    jr nz, .xb_bad
+    ld a, l
+    add a, a
+    add a, .xb_table & 0xFF
+    ld l, a
+    adc a, .xb_table >> 8
+    sub l
+    ld h, a                        ; HL = &.xb_table[slot]
+    ld a, (hl)
+    inc hl
+    ld h, (hl)
+    ld l, a
+    ld (.xb_jump + 1), hl          ; patch the handler address
+    pop hl                         ; caller HL back
+.xb_jump:
+    jp 0                           ; patched: jump to the handler
+.xb_bad:
+    pop hl
+.xb_unknown:
     ld a, 0xFF                     ; unknown XBIOS ID
+.xb_ret:
     ret
+
+; One word per XBIOS entry point, 0x80 + 3 * slot.
+.xb_table:
+    dw .dd_init, .dd_setup, .dd_read_sector, .dd_write      ; 80 83 86 89
+    dw .dd_check, .dd_format, .dd_login, .dd_sel_format     ; 8C 8F 92 95
+    dw .dd_drive_status, .dd_read_id, .dd_l_dpb             ; 98 9B 9E
+    dw .dd_l_xdpb, .dd_l_on_motor, .dd_l_t_off_motor        ; A1 A4 A7
+    dw .dd_off_motor, .dd_l_read, .dd_l_write, .dd_l_seek   ; AA AD B0 B3
+    dw .xb_unknown, .xb_unknown, .xb_unknown                ; B6 B9 BC
+    dw .te_ask, .te_reset, .te_stl_ask, .te_stl_on_off      ; BF C2 C5 C8
+    dw .te_set_ink, .te_set_border                          ; CB CE
+    dw .xb_ret                     ; D1 TE_SET_SPEED: the +3 flash is hardware-only
+    dw .km_set_expand, .km_set_key, .km_kt_get              ; D4 D7 DA
+    dw .km_kt_put, .km_set_speed                            ; DD E0
+    dw .cd_version, .cd_info, .scr_run_routine              ; E3 E6 E9
+    assert $ - .xb_table == 2 * ((0xE9 - 0x80) / 3 + 1), "XBIOS table must cover 80h..E9h"
 
 .cd_version:
     ; CD_VERSION (0x00E3): A=machine type, B=major, C=minor.

@@ -107,6 +107,9 @@ Checks:
 1. **Stack balance** — every `RET` must be reached with net push/pop depth 0
    along every path (CFG with a fixed-point solver). `ld sp, …` is a stack
    rebase; `inc sp`/`dec sp`/`jp (hl/ix/iy)` need `; lint-exempt: stack`.
+   Labels named in a `dw` table inside the routine are entry points at
+   depth 0 too, so handlers reached only through a jump table (the XBIOS
+   dispatcher) are still checked.
 2. **Register clobber after CALL** — reading a register a preceding call
    clobbered without restoring it.
 3. **Dead stores** — writes between `push` and `pop` that the pop discards.
