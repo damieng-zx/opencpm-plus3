@@ -303,6 +303,7 @@ scr_putchar:
     ; '2' (national charset) and '5' (24x80 auto-flip) are consumed and
     ; ignored; we have one font and no 24x80 mode.
     xor a
+.esc_set_a:
     ld (esc_state), a
     ret
 
@@ -354,8 +355,7 @@ scr_putchar:
 .enter_esc:
     ; Received 0x1B — enter ESC state
     ld a, ESC_SAW_ESC
-    ld (esc_state), a
-    ret
+    jr .esc_set_a
 
 ; ------------------------------------------------------------------
 ; State 1: received ESC, A = command char (on stack → pop first)
@@ -504,8 +504,7 @@ scr_putchar:
     ld a, b
     ld (esc_cmd), a
     ld a, ESC_WAIT_1P
-    ld (esc_state), a
-    ret
+    jr .esc_set_b
 
 ; ------- ANSI/VT-100 CSI sequences (ESC [ params final) -------
 ; Parameters are decimal, separated by ';', with a leading '?' for private
@@ -519,6 +518,7 @@ scr_putchar:
     ld (csi_val), a
     ld (csi_have), a
     ld a, ESC_CSI
+.esc_set_b:
     ld (esc_state), a
     ret
 
@@ -823,9 +823,7 @@ scr_putchar:
     jp _enter80
 
 .p3_ignore:
-    xor a
-    ld (esc_state), a
-    ret
+    jr .esc_done_c          ; esc_state = normal, return
 
 .esc_p4:
     ; ESC 4 n - page mode (0 off, 1 on); other parameters are ignored.
@@ -851,9 +849,7 @@ scr_putchar:
     and 0xFE
     ld (con_mode), a
 .p4_done:
-    xor a
-    ld (esc_state), a
-    ret
+    jr .esc_done_c          ; esc_state = normal, return
 
 .esc_p5:
     ; ESC 5 n - auto-flip in 24x80 mode.  The +3 manual (Appendix III) has
@@ -880,6 +876,7 @@ scr_putchar:
     ret z
     jp _lg_autoflip
 .p5_done:
+.esc_done_c:
     xor a
     ld (esc_state), a
     ret
@@ -893,9 +890,7 @@ scr_putchar:
     ld a, c
     ld (scr_ink_br), a
     call _set_attr
-    xor a
-    ld (esc_state), a
-    ret
+    jr .esc_done_c          ; esc_state = normal, return
 
 .esc_pc:
     ; ESC c c - background colour; the border follows the paper
@@ -908,9 +903,7 @@ scr_putchar:
     ld a, c
     ld (scr_paper_br), a
     call _set_attr
-    xor a
-    ld (esc_state), a
-    ret
+    jr .esc_done_c          ; esc_state = normal, return
 
 .esc_v:
     ; ESC v - wrap at the right edge
@@ -1104,8 +1097,7 @@ scr_putchar:
 .esc_Y_start:
     ; Record that we're waiting for row param
     ld a, ESC_WAIT_Y_ROW
-    ld (esc_state), a
-    ret
+    jr .esc_set_d
 
 .esc_y_row:
     ; A still on stack from putchar entry; pop it, subtract 32, clamp
@@ -1126,8 +1118,7 @@ scr_putchar:
 .yr_store:
     ld (esc_p1), a
     ld a, ESC_WAIT_Y_COL
-    ld (esc_state), a
-    ret
+    jr .esc_set_d
 
 .esc_y_col:
     pop af                     ; A = col param byte
@@ -1168,6 +1159,7 @@ scr_putchar:
     add a, b
     ld (vp_tmp_col), a
     ld a, ESC_WAIT_X_TR
+.esc_set_d:
     ld (esc_state), a
     ret
 
@@ -1179,8 +1171,7 @@ scr_putchar:
 .xt_ok:
     ld (esc_p1), a
     ld a, ESC_WAIT_X_LC
-    ld (esc_state), a
-    ret
+    jr .esc_set_d
 
 .esc_x_lc:
     pop af
@@ -1190,8 +1181,7 @@ scr_putchar:
 .xl_ok:
     ld (esc_p2), a
     ld a, ESC_WAIT_X_H
-    ld (esc_state), a
-    ret
+    jr .esc_set_d
 
 .esc_x_h:
     pop af
@@ -1211,8 +1201,7 @@ scr_putchar:
 .xh_have:
     ld (vp_height), a
     ld a, ESC_WAIT_X_W
-    ld (esc_state), a
-    ret
+    jr .esc_set_d
 
 .esc_x_w:
     pop af
