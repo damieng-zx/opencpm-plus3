@@ -14,8 +14,9 @@ Covered:
   and quit with ``Q``/``Y``.
 * ``SET``     - the DRI attribute utility runs, prints its "no options"
   diagnostic and applies a bracketed attribute (``SET FILE [RO]``).
-* ``SETKEYS`` - parses ``RESET.KEY`` and programs the +3 key table through
-  XBIOS ``KM_SET_KEY`` / ``KM_SET_EXPAND``.
+* ``SETKEYS`` - our own ``build/SETKEYS.COM`` parses ``RESET.KEY`` and
+  programs the +3 key table through XBIOS ``KM_SET_KEY`` / ``KM_SET_EXPAND``.
+  Only the key *data* file comes from ``references/binaries/``.
 
 Usage:
     python3 tools/zx84_dri.py
@@ -58,12 +59,20 @@ def main() -> int:
     args = ap.parse_args()
 
     bin_dir = Path(args.bin)
-    wanted = ("SHOW.COM", "ED.COM", "SET.COM", "SETKEYS.COM", "RESET.KEY")
+    # Only the DRI binaries and the key *data* file are needed: SETKEYS itself
+    # is ours (build/SETKEYS.COM), so Amstrad's Locomotive build is never used.
+    wanted = ("SHOW.COM", "ED.COM", "SET.COM", "RESET.KEY")
     missing = [n for n in wanted if not (bin_dir / n).exists()]
     if missing:
         print(NOTICE)
         print(f"[dri] skipped (missing {', '.join(missing)})")
         return 0
+
+    setkeys = ROOT / "build" / "SETKEYS.COM"
+    if not setkeys.exists():
+        print(f"error: {setkeys} does not exist; run build.cmd first",
+              file=sys.stderr)
+        return 2
 
     base = Path(args.dsk)
     if not base.is_absolute():
@@ -88,6 +97,8 @@ def main() -> int:
     extra = [bin_dir / n for n in wanted]
     if (ROOT / "build" / "SET24X80.COM").exists():
         base_files.append("build/SET24X80.COM")
+    # SETKEYS is ours, so it ships in the build tree, not references/.
+    base_files.append("build/SETKEYS.COM")
     # ED's read test types an existing line (the build's own smoke fixture).
     if (ROOT / "src" / "test" / "smoke.txt").exists():
         base_files.append("src/test/smoke.txt")

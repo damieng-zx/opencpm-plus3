@@ -147,6 +147,12 @@ for the API references.
 - `SCREEN.COM` — show or set the screen width (32, 51 or 64 columns).
 - `SET24X80.COM` — enter (`ON` or no argument) or leave (`OFF`) the virtual
   80-column screen.
+- `SETKEYS.COM` — apply a key-definition file (`SETKEYS [file]`, default
+  `SETKEYS.KEY`): `n C "string"` sets key *n*'s translation and `E n "string"`
+  sets expansion token *n*.  Strings accept `^X` control characters and the
+  `^'#NN'` hex form, so the stock `RESET.KEY` works unchanged.  Writes the
+  bank-6 table through XBIOS `KM_SET_KEY`/`KM_SET_EXPAND`, so it survives a
+  warm boot.
 - `DATE.COM` — set/show the clock (4-digit year, tick-driven).
 - `DUMP.COM` — hex dump that adapts to the current screen width.
 - `SETDEF.COM` — show/set the search order and search path (F120-F123).
@@ -227,7 +233,7 @@ banner — `TYPE` or `DUMP` the file to read the same text.
 | `FONT32.BIN` | 8-pixel font, 32-column mode |
 | `FONT64.BIN` | 4-pixel font, 64-column mode |
 | `DATE.COM` `DUMP.COM` `SETDEF.COM` `SUBMIT.COM` | `src/tools/` |
-| `SCREEN.COM` `SET24X80.COM` `SHOWXDPB.COM` | `src/tools/` |
+| `SCREEN.COM` `SET24X80.COM` `SETKEYS.COM` `SHOWXDPB.COM` | `src/tools/` |
 | `FORMAT.COM` `DISKCOPY.COM` `STAT.COM` `SYSGEN.COM` | `src/tools/` |
 
 The fonts are 256-glyph, 8-bytes-per-character sets.  `FONT64.BIN` is
@@ -270,7 +276,7 @@ of the image by name in `build.cmd` and `build.sh`:
 
 | File | Why not |
 |---|---|
-| `SETKEYS.COM`, `RESET.KEY` | Locomotive Software / Amstrad code — the banner reads "Developed by Locomotive Software Ltd."  This project is a clean-room CP/M 3.1 and contains no part of Locomotive's system, so their utilities stay off the disk.  Add them to a copy yourself if you want to use them. |
+| `SETKEYS.COM`, `RESET.KEY` | Amstrad's originals are Locomotive Software code — the banner reads "Developed by Locomotive Software Ltd."  This project is a clean-room CP/M 3.1 and contains no part of Locomotive's system, so their `SETKEYS.COM` stays off the disk.  Our own `SETKEYS.COM` (above) does the same job, and `RESET.KEY` is data, not code: add it yourself and it works unchanged. |
 | `PROFILE.SUB` | Amstrad's start-up script; running it at every cold boot would copy ~10K into the 16K `C:` RAM disk before the first prompt.  It works if you add it. |
 | `RENAME.COM` | the CCP's built-in `REN` covers it |
 | `NULU11.COM` | an LBR library manager, not needed on the distribution disk |

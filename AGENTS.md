@@ -265,6 +265,10 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   memory, to leave room in the 16K bank-4 image; see `docs/boot.md`
 - `src/ccp/miniccp.zpa` — CCP with the CP/M 3 built-ins DIR, DIRSYS, ERASE, RENAME, TYPE and USER (and their short forms DIRS, ERA, REN, TYP, USE) plus HELP, `cmd1!cmd2` chaining (the rest of the line is kept by private BDOS F125) and `.COM` loading; built as `CCP.COM`.  Its work buffers are `equ` addresses above the image, so they do not count against the 4K staging window.  On a cold start it submits `PROFILE.SUB` from the default drive — the SCB byte at `0x0A` (`scb_coldboot`) marks a cold boot and the CCP clears it, so a warm boot does not run the profile again.  Lines of a submit file that begin with `<` are queued for the running program (BDOS F124, a private CCP helper) and served by `con_in`/`con_status` as console input
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
+- `src/tools/set24x80.asm` — `SET24X80.COM`, enter/leave the virtual 80x24 screen
+- `src/tools/setkeys.asm` — `SETKEYS.COM`, apply a +3 key-definition file
+  through XBIOS `KM_SET_KEY`/`KM_SET_EXPAND` (replaces Amstrad's Locomotive
+  build, which is never shipped)
 - `src/tools/sysgen.asm` — `SYSGEN.COM`: reads the system from A: (track 0
   via `DD_READ_SECTOR` and the three system files via the BDOS) into memory,
   checks the target's geometry with `DD_LOGIN`, then writes the boot track

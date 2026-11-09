@@ -71,6 +71,7 @@ echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/submit.com src/tools/submit.asm
 "$SJASMPLUS" --raw=build/screen.com src/tools/screen.asm
 "$SJASMPLUS" --raw=build/set24x80.com src/tools/set24x80.asm
+"$SJASMPLUS" --raw=build/setkeys.com src/tools/setkeys.asm
 "$SJASMPLUS" --raw=build/format.com src/tools/format.asm
 "$SJASMPLUS" --raw=build/diskcopy.com src/tools/diskcopy.asm
 "$SJASMPLUS" --raw=build/stat.com src/tools/stat.asm
@@ -118,6 +119,7 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     build/RAMDISK.FID \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
     build/submit.com build/screen.com build/set24x80.com \
+    build/setkeys.com \
     build/format.com \
     build/diskcopy.com \
     build/stat.com \
@@ -149,6 +151,7 @@ python3 tools/mkdsk.py create build/cpm3-test.dsk \
     build/RAMDISK.FID \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
     build/submit.com build/screen.com build/set24x80.com \
+    build/setkeys.com \
     build/format.com \
     build/diskcopy.com \
     build/stat.com \
@@ -179,6 +182,7 @@ python3 tools/mkdsk.py create build/cpm3-dist720.dsk \
     build/RAMDISK.FID \
     build/date.com build/showxdpb.com build/dump.com build/setdef.com \
     build/submit.com build/screen.com build/set24x80.com \
+    build/setkeys.com \
     build/format.com \
     build/diskcopy.com \
     build/stat.com \

@@ -45,7 +45,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 | **SHOW** | DRI CP/M 3 | Prints `A: RW, Space: ...` | Local-only harness `tools/zx84_dri.py` |
 | **ED** | DRI CP/M 3 | Appends/types a line, inserts text, `E` (END) saves and the text reads back with `TYPE`, `Q`/`Y` quits | Local-only harness; the save used to hang (see below) |
 | **SET** | DRI CP/M 3 | Reports `ERROR: No options specified.` and applies a bracketed attribute (`SET FILE [RO]` prints `Read Only (RO)`) | Local-only harness; options go in `[...]` |
-| **SETKEYS** | Locomotive (+3) | Parses `RESET.KEY` and programs the +3 key override table through XBIOS `KM_SET_KEY`/`KM_SET_EXPAND` | Local-only harness verifies the table changed |
+| **SETKEYS** | ours (`src/tools/setkeys.asm`) | Applies a key file: parses `RESET.KEY` and programs the +3 key table through XBIOS `KM_SET_KEY`/`KM_SET_EXPAND`.  Amstrad's original is Locomotive code and is not shipped or needed | DRI harness builds a scratch image and checks the table changed |
 
 ## ❌ Doesn’t work yet
 

@@ -63,7 +63,7 @@ local copy the tool prints the notice and exits 0.
 
 ## DRI CP/M 3 utilities
 
-The DRI utilities (`SHOW`, `ED`, `SET`, `SETKEYS`, `PIP`, ...) are Copyright
+The DRI utilities (`SHOW`, `ED`, `SET`, `PIP`, ...) are Copyright
 Digital Research and are not included or redistributed.  The harness reads
 your own copies from `references/binaries/` (git-ignored) or `--bin DIR`:
 
@@ -89,7 +89,9 @@ checks:
   `SET RO.TXT [RW]` clears the attribute and `ERA` deletes it.
 * `SETKEYS RESET.KEY` parses the key file and programs the +3 key override
   table (XBIOS `KM_SET_KEY`); the harness snapshots the table before and
-  after and fails if nothing changed.
+  after and fails if nothing changed.  This exercises **our own**
+  `src/tools/setkeys.asm`; `RESET.KEY` itself is plain data and is taken from
+  your `references/binaries/`, so the test is skipped when it is absent.
 
 The three failures this harness originally found are fixed:
 
