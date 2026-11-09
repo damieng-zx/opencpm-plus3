@@ -468,6 +468,14 @@ BDOS function 124 (private, used by the CCP only):
 #### F112 — Print Block to Printer
 - **In**: DE=character control block (same layout as F111)
 - **Out**: A=0
+
+#### F125 — Pending Command Line (private CCP helper)
+- **In**: B>0: store B characters (at most 126) from DE in the TPA.
+  B=0: fetch the stored text into DE in the TPA and forget it.
+- **Out**: A=characters stored or fetched (0 = nothing pending)
+- **Note**: Not a CP/M 3 call.  The CCP stores the rest of a `cmd1!cmd2`
+  line here and fetches it at the next prompt, because a program that runs
+  in between overwrites the TPA and ends with a warm boot.
 - **Note**: No printer is fitted, so the block is discarded.
 
 ---

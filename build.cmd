@@ -126,7 +126,11 @@ set REF_BINS=
 :: PROFILE.SUB: Amstrad's start-up script.  It runs here, but auto-running it
 :: would copy ~10K into the 16K C: RAM disk at every cold boot.
 :: PMAUTOAE.COM: third-party toolkit, test image only (PMAUTOAE_FILE below).
-for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" if /I not "%%~nxF"=="NULU11.COM" if /I not "%%~nxF"=="PROFILE.SUB" if /I not "%%~nxF"=="PMAUTOAE.COM" set REF_BINS=!REF_BINS! %%F
+:: SETKEYS.COM, RESET.KEY: Locomotive Software/Amstrad code, and the labels say
+:: "Developed by Locomotive Software Ltd." - this project is a clean-room CP/M
+:: and must not ship it.  The DRI harness fetches both into its own scratch
+:: image from references/binaries/, so nothing is lost by leaving them off.
+for %%F in (references\binaries\*.COM references\binaries\*.SUB) do if /I not "%%~nxF"=="SUBMIT.COM" if /I not "%%~nxF"=="RENAME.COM" if /I not "%%~nxF"=="NULU11.COM" if /I not "%%~nxF"=="PROFILE.SUB" if /I not "%%~nxF"=="PMAUTOAE.COM" if /I not "%%~nxF"=="SETKEYS.COM" if /I not "%%~nxF"=="RESET.KEY" set REF_BINS=!REF_BINS! %%F
 
 set EXTRA_FILES=
 if /I "%~1"=="--add" shift

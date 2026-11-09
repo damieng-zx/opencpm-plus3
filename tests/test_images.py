@@ -96,11 +96,13 @@ class Distribution720Image(unittest.TestCase):
         # The point of the 720K distribution: far more free space than the
         # 180K one (250+ free 2K blocks).
         self.assertGreaterEqual(free_blocks(DIST720), 250)
-        # The 180K disc is nearly full - at most 57 free 1K blocks - but only
+        # The 180K disc is nearly full - at most 58 free 1K blocks - but only
         # with the git-ignored third-party toolkit (BBC BASIC, ED, PIP...) on
         # it.  A checkout without references/binaries, such as CI, has ~120.
+        # (SETKEYS.COM and RESET.KEY are deliberately not put on the image, so
+        # this baseline is one block more than before they were excluded.)
         if BBC.exists():
-            self.assertLessEqual(free_blocks(DIST), 57)
+            self.assertLessEqual(free_blocks(DIST), 58)
 
 
 @unittest.skipUnless(TEST.exists(),

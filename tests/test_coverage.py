@@ -18,6 +18,8 @@ from .layout import ROOT, source
 BDOS_EXEMPT = {
     0: "system reset never returns to the caller",
     124: "private CCP submit-input helper, exercised by the SUBMIT/INPTEST smoke",
+    125: "private CCP helper for the rest of a cmd1!cmd2 line, exercised by "
+         "the '!' chain in the smoke",
 }
 
 # BIOS entries that cannot (or must not) be called by a TPA test program.

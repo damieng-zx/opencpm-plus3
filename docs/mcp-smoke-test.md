@@ -136,9 +136,15 @@ tests, which are the parts that reboot other images.
 
 The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, the `SCREEN` utility
 (`SCREEN 32`/`SCREEN 51`),
-`ERA` (usage, `No file`, the `ALL (Y/N)?` guard and a real delete), `REN`
-(`REN new=old`, `No file`, a real rename and the wildcard refusal), `USER`
-(query, `USER 3`/`USER 10`, range and junk rejection, restore to 0),
+the short names (`TYP`, `DIRS`, `ERASE`, `USE`), `DIRSYS` with and without a
+SYS file (made with `STAT $SYS`), the `NOSUCH?` echo and a `DIRSYS!SETDEF!TYP`
+chain across a program,
+`ERA` (the `Enter filename:` prompt, `No File`, the `ERASE spec (Y/N)?` guard
+for any wildcard and a real delete), `REN`
+(the `Enter New Name:` prompt, `No File`, a real rename, corresponding
+wildcards, the mismatch message and the existing-target question), `USER`
+(the `Enter User# :` prompt, `USER 3`/`USE 10` and the `3A>` prompt, range and
+junk rejection, restore to 0),
 `DATE`, invalid `D:`, and the C: prompt. They also verify that `CCP.COM` is
 on the disk and staged byte-for-byte at `CCP_STAGE` (bank 6, B000h), and that
 `CPM3.SYS` no longer embeds the CCP image. `CPM3C.SYS` is staged at `SYS2_STAGE` (bank 5, 62C0h):
@@ -358,7 +364,7 @@ Run:
 DIR D:
 ```
 
-Require `No files` and no directory listing from the previous drive.  An
+Require `No File` and no directory listing from the previous drive.  An
 invalid drive must return "not found" instead of searching the last cached
 drive.
 

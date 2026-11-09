@@ -894,7 +894,7 @@ class Smoke:
                               drive=1)
             self.check_e5(39, 0, 0x49, drive=1)
             self.command("DIR B:", 1500)
-            self.expect("CPC System DIR", "No files")
+            self.expect("CPC System DIR", "No File")
             self.command("SHOWXDPB", 1500)
             self.expect("CPC System XDPB", "First=41h", "OFF=2",
                         "DSM=170")
@@ -908,7 +908,7 @@ class Smoke:
             self.check_e5(0, 0, 0xC1, drive=1)
             self.check_e5(39, 0, 0xC9, drive=1)
             self.command("DIR B:", 1500)
-            self.expect("CPC Data DIR", "No files")
+            self.expect("CPC Data DIR", "No File")
             self.command("SHOWXDPB", 1500)
             self.expect("CPC Data XDPB", "First=C1h", "OFF=0",
                         "DSM=179")
@@ -1341,7 +1341,7 @@ class Smoke:
 
             self.command("SETDEF [ORDER=(COM)]", 600)
             self.command("ONLYSUB", 700)
-            if self.last_output_line() != "?":
+            if self.last_output_line() != "ONLYSUB?":
                 raise SmokeError("ORDER=(COM) still ran ONLYSUB.SUB: "
                                  + repr(self.last_output_line()))
             self.command("ONLYCOM", 700)
@@ -1356,7 +1356,7 @@ class Smoke:
             self.command("SETDEF", 600)
             check_setting("SETDEF display off", "Display mode:", "OFF")
             self.command("SUBMIT NODISP.SUB", 1200)
-            self.expect("no-display submit ran", "No files")
+            self.expect("no-display submit ran", "No File")
             if "DIR A:NOSUCH" in self.text():
                 raise SmokeError("[NO DISPLAY] still echoed the submit line")
 
@@ -1398,7 +1398,7 @@ class Smoke:
             self.command("SETDEF", 700)
             check_setting("SETDEF search path one drive", "Search path:", "A:")
             self.command("PATHTEST", 700)
-            if self.last_output_line() != "?":
+            if self.last_output_line() != "PATHTEST?":
                 raise SmokeError("PATHTEST ran with an A:-only path: "
                                  + repr(self.last_output_line()))
 
@@ -1419,7 +1419,7 @@ class Smoke:
             # scratch image; the next boot resets the order byte.
             self.command("SETDEF [ORDER=(SUB)]", 600)
             self.command("ONLYCOM", 700)
-            if self.last_output_line() != "?":
+            if self.last_output_line() != "ONLYCOM?":
                 raise SmokeError("ORDER=(SUB) still ran ONLYCOM.COM: "
                                  + repr(self.last_output_line()))
             self.command("ONLYSUB", 900)
@@ -1730,9 +1730,9 @@ class Smoke:
                         "BSH=4(2048)", "DRM=127 (128 ent)")
             # It must not carry the test programs or the PMARC toolkit.
             self.command("DIR BDOSTEST.COM", 700)
-            self.expect("no test programs", "No files")
+            self.expect("no test programs", "No File")
             self.command("DIR PMAUTOAE.COM", 700)
-            self.expect("no PMAUTOAE", "No files")
+            self.expect("no PMAUTOAE", "No File")
             # Same file list as the 180K distribution.
             names720 = self._dsk_names(dist720)
             names180 = self._dsk_names(dist) if dist.exists() else None
@@ -2129,7 +2129,8 @@ class Smoke:
         self.expect("TYPE", "SMOKE OK")
 
         self.command("HELP", 500)
-        self.expect("HELP", "Built-in commands:", "DIR", "ERA", "REN", "USER")
+        self.expect("HELP", "Built-in commands:", "DIR", "ERASE", "RENAME",
+                    "USER")
         if "SCREEN -" in self.text():
             raise SmokeError("HELP still advertises a SCREEN built-in")
 
@@ -2158,9 +2159,9 @@ class Smoke:
             self.command("SUBMIT SMOKE.SUB", 2000)
             # SMOKE.SUB runs HELP then DIR; check the last help line rather
             # than the header, which can scroll off above the listing.
-            self.expect("SUBMIT file", "This help", "CPM3     SYS", "A>")
+            self.expect("SUBMIT file", "of the same name.", "CPM3     SYS", "A>")
             self.command("SMOKE", 2000)
-            self.expect("SUBMIT chain", "This help", "CPM3     SYS", "A>")
+            self.expect("SUBMIT chain", "of the same name.", "CPM3     SYS", "A>")
             self.command("SUBMIT NOPE.SUB", 900)
             self.expect("SUBMIT missing", "No 'SUB' File Found", "A>")
             if "PARAM    SUB" in listing:
@@ -2186,10 +2187,10 @@ class Smoke:
             self.log("RENAME.COM not on the disk; skipping RENAME checks")
 
         self.command("DIR D:", 400)
-        self.expect("invalid drive", "No files")
+        self.expect("invalid drive", "No File")
 
         self.command("DIR C:", 400)
-        self.expect("C: empty", "No files")
+        self.expect("C: empty", "No File")
 
         self.command("C:", 300)
         self.expect("C: prompt", "C>")
@@ -2211,17 +2212,57 @@ class Smoke:
         else:
             self.log("PIP.COM not on the disk; skipping the C: copy check")
 
+    def run_ccp_names(self) -> None:
+        """Short command names, DIR/DIRSYS and the unknown-command echo."""
+        self.command("DIRSYS", 500)
+        self.expect("DIRSYS with no SYS files", "NON-SYSTEM FILE(S) EXIST")
+        self.command("TYP SMOKE.TXT", 400)
+        self.expect("TYP", "SMOKE OK")
+        self.command("TYPE SMOKE.TXT [NO PAGE]", 400)
+        self.expect("TYPE [NO PAGE]", "SMOKE OK")
+        self.command("NOSUCH", 400)
+        self.expect("unknown command repeats its name", "NOSUCH?")
+
+        # "cmd1!cmd2": each command runs after its own prompt, also across a
+        # program (SETDEF) that ends with a warm boot.
+        self.command("DIRSYS!SETDEF!TYP SMOKE.TXT!USE 2", 1800)
+        self.expect("! chain", "NON-SYSTEM FILE(S) EXIST", "Page mode",
+                    "SMOKE OK", "2A>")
+        self.command("USER 0", 400)
+        self.expect("! chain ran USE 2 last", "A>")
+
+        self.command("DIR PIP.COM", 500)
+        if "PIP      COM" not in self.text():
+            self.log("PIP.COM not on the disk; skipping the DIRSYS checks")
+            return
+        self.command("PIP SYS1.TXT=SMOKE.TXT", 800)
+        self.command("STAT SYS1.TXT $SYS", 700)
+        self.command("DIR SYS1.TXT", 500)
+        self.expect("DIR hides SYS files", "SYSTEM FILE(S) EXIST")
+        if "SYS1     TXT" in self.text():
+            raise SmokeError("DIR listed a SYS file: " + self.text())
+        self.command("DIRS SYS1.TXT", 500)
+        self.expect("DIRS lists SYS files", "SYS1     TXT")
+        self.command("DIRSYS CPM3.SYS", 500)
+        self.expect("DIRSYS reports non-SYS", "NON-SYSTEM FILE(S) EXIST")
+        self.command("ERASE SYS1.TXT", 500)
+        self.command("DIRS SYS1.TXT", 500)
+        self.expect("SYS file erased", "No File")
+
     def run_era(self) -> None:
         """ERA: usage, missing file, the *.* guard and a real delete."""
+        # No argument: the CCP asks for a file name; Return leaves it be.
         self.command("ERA", 500)
-        self.expect("ERA usage", "ERA filespec")
+        self.expect("ERA prompt", "Enter filename:")
+        self.key("enter", 200)
+        self.expect("ERA prompt returns", "A>")
 
         self.command("ERA NOSUCH.TXT", 600)
-        self.expect("ERA missing", "No file")
+        self.expect("ERA missing", "No File")
 
-        # An all-wildcard delete must ask first; N leaves the disk alone.
-        self.command("ERA *.*", 600)
-        self.expect("ERA *.* prompt", "ALL (Y/N)?")
+        # A wildcard delete must ask first; N leaves the disk alone.
+        self.command("ERASE *.*", 600)
+        self.expect("ERASE *.* prompt", "ERASE *.* (Y/N)?")
         self.key("n", 100)
         self.mcp.call("run", {"frames": 500})
         self.expect("ERA *.* aborted", "A>")
@@ -2238,15 +2279,29 @@ class Smoke:
         self.expect("ERA copy exists", "ERA1     TXT")
         self.command("ERA ERA1.TXT", 500)
         self.command("DIR ERA1.TXT", 500)
-        self.expect("ERA deleted the file", "No files")
+        self.expect("ERA deleted the file", "No File")
+
+        # Any wildcard asks, and a Y deletes only what matches.
+        self.command("PIP ERA2.TXT=SMOKE.TXT", 800)
+        self.command("ERA ERA?.TXT", 600)
+        self.expect("ERA ERA?.TXT prompt", "ERASE ERA?.TXT (Y/N)?")
+        self.key("y", 100)
+        self.mcp.call("run", {"frames": 500})
+        self.command("DIR ERA2.TXT", 500)
+        self.expect("ERA wildcard deleted the file", "No File")
+        self.command("DIR CPM3.SYS", 500)
+        self.expect("ERA wildcard kept the others", "CPM3     SYS")
 
     def run_ren(self) -> None:
         """REN NEW=OLD: usage, missing old, a real rename and wildcards."""
+        # No argument: the CCP asks for both names; Return leaves it be.
         self.command("REN", 500)
-        self.expect("REN usage", "REN new=old")
+        self.expect("REN prompt", "Enter New Name:")
+        self.key("enter", 200)
+        self.expect("REN prompt returns", "A>")
 
         self.command("REN NEW.TXT=NOSUCH.TXT", 600)
-        self.expect("REN missing", "No file")
+        self.expect("REN missing", "No File")
 
         # PIP is optional; without it there is nothing safe to rename.
         self.command("DIR PIP.COM", 500)
@@ -2258,13 +2313,36 @@ class Smoke:
         self.command("DIR REN2.TXT", 500)
         self.expect("REN new name", "REN2     TXT")
         self.command("DIR REN1.TXT", 500)
-        self.expect("REN old name gone", "No files")
+        self.expect("REN old name gone", "No File")
 
-        # Wildcards are refused and leave the file alone.
+        # Wildcards must correspond; a mismatch leaves the file alone.
         self.command("REN BAD.TXT=*.TXT", 600)
-        self.expect("REN wildcard", "No wildcards")
+        self.expect("REN wildcard mismatch", "Wildcards do not correspond")
         self.command("DIR REN2.TXT", 500)
-        self.expect("REN wildcard changed nothing", "REN2     TXT")
+        self.expect("REN mismatch changed nothing", "REN2     TXT")
+
+        # Corresponding wildcards rename every match, '?' taken from the
+        # old name, and the long name RENAME works as well.
+        self.command("PIP WA1.TXT=SMOKE.TXT", 800)
+        self.command("PIP WA2.TXT=SMOKE.TXT", 800)
+        self.command("RENAME WB?.TXT=WA?.TXT", 900)
+        self.command("DIR WB?.TXT", 500)
+        self.expect("REN wildcard", "WB1      TXT", "WB2      TXT")
+        self.command("DIR WA?.TXT", 500)
+        self.expect("REN wildcard old names gone", "No File")
+
+        # An existing target is not overwritten unless asked: N keeps both.
+        self.command("PIP WA1.TXT=SMOKE.TXT", 800)
+        self.command("REN WB1.TXT=WA1.TXT", 700)
+        self.expect("REN exists", "Not renamed WB1.TXT file already exists",
+                    "delete (Y/N)?")
+        self.key("n", 100)
+        self.mcp.call("run", {"frames": 400})
+        self.command("DIR WA1.TXT", 500)
+        self.expect("REN N kept the old file", "WA1      TXT")
+        self.command("ERA WA1.TXT", 500)
+        self.command("ERA WB1.TXT", 500)
+        self.command("ERA WB2.TXT", 500)
 
         # RENAME.COM argument order, without the '='.
         self.command("PIP REN3.TXT=SMOKE.TXT", 800)
@@ -2272,27 +2350,38 @@ class Smoke:
         self.command("DIR REN4.TXT", 500)
         self.expect("REN space form", "REN4     TXT")
         self.command("DIR REN3.TXT", 500)
-        self.expect("REN space form old gone", "No files")
+        self.expect("REN space form old gone", "No File")
 
         self.command("ERA REN2.TXT", 500)
         self.command("ERA REN4.TXT", 500)
         self.command("DIR REN?.TXT", 500)
-        self.expect("REN cleanup", "No files")
+        self.expect("REN cleanup", "No File")
+        self.command("DIR WB?.TXT", 500)
+        self.expect("REN wildcard cleanup", "No File")
 
     def run_user(self) -> None:
-        """USER: query, switch user areas, reject out-of-range values."""
+        """USER: prompt, switch user areas, reject out-of-range values."""
+        # No number: the CCP asks; Return leaves the user alone.
         self.command("USER", 500)
-        self.expect("USER query", "User 0")
+        self.expect("USER prompt", "Enter User# :")
+        self.key("enter", 200)
+        self.expect("USER prompt returns", "A>")
 
+        # The prompt shows the user number when it is not 0 ("3A>").
         self.command("USER 3", 500)
-        self.command("USER", 500)
-        self.expect("USER set", "User 3")
+        self.expect("USER set shows 3A>", "3A>")
         self.command("DIR", 600)
-        self.expect("USER 3 has no files", "No files")
+        self.expect("USER 3 has no files", "No File")
 
-        self.command("USER 10", 500)
+        self.command("USE 10", 500)
+        self.expect("USE two digits", "10A>")
+
+        # Typing the number at the prompt works too.
         self.command("USER", 500)
-        self.expect("USER two digits", "User 10")
+        self.expect("USER prompt again", "Enter User# :")
+        self.mcp.call("type", {"text": "4"})
+        self.key("enter", 300)
+        self.expect("USER from the prompt", "4A>")
 
         self.command("USER 16", 500)
         self.expect("USER range", "USER n (0-15)")
@@ -2300,10 +2389,9 @@ class Smoke:
         self.expect("USER junk", "USER n (0-15)")
 
         self.command("USER 0", 500)
+        self.expect("USER back to zero", "A>")
         self.command("DIR CPM3.SYS", 500)
         self.expect("USER 0 restored", "CPM3     SYS")
-        self.command("USER", 500)
-        self.expect("USER back to zero", "User 0")
 
     def run_screen64(self) -> None:
         """SCREEN 64: 4-pixel font, two characters per attribute cell."""
@@ -2528,7 +2616,7 @@ class Smoke:
         self.command("ERA TEST.PMA", 600)
         self.command("ERA COPY.TXT", 600)
         self.command("DIR TEST.PMA", 500)
-        self.expect("PMA cleanup", "No files")
+        self.expect("PMA cleanup", "No File")
 
     def check_fdc(self) -> None:
         log = self.mcp.call("fdc_log", {})
@@ -2557,6 +2645,7 @@ class Smoke:
         self.run_ccp()
         self.run_dump()
         self.run_inptest_edit()
+        self.run_ccp_names()
         self.run_era()
         self.run_ren()
         self.run_user()

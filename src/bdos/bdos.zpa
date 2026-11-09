@@ -201,7 +201,9 @@ bdos_entry:
     jr c, .mid
     cp 124
     jp z, bf_f124              ; private CCP helper: submit-file input
-    jp nc, bdos_eok            ; 125+: unsupported
+    cp 125
+    jp z, bf_f125              ; private CCP helper: pending "!" command line
+    jp nc, bdos_eok            ; 126+: unsupported
     sub 99
     add a, a
     ld e, a
@@ -3925,6 +3927,60 @@ bf_f124:
     pop de
     ld a, 0xFF
     jp bdos_ret
+
+
+; F125: the rest of a "cmd1!cmd2" line (private CCP helper, not a CP/M 3 call)
+;
+;   The CCP runs the first command and has to remember the others across the
+;   warm boot a program ends with, and across the program overwriting the
+;   TPA.  The BDOS keeps the text for it.
+;
+;   In:  B > 0: store B characters (at most PEND_MAX) from DE in the TPA
+;        B = 0: fetch the stored text into DE in the TPA, and forget it
+;   Out: A = number of characters stored or fetched (0 = none pending)
+; @proc bf_f125
+; @param %text:u16  de
+; @param %len:u8    b
+; @param %func:u8   c
+; @out   a
+; @clobbers af,bc,de,hl
+; @end
+bf_f125:
+    pop de
+    pop bc
+    ld a, b
+    or a
+    jr z, .fetch
+    cp PEND_MAX + 1
+    jr c, .len_ok
+    ld a, PEND_MAX              ; too long: keep the first PEND_MAX characters
+.len_ok:
+    ld (pend_len), a
+    ld c, a
+    ld b, 0
+    ex de, hl                   ; HL = source in the TPA
+    ld de, pend_buf
+    call copy_from_user
+    ld a, (pend_len)
+    jp bdos_ret
+.fetch:
+    ld a, (pend_len)
+    or a
+    jp z, bdos_ret              ; nothing pending
+    ld c, a
+    ld b, 0
+    ld hl, pend_buf
+    call copy_to_user           ; DE is already the TPA destination
+    ld a, (pend_len)
+    ld c, a
+    xor a
+    ld (pend_len), a
+    ld a, c
+    jp bdos_ret
+
+PEND_MAX equ 126
+pend_len:  db 0                 ; characters pending
+pend_buf:  ds PEND_MAX
 
 
 ; F49: Get/Set System Control Block

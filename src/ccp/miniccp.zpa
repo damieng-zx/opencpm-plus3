@@ -38,6 +38,7 @@ F_CONMODE equ 109              ; Get/Set console mode word (F109)
 F_GET_ORD  equ 120             ; Get SETDEF order byte (F120)
 F_GET_PATH equ 122             ; Get SETDEF search path (DE = 4-byte buf)
 F_SUBIN equ 124                ; private: queue submit-file program input
+F_PEND  equ 125                ; private: store/fetch the rest of a "!" line
 
 CON_MODE_DISPLAY equ 0x02      ; con_mode bit 1: echo SUBmit lines
 
@@ -52,7 +53,7 @@ ORDER_SUB     equ 3
 ; ==========================================================================
 
 ; @proc ccp_start
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 ccp_start:
     ld sp, ccp_stack           ; Local stack
@@ -122,6 +123,25 @@ ccp_start:
     ld de, 0
     ld c, F_SUBIN
     call BDOS
+
+    ; The rest of a "cmd1!cmd2" line comes next, shown after a prompt like a
+    ; typed command.
+    ld de, cmd_buf + 2
+    ld b, 0
+    ld c, F_PEND
+    call BDOS                  ; A = length of the pending text (0 = none)
+    or a
+    jr z, .no_pending
+    ld (cmd_buf + 1), a
+    ld l, a
+    ld h, 0
+    ld de, cmd_buf + 2
+    add hl, de
+    ld (hl), 0
+    call print_prompt
+    call echo_sub_line
+    jr .got_line
+.no_pending:
     call try_sub
     jr c, .read_console
 
@@ -150,25 +170,22 @@ ccp_start:
 ; @clobbers af,bc,de,hl
 ; @end
 print_prompt:
-    ; Prompt: CRLF + drive letter (from BDOS) + '>'
+    ; Prompt: CRLF + user number (when not 0) + drive letter + '>', as in
+    ; "3A>".
     ld c, 25                   ; F25: Return Current Disk
     call BDOS                  ; A = current drive (0-15)
-    ld (cur_drive), a
-
-    ld e, 0x0D
-    ld c, F_COUT
+    push af
+    call print_crlf
+    ld e, 0xFF
+    ld c, 32                   ; F32: Get User
     call BDOS
-    ld e, 0x0A
-    ld c, F_COUT
-    call BDOS
-    ld a, (cur_drive)
+    or a
+    call nz, print_decimal_a
+    pop af
     add a, 'A'
-    ld e, a
-    ld c, F_COUT
-    call BDOS
-    ld e, '>'
-    ld c, F_COUT
-    jp BDOS
+    call putc
+    ld a, '>'
+    jp putc
 
 
 ; ==========================================================================
@@ -178,7 +195,7 @@ print_prompt:
 ;   Clobbers: everything
 ; ==========================================================================
 ; @proc parse_cmd
-; @clobbers af,bc,de,hl
+; @clobbers af,bc,de,hl,ix
 ; @end
 parse_cmd:
     ld a, (cmd_buf + 1)        ; Characters read
@@ -192,6 +209,45 @@ parse_cmd:
     add hl, de
     ld (hl), 0                 ; Null terminate
 
+    ; "cmd1!cmd2": run cmd1 now and hand the rest to the BDOS, which keeps
+    ; it until the next prompt (a program may run in between).
+    ld hl, cmd_buf + 2
+.bang:
+    ld a, (hl)
+    or a
+    jr z, .no_bang
+    inc hl
+    cp '!'
+    jr nz, .bang
+    push hl                    ; HL = text after the '!'
+    ld d, h
+    ld e, l
+    ld b, 0
+.bang_len:
+    ld a, (hl)
+    or a
+    jr z, .bang_store
+    inc hl
+    inc b
+    jr .bang_len
+.bang_store:
+    ld a, b
+    or a
+    ld c, F_PEND
+    call nz, BDOS              ; DE = text, B = length
+    pop hl
+    dec hl
+    ld (hl), 0                 ; cmd1 ends at the '!'
+    ld de, cmd_buf + 2
+    or a
+    sbc hl, de
+    ld a, l
+    ld (cmd_buf + 1), a        ; new length
+.no_bang:
+    ld a, (cmd_buf + 1)
+    or a
+    ret z                      ; nothing before the '!': just re-prompt
+
     ; Point to start of command text
     ld hl, cmd_buf + 2
 
@@ -204,6 +260,8 @@ parse_cmd:
     jr .skip_space
 
 .got_cmd:
+    ld (ccp_cmdp), hl          ; the built-ins find their argument from here
+
     ; Check for drive switch: "X:" where X is A-P, optionally followed by
     ; space, CR, or end of line. Dispatches to BDOS F14 (Select Disk).
     ld a, (hl)
@@ -224,8 +282,6 @@ parse_cmd:
     jr z, .do_drive_switch
     cp ' '
     jr z, .do_drive_switch
-    cp 0x0D
-    jr z, .do_drive_switch
 .not_drive:
     pop hl
     jr .check_builtins
@@ -238,133 +294,97 @@ parse_cmd:
     jp BDOS
 
 .check_builtins:
-    ; Check against built-in commands
-    ld de, cmd_dir
+    ; Walk cmd_table: name, 0, handler address.  A table end (name starts
+    ; with 0) means the word is not a built-in, so it is loaded as a program.
+    ld de, .cmd_table
+.bt_next:
+    ld a, (de)
+    or a
+    jp z, .do_load_com         ; HL still holds the start of the command
+    push de                    ; str_match gives DE and HL back unchanged
     call str_match
-    jr z, .do_dir
+    pop de
+    jr z, .bt_hit
+.bt_skip:
+    ld a, (de)
+    inc de
+    or a
+    jr nz, .bt_skip
+    inc de                     ; step over the handler address
+    inc de
+    jr .bt_next
+.bt_hit:
+    ld a, (de)                 ; find the end of the name
+    inc de
+    or a
+    jr nz, .bt_hit
+    ex de, hl                  ; HL = handler address slot
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    ex de, hl                  ; HL = handler
+    jp (hl)                    ; lint-exempt: stack
 
-    ld de, cmd_type
-    call str_match
-    jp z, .do_type
-
-    ld de, cmd_help
-    call str_match
-    jp z, .do_help
-
-    ld de, cmd_era
-    call str_match
-    jp z, .do_era
-
-    ld de, cmd_ren
-    call str_match
-    jp z, .do_ren
-
-    ld de, cmd_user
-    call str_match
-    jp z, .do_user
-
-    ; Not a built-in — try loading as .COM file
-    ; HL still points to start of command text (str_match preserves HL)
-    jp .do_load_com
+; The built-in command names (CP/M 3 User's Guide, Table 4-1 and its
+; abbreviations) and their handlers.
+.cmd_table:
+    db "DIR", 0
+    dw .do_dir
+    db "DIRSYS", 0
+    dw .do_dirsys
+    db "DIRS", 0
+    dw .do_dirsys
+    db "ERASE", 0
+    dw .do_era
+    db "ERA", 0
+    dw .do_era
+    db "RENAME", 0
+    dw .do_ren
+    db "REN", 0
+    dw .do_ren
+    db "TYPE", 0
+    dw .do_type
+    db "TYP", 0
+    dw .do_type
+    db "USER", 0
+    dw .do_user
+    db "USE", 0
+    dw .do_user
+    db "HELP", 0
+    dw .do_help
+    db 0
 
 ; --- Built-in commands ---
 
+; An option list ("[...]") needs the related transient (DIR.COM, ERASE.COM,
+; RENAME.COM): load the program of the same name, as the manual describes.
+.opt_com:
+    ld hl, (ccp_cmdp)
+    jp .do_load_com
+
+; ==========================================================================
+; DIR / DIRSYS [d:][filespec]
+;   DIR lists the files without the SYS attribute, DIRSYS those with it.  A
+;   name with no type matches only a blank type; * and ? are wildcards.
+; ==========================================================================
+.do_dirsys:
+    ld a, 0x80                 ; list SYS files
+    jr .dir_go
 .do_dir:
-    ; Check for optional filename argument
-.dir_skip_cmd:
-    ld a, (hl)
-    or a
-    jr z, .dir_no_arg
-    cp ' '
-    jr z, .dir_found_space
-    inc hl
-    jr .dir_skip_cmd
-.dir_found_space:
-    inc hl
-    ld a, (hl)
-    cp ' '
-    jr z, .dir_found_space
-    or a
-    jr z, .dir_no_arg
-    ; HL points to argument — detect optional "X:" drive prefix
-    ld c, 0
-    ld a, (hl)
-    call to_upper
-    cp 'A'
-    jr c, .dir_try_parse
-    cp 'P' + 1
-    jr nc, .dir_try_parse
-    push hl
-    inc hl
-    ld a, (hl)
-    cp ':'
-    jr nz, .dir_not_drv
-    pop hl
-    ld a, (hl)
-    call to_upper
-    sub 'A' - 1
-    ld c, a
-    jr .dir_try_parse
-.dir_not_drv:
-    pop hl
-.dir_try_parse:
-    push bc
+    xor a                      ; list non-SYS files
+.dir_go:
+    ld (dir_mode), a
+    ld hl, 0
+    ld (dir_shown), hl         ; dir_shown = dir_other = 0
+    call find_opt
+    jp c, .opt_com
+    call skip_arg
+    jr nz, .dir_arg
+    ld hl, nul_str             ; no argument: parse fails, FCB is cleared
+.dir_arg:
     call parse_filename
-    pop bc
-    jr nc, .dir_got_fcb
-    ; Parse failed — use wildcard with detected drive (e.g. "DIR B:")
-    ld a, c
-    or a
-    jr nz, .dir_wildcard_drv
-    jr .dir_no_arg
-.dir_got_fcb:
-    ; Copy type_fcb to dir_fcb. parse_filename has already stamped the
-    ; drive byte into type_fcb[0] (0 = default, 1=A:, 2=B:, ...).
-    ld hl, type_fcb
-    ld de, dir_fcb
-    ld bc, 36
-    ldir
-.dir_check_ext:
-    ; If ext is spaces (no explicit ext given), fill with '?' so
-    ; DIR FOO matches FOO.* (standard CP/M behavior)
-    ld hl, dir_fcb + 9
-    ld a, (hl)
-    cp ' '
-    jr nz, .dir_search
-    inc hl
-    ld a, (hl)
-    cp ' '
-    jr nz, .dir_search
-    inc hl
-    ld a, (hl)
-    cp ' '
-    jr nz, .dir_search
-    ld hl, dir_fcb + 9
-    ld (hl), '?'
-    inc hl
-    ld (hl), '?'
-    inc hl
-    ld (hl), '?'
-    jr .dir_search
-.dir_wildcard_drv:
-    ; A = drive number (1=A:, 2=B:, ...); fall through with drive saved
-    ld b, a
-    jr .wild_common
-.dir_no_arg:
-    ld b, 0                    ; default drive
-.wild_common:
-    ; Zero the whole FCB so stale EX/S1/S2/RC/AL/CR from a previous DIR
-    ; can't bias Search First.
-    push bc
-    ld hl, dir_fcb
-    ld de, dir_fcb + 1
-    ld (hl), 0
-    ld bc, 35
-    ldir
-    pop bc
-    ld a, b
-    ld (dir_fcb), a            ; drive byte (0 = default)
-    ld hl, dir_fcb + 1
+    jr nc, .dir_search
+    ld hl, type_fcb + 1        ; no name ("DIR", "DIR B:"): every file
     ld b, 11
     ld a, '?'
 .fill_q:
@@ -372,11 +392,12 @@ parse_cmd:
     inc hl
     djnz .fill_q
 .dir_search:
-    ; Compute display drive for prefix from dir_fcb[0]
-    ld a, (dir_fcb)
+    ; Display drive for the prefix: the FCB's drive, or the current one.
+    ld a, (type_fcb)
     or a
     jr nz, .dir_got_ddrv
-    ld a, (cur_drive)
+    ld c, 25                   ; F25: Return Current Disk
+    call BDOS
     jr .dir_ddrv_set
 .dir_got_ddrv:
     dec a
@@ -408,16 +429,15 @@ parse_cmd:
     ld (dir_maxcols), a
 
     ; Search first
-    ld de, dir_fcb
+    ld de, type_fcb
     ld c, 17                   ; F17: Search First
     call BDOS
     cp 0xFF
-    jp z, .dir_empty
+    jp z, .dir_end
 
     ld b, 0                    ; B = column counter (0-based)
 .dir_loop:
-    ; A = index (0-3) of match in DMA buffer
-    ; Entry is at DMA + A*32
+    ; A = index (0-3) of match in DMA buffer; the entry is at DMA + A*32
     push bc
     ld l, a
     ld h, 0
@@ -425,7 +445,7 @@ parse_cmd:
     add hl, hl
     add hl, hl
     add hl, hl
-    add hl, hl                ; HL = A * 32
+    add hl, hl                 ; HL = A * 32
     ld de, DMA
     add hl, de                 ; HL = entry address
 
@@ -438,71 +458,58 @@ parse_cmd:
     or a
     jr nz, .dir_next_skip
 
+    ; Only one kind is listed: bit 7 of the second type byte is SYS.
+    push hl
+    ld de, 10
+    add hl, de
+    ld a, (hl)
+    pop hl
+    and 0x80
+    ld e, a
+    ld a, (dir_mode)
+    xor e
+    jr z, .dir_show
+    ld (dir_other), a          ; the other kind exists (non-zero)
+    jr .dir_next_skip
+.dir_show:
+    ld a, 1
+    ld (dir_shown), a
+
     ; At start of line: print "A: " prefix; otherwise print " : " separator
     pop bc                     ; B = column counter
     push bc
     ld a, b
     or a
     jr nz, .mid_line
-    ; Start of line — print drive prefix
-    push hl
     ld a, (dir_display_drive)
     add a, 'A'
-    ld e, a
-    ld c, F_COUT
-    call BDOS
-    ld e, ':'
-    ld c, F_COUT
-    call BDOS
-    ld e, ' '
-    ld c, F_COUT
-    call BDOS
-    pop hl
+    call putc
+    ld a, ':'
+    call putc
+    ld a, ' '
+    call putc
     jr .print_entry
 .mid_line:
-    ; Mid-line — print separator before this entry
     push hl
     ld de, dir_sep
-    ld c, F_PSTR
-    call BDOS
+    call pstr
     pop hl
 .print_entry:
-
-    ; Print filename: 8 chars name (space-padded)
-    inc hl                     ; Skip user byte
+    inc hl                     ; skip the user byte
     ld b, 8
 .pr_name:
     ld a, (hl)
-    and 0x7F                   ; Mask attribute bit
-    push hl
-    push bc
-    ld e, a
-    ld c, F_COUT
-    call BDOS
-    pop bc
-    pop hl
+    and 0x7F                   ; mask the attribute bit
+    call putc
     inc hl
     djnz .pr_name
-
-    ; Space between name and type (where dot would be)
-    push hl
-    ld e, ' '
-    ld c, F_COUT
-    call BDOS
-    pop hl
-
-    ; Print type (3 chars, no dot — real CP/M style)
+    ld a, ' '                  ; where the dot would be (real CP/M style)
+    call putc
     ld b, 3
 .pr_type:
     ld a, (hl)
     and 0x7F
-    push hl
-    push bc
-    ld e, a
-    ld c, F_COUT
-    call BDOS
-    pop bc
-    pop hl
+    call putc
     inc hl
     djnz .pr_type
 
@@ -512,11 +519,9 @@ parse_cmd:
     ld a, (dir_maxcols)
     cp b                       ; Reached max columns?
     jr nz, .dir_next           ; Not yet — separator printed before next entry
-    ; End of line
     push bc
     ld de, msg_crlf
-    ld c, F_PSTR
-    call BDOS
+    call pstr
     pop bc
     ld b, 0                    ; Reset column
     jr .dir_next
@@ -524,7 +529,6 @@ parse_cmd:
 .dir_next_skip:
     pop bc                     ; Balance the push bc at .dir_loop entry
 .dir_next:
-    ; Search next
     push bc
     ld c, 18                   ; F18: Search Next
     call BDOS
@@ -532,53 +536,67 @@ parse_cmd:
     cp 0xFF
     jp nz, .dir_loop
 
-    ; Final newline
-    ld de, msg_crlf
-    ld c, F_PSTR
-    jp BDOS
+.dir_end:
+    ld a, (dir_shown)
+    or a
+    jr z, .dir_none
+    ld de, msg_crlf            ; final newline
+    call pstr
+.dir_none:
+    ld a, (dir_other)
+    or a
+    jr nz, .dir_exist
+    ld a, (dir_shown)
+    or a
+    ret nz
+    ld de, msg_no_file
+    jp pstr
+.dir_exist:
+    ld de, msg_sys_exist       ; DIR found SYS files ...
+    ld a, (dir_mode)
+    or a
+    jp z, pstr
+    ld de, msg_dir_exist       ; ... DIRSYS found non-SYS files
+    jp pstr
 
-.dir_empty:
-    ld de, msg_no_files
-    ld c, F_PSTR
-    jp BDOS
-
+; ==========================================================================
+; TYPE [d:]filename [[PAGE] | [NO PAGE]]
+; ==========================================================================
 .do_type:
-    ; Skip past "TYPE" in the command buffer to find the filename
-.type_skip_cmd:
-    ld a, (hl)
-    cp ' '
-    jr z, .type_skip_sp
-    or a
-    jr z, .type_no_arg
-    inc hl
-    jr .type_skip_cmd
-.type_skip_sp:
-    inc hl
-    ld a, (hl)
-    cp ' '
-    jr z, .type_skip_sp
-    or a
-    jr z, .type_no_arg
+    call get_arg               ; prompts "Enter filename:" when missing
+    ret z
+    call parse_filename        ; HL = filename string -> type_fcb
+    jr c, .no_file
 
-    ; HL points to filename. Parse into FCB.
-    call parse_filename        ; HL = filename string → type_fcb filled
-    jr c, .type_no_arg         ; Carry = parse failed
-
-    ; Open file
     ld de, type_fcb
     ld c, 15                   ; F15: Open File
     call BDOS
     cp 0xFF
-    jr z, .type_not_found
+    jr z, .no_file
+
+    ; "[NO PAGE]" (any option starting with N) turns the page pause off
+    ; for this listing; the console mode is put back at the end.
+    ld de, 0xFFFF
+    ld c, F_CONMODE
+    call BDOS                  ; HL = con_mode
+    ld (type_mode), hl
+    call find_opt              ; HL = text after the '['
+    jr nc, .type_loop
+    ld a, (hl)
+    call to_upper
+    cp 'N'
+    jr nz, .type_loop
+    ld hl, (type_mode)
+    res 0, l                   ; CON_MODE_PAGE
+    ex de, hl
+    ld c, F_CONMODE
+    call BDOS
 
     ; Read and print records until EOF
 .type_loop:
-    ; Set DMA to 0080h
-    ld de, 0x0080
+    ld de, DMA
     ld c, 26                   ; F26: Set DMA
     call BDOS
-
-    ; Read sequential
     ld de, type_fcb
     ld c, 20                   ; F20: Read Sequential
     call BDOS
@@ -586,152 +604,101 @@ parse_cmd:
     jr nz, .type_eof           ; Non-zero = EOF or error
 
     ; Print 128 bytes from DMA, stop at Ctrl-Z (0x1A)
-    ld hl, 0x0080
+    ld hl, DMA
     ld b, 128
 .type_char:
     ld a, (hl)
     cp 0x1A                    ; Ctrl-Z = EOF marker
     jr z, .type_eof
-    push hl
-    push bc
-    ld e, a
-    ld c, 2                    ; F2: Console Output
-    call BDOS
-    pop bc
-    pop hl
+    call putc
     inc hl
     djnz .type_char
     jr .type_loop
 
 .type_eof:
-    ; Print final newline
-    ld e, 0x0D
-    ld c, 2
-    call BDOS
-    ld e, 0x0A
-    ld c, 2
+    call print_crlf
+    ld de, (type_mode)
+    ld c, F_CONMODE
     jp BDOS
 
-.type_no_arg:
-    ld de, msg_type_usage
-    ld c, F_PSTR
-    jp BDOS
-
-.type_not_found:
-    ld de, msg_type_nf
-    ld c, F_PSTR
-    jp BDOS
+.no_file:
+    ld de, msg_no_file
+    jp pstr
 
 .do_help:
     ld de, msg_help
-    ld c, F_PSTR
-    jp BDOS
+    jp pstr
 
 
 ; ==========================================================================
-; .do_era — ERA filespec: delete one or more files (F19, wildcards allowed)
-;   An all-wildcard spec (ERA *.*) asks for confirmation, like CP/M.
+; ERASE / ERA [d:]filespec
+;   Any wildcard asks "ERASE spec (Y/N)?" first, as the DRI CCP does.
+;   An option list ("[CONFIRM]") needs ERASE.COM.
 ; ==========================================================================
 
 .do_era:
-    ; Skip the command word
-.era_skip_cmd:
-    ld a, (hl)
-    cp ' '
-    jr z, .era_skip_sp
-    or a
-    jr z, .era_usage
-    cp 0x0D
-    jr z, .era_usage
-    inc hl
-    jr .era_skip_cmd
-.era_skip_sp:
-    inc hl
-    ld a, (hl)
-    cp ' '
-    jr z, .era_skip_sp
-    or a
-    jr z, .era_usage
-    cp 0x0D
-    jr z, .era_usage
-
-    ; HL = filespec.  parse_filename handles an optional "X:" prefix.
-    call parse_filename
-    jr c, .era_usage
-
-    ; An all-wildcard spec needs an explicit Y, like the DRI CCP.
-    call _era_all
-    jr nz, .era_delete
-    ld de, msg_era_all
-    ld c, F_PSTR
-    call BDOS
+    call find_opt
+    jp c, .opt_com
+    call get_arg               ; prompts "Enter filename:" when missing
+    ret z
+    push hl
+    call parse_filename        ; optional "X:" prefix, wildcards
+    pop hl                     ; HL = the spec as typed
+    jr c, .no_file
+    push hl
+    call _fcb_wild             ; Z if there is a wildcard (clobbers HL)
+    pop hl
+    jr nz, .era_delete         ; no wildcard: no question
+    push hl
+    ld de, msg_erase
+    call pstr
+    pop hl
+    call print_word
+    ld de, msg_yn
+    call pstr
     ld c, F_CIN
     call BDOS
+    and 0xDF                   ; upper case
     push af
     ld de, msg_crlf
-    ld c, F_PSTR
-    call BDOS
+    call pstr
     pop af
     cp 'Y'
-    jr z, .era_delete
-    cp 'y'
-    jr z, .era_delete
-    ret
-
+    ret nz                     ; anything but Y: nothing is erased
 .era_delete:
     ld de, type_fcb
     ld c, 19                   ; F19: Delete File (wildcards allowed)
     call BDOS
     inc a                      ; A = 0xFF (nothing matched) -> Z
     ret nz
-    ld de, msg_no_file
-    ld c, F_PSTR
-    jp BDOS
-
-.era_usage:
-    ld de, msg_era_usage
-    ld c, F_PSTR
-    jp BDOS
+    jr .no_file
 
 
 ; ==========================================================================
-; .do_ren — REN new=old: rename a file (F23)
-;   Wildcards are rejected: F23 renames every matching entry, so a wildcard
-;   could rename several files to the same name.
+; RENAME / REN new=old        (also "new old", or prompts for both names)
+;   The wildcards of the two names must correspond (REN A*.T*=S*.T*): each
+;   matching file is renamed on its own, with the new name's '?' filled
+;   from the old name.  An existing target asks "delete (Y/N)?".
 ; ==========================================================================
 
 .do_ren:
-    ; Skip the command word and any spaces
-.ren_skip_cmd:
-    ld a, (hl)
-    cp ' '
-    jr z, .ren_skip_sp
-    or a
-    jp z, .ren_usage
-    cp 0x0D
-    jp z, .ren_usage
-    inc hl
-    jr .ren_skip_cmd
-.ren_skip_sp:
-    inc hl
-    ld a, (hl)
-    cp ' '
-    jr z, .ren_skip_sp
-    or a
-    jp z, .ren_usage
-    cp 0x0D
-    jp z, .ren_usage
+    call find_opt
+    jp c, .opt_com
+    ld hl, ren_fcb             ; clear ren_fcb and ren_chk (72 bytes)
+    ld de, ren_fcb + 1
+    ld bc, 71
+    ld (hl), 0
+    ldir
+    call skip_arg
+    jr z, .ren_ask
     ld (ren_new), hl           ; start of the new name
 
     ; Find the separator.  "REN new=old" is the documented form; RENAME.COM
     ; style "REN new old" is accepted too, in the same new-then-old order.
     ; An '=' anywhere wins, so spaces around it do not confuse the split.
-    ld hl, (ren_new)
 .ren_find_eq:
     ld a, (hl)
     or a
-    jr z, .ren_find_sp
-    cp 0x0D
     jr z, .ren_find_sp
     cp '='
     jr z, .ren_got_sep
@@ -743,8 +710,6 @@ parse_cmd:
     ld a, (hl)
     or a
     jp z, .ren_usage
-    cp 0x0D
-    jp z, .ren_usage
     cp ' '
     jr z, .ren_got_sep
     inc hl
@@ -753,106 +718,224 @@ parse_cmd:
     ld (hl), 0                 ; terminate the new name here
     inc hl
     ld (ren_old), hl
-
-    ; --- New name ---
     ld hl, (ren_new)
-    call parse_filename
+    call ren_new_name
     jp c, .ren_usage
-    call _fcb_wild
-    jr z, .ren_wild
-    ld a, (type_fcb)
-    ld (ren_drive), a
-    ld hl, type_fcb + 1
-    ld de, ren_fcb + 17        ; F23 expects the new name at 17..27
-    ld bc, 11
-    ldir
-
-    ; --- Old name ---
     ld hl, (ren_old)
-    call parse_filename
+    jr .ren_old
+
+.ren_ask:
+    ld de, msg_ren_new
+    call prompt_line
+    ret z
+    call ren_new_name
     jp c, .ren_usage
-    call _fcb_wild
-    jr z, .ren_wild
-    ld a, (type_fcb)           ; an explicit old drive wins
+    ld de, msg_ren_old
+    call prompt_line
+    ret z
+
+.ren_old:
+    call parse_filename        ; the old name (maybe wild) -> type_fcb
+    jp c, .ren_usage
+    ld a, (type_fcb)
     or a
-    jr z, .ren_drive_done
+    jr nz, .ren_drive_set      ; an explicit old drive wins
+    ld a, (ren_drive)
+    ld (type_fcb), a
+.ren_drive_set:
     ld (ren_drive), a
-.ren_drive_done:
+
+    ; The wildcards must correspond: '?' in the new name exactly where the
+    ; old name has one.
+    ld hl, ren_newname
+    ld de, type_fcb + 1
+    ld b, 11
+.ren_wcheck:
+    ld a, (hl)
+    cp '?'
+    ld a, 0
+    jr nz, .ren_nw
+    inc a
+.ren_nw:
+    ld c, a
+    ld a, (de)
+    cp '?'
+    ld a, 0
+    jr nz, .ren_ow
+    inc a
+.ren_ow:
+    xor c
+    jp nz, .ren_wild
+    inc hl
+    inc de
+    djnz .ren_wcheck
+
+    ; Each pass searches the directory afresh and takes the first file that
+    ; was not left alone before: a renamed file no longer matches the old
+    ; name (the wildcards correspond), and the files left alone are the
+    ; first matches, in directory order.
+    xor a
+    ld (ren_skip), a           ; files seen and left alone so far
+    ld (ren_any), a            ; non-zero once a file was renamed
+.ren_restart:
+    ld a, (ren_skip)
+    ld (ren_seen), a
+    ld de, type_fcb
+    ld c, 17                   ; F17: Search First for the old name(s)
+    call BDOS
+.ren_scan:
+    cp 0xFF
+    jp z, .ren_end
+    ld l, a
+    ld h, 0
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    ld de, DMA
+    add hl, de                 ; HL = directory entry
+    push hl
+    ld de, 12
+    add hl, de
+    ld a, (hl)                 ; extent: only the first one names the file
+    pop hl
+    or a
+    jr nz, .ren_nextf
+    ld a, (ren_seen)
+    or a
+    jr z, .ren_found           ; not one of the files left alone
+    dec a
+    ld (ren_seen), a
+.ren_nextf:
+    ld c, 18                   ; F18: Search Next
+    call BDOS
+    jr .ren_scan
+
+.ren_found:
+    ; Old name from the entry (attribute bits stripped), new name from the
+    ; pattern with '?' replaced by the old name's character.
+    inc hl
+    ld de, ren_fcb + 1
+    ld b, 11
+.ren_copy_old:
+    ld a, (hl)
+    and 0x7F
+    ld (de), a
+    inc hl
+    inc de
+    djnz .ren_copy_old
+    ld hl, ren_newname
+    ld de, ren_fcb + 17
+    ld ix, ren_fcb + 1
+    ld b, 11
+.ren_make_new:
+    ld a, (hl)
+    cp '?'
+    jr nz, .ren_keep
+    ld a, (ix + 0)
+.ren_keep:
+    ld (de), a
+    inc hl
+    inc de
+    inc ix
+    djnz .ren_make_new
     ld a, (ren_drive)
     ld (ren_fcb), a
-    ld hl, type_fcb + 1
-    ld de, ren_fcb + 1
+    ld (ren_chk), a
+
+    ; Renaming a file to its own name needs nothing.
+    ld hl, ren_fcb + 1
+    ld de, ren_fcb + 17
+    ld b, 11
+.ren_same:
+    ld a, (de)
+    cp (hl)
+    jr nz, .ren_differs
+    inc hl
+    inc de
+    djnz .ren_same
+    jr .ren_left
+.ren_differs:
+
+    ; Does the new name already exist?
+    ld hl, ren_fcb + 17
+    ld de, ren_chk + 1
     ld bc, 11
     ldir
-
-    ; Zero the fields F23 must not see: EX/S1/S2/RC (12-15), the spare
-    ; byte 16 and the tail (28-35).
-    ld hl, ren_fcb + 12
-    ld b, 5
-.ren_zero_a:
-    ld (hl), 0
-    inc hl
-    djnz .ren_zero_a
-    ld hl, ren_fcb + 28
-    ld b, 8
-.ren_zero_b:
-    ld (hl), 0
-    inc hl
-    djnz .ren_zero_b
-
-    ld de, ren_fcb
-    ld c, 23                   ; F23: Rename File
+    ld de, ren_chk
+    ld c, 17                   ; F17: Search First for the new name
     call BDOS
-    inc a                      ; 0xFF (nothing matched) -> Z
-    ret nz
-    ld de, msg_no_file
-    ld c, F_PSTR
-    jp BDOS
+    inc a
+    jr z, .ren_do              ; nothing there
+    ld de, msg_not_renamed
+    call pstr
+    ld hl, ren_fcb + 17
+    call print_name11
+    ld de, msg_exists
+    call pstr
+    ld c, F_CIN
+    call BDOS
+    and 0xDF
+    push af
+    ld de, msg_crlf
+    call pstr
+    pop af
+    cp 'Y'
+    jr nz, .ren_left           ; keep the old file, leave this one alone
+    ld de, ren_chk
+    ld c, 19                   ; F19: Delete the existing file
+    call BDOS
+.ren_do:
+    ld de, ren_fcb
+    ld c, 23                   ; F23: Rename this one file
+    call BDOS
+    inc a
+    jr z, .ren_left            ; refused (read-only): leave it alone
+    ld a, 1
+    ld (ren_any), a
+    jp .ren_restart
+.ren_left:
+    ld hl, ren_skip
+    inc (hl)
+    jp .ren_restart
+
+.ren_end:
+    ld hl, ren_skip            ; ren_any follows ren_skip
+    ld a, (hl)
+    inc hl
+    or (hl)
+    ret nz                     ; something matched
+    jp .no_file                ; "No File": nothing matched
 
 .ren_wild:
     ld de, msg_ren_wild
-    ld c, F_PSTR
-    jp BDOS
+    jp pstr
 
 .ren_usage:
     ld de, msg_ren_usage
-    ld c, F_PSTR
-    jp BDOS
+    jp pstr
 
 
 ; ==========================================================================
-; .do_user — USER [n]: show or change the CP/M user area (0-15)
+; USER [n] — set the CP/M user area (0-15); asks "Enter User# :" if no number
 ;   Uses BDOS F32, which also keeps page-zero byte 0004h in sync for
 ;   programs that read it.
 ; ==========================================================================
 
 .do_user:
-    ; Skip the command word and any spaces
-.user_skip_cmd:
-    ld a, (hl)
-    cp ' '
-    jr z, .user_skip_sp
-    or a
-    jr z, .user_query
-    cp 0x0D
-    jr z, .user_query
-    inc hl
-    jr .user_skip_cmd
-.user_skip_sp:
-    inc hl
-    ld a, (hl)
-    cp ' '
-    jr z, .user_skip_sp
-    or a
-    jr z, .user_query
-    cp 0x0D
-    jr z, .user_query
-
+    call skip_arg
+    jr nz, .user_num
+    ld de, msg_enter_user
+    call prompt_line
+    ret z                      ; just Return: leave the user alone
+.user_num:
     ; First digit
+    ld a, (hl)
     cp '0'
-    jp c, .user_usage
+    jr c, .user_usage
     cp '9' + 1
-    jp nc, .user_usage
+    jr nc, .user_usage
     sub '0'
     ld b, a
     inc hl
@@ -866,10 +949,10 @@ parse_cmd:
     sub '0'
     ld c, a
     ld a, b
-    add a, a                   ; ×2
-    add a, a                   ; ×4
-    add a, b                   ; ×5
-    add a, a                   ; ×10
+    add a, a                   ; x2
+    add a, a                   ; x4
+    add a, b                   ; x5
+    add a, a                   ; x10
     add a, c
     ld b, a
     inc hl
@@ -879,37 +962,18 @@ parse_cmd:
     or a
     jr z, .user_set
     cp ' '
-    jr z, .user_set
-    cp 0x0D
-    jr z, .user_set
-    jp .user_usage
-
+    jr nz, .user_usage
 .user_set:
     ld a, b
     cp 16
-    jp nc, .user_usage
+    jr nc, .user_usage
     ld e, a
     ld c, 32                   ; F32: Set User
     jp BDOS
 
-.user_query:
-    ld e, 0xFF
-    ld c, 32                   ; F32: Get User
-    call BDOS
-    push af
-    ld de, str_user
-    ld c, F_PSTR
-    call BDOS
-    pop af
-    call print_decimal_a
-    ld de, msg_crlf
-    ld c, F_PSTR
-    jp BDOS
-
 .user_usage:
     ld de, msg_user_usage
-    ld c, F_PSTR
-    jp BDOS
+    jp pstr
 
 
 ; ==========================================================================
@@ -1456,9 +1520,178 @@ parse_cmd:
     ; (Loading and execution handled by stub at 0x0008)
 
 .com_unknown:
+    ; Repeat the command word followed by a question mark, as CP/M 3 does.
+    ld hl, (ccp_cmdp)
+    call print_word
     ld de, msg_unknown
+    jp pstr
+
+
+; ==========================================================================
+; Helpers shared by the built-in commands
+; ==========================================================================
+
+; skip_arg — find the argument that follows the command word
+;   Out: HL = argument text; Z set if there is none
+; @proc skip_arg
+; @out   hl
+; @out   zero
+; @clobbers af
+; @end
+skip_arg:
+    ld hl, (ccp_cmdp)
+.word:
+    ld a, (hl)
+    or a
+    ret z                      ; no argument
+    inc hl
+    cp ' '
+    jr nz, .word
+.spaces:
+    ld a, (hl)
+    cp ' '
+    jr nz, .done
+    inc hl
+    jr .spaces
+.done:
+    or a                       ; Z if the text ended
+    ret
+
+; get_arg — the argument, or ask for a file name when there is none
+;   Out: HL = text; Z set if still empty
+; @proc get_arg
+; @out   hl
+; @out   zero
+; @clobbers af,bc,de
+; @end
+get_arg:
+    call skip_arg
+    ret nz
+    ld de, msg_enter_file
+    ; falls through to prompt_line
+
+; prompt_line — print the prompt at DE and read a line into cmd_buf
+;   Out: HL = line text (NUL-terminated); Z set if the line is empty
+; @proc prompt_line
+; @out   hl
+; @out   zero
+; @clobbers af,bc,de
+; @end
+prompt_line:
+    ld c, F_PSTR
+    call BDOS
+    ld de, cmd_buf
+    ld c, F_RDBUF
+    call BDOS                  ; the BDOS ends the line itself
+    ld hl, cmd_buf + 2
+    ld a, (cmd_buf + 1)
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld (hl), 0
+    ld hl, cmd_buf + 2
+    or a                       ; Z if the line is empty
+    ret
+
+; find_opt — look for an option list in the command line
+;   Out: CF set and HL = text after the '[' if there is one
+; @proc find_opt
+; @out   carry
+; @out   hl
+; @clobbers af
+; @end
+find_opt:
+    ld hl, (ccp_cmdp)
+.scan:
+    ld a, (hl)
+    or a
+    ret z                      ; end of line, carry clear
+    inc hl
+    cp '['
+    jr nz, .scan
+    scf
+    ret
+
+; putc — print the character in A, keeping BC and HL
+; @proc putc
+; @param %ch:u8 a
+; @clobbers af,de
+; @end
+putc:
+    push bc
+    push hl
+    ld e, a
+    ld c, F_COUT
+    call BDOS
+    pop hl
+    pop bc
+    ret
+
+; pstr — print the '$'-terminated string at DE
+; @proc pstr
+; @param %str:u16 de
+; @clobbers af,bc,de,hl
+; @end
+pstr:
     ld c, F_PSTR
     jp BDOS
+
+; print_word — print the word at HL (up to a space or the end) in capitals
+; @proc print_word
+; @param %str:u16 hl
+; @clobbers af,bc,de,hl
+; @end
+print_word:
+    ld a, (hl)
+    or a
+    ret z
+    cp ' '
+    ret z
+    call to_upper
+    call putc
+    inc hl
+    jr print_word
+
+; print_name11 — print "NAME.TYP" from the 11 name bytes at HL
+; @proc print_name11
+; @param %name:u16 hl
+; @clobbers af,bc,de,hl
+; @end
+print_name11:
+    ld b, 8
+    call .part
+    ld a, (hl)
+    cp ' '
+    ret z                      ; no type
+    ld a, '.'
+    call putc
+    ld b, 3
+.part:
+    ld a, (hl)
+    inc hl
+    cp ' '
+    call nz, putc
+    djnz .part
+    ret
+
+; ren_new_name — parse the new name of a RENAME into ren_newname / ren_drive
+;   In:  HL = the text
+;   Out: CF set if the name is not valid
+; @proc ren_new_name
+; @param %str:u16 hl
+; @out   carry
+; @clobbers af,bc,de,hl
+; @end
+ren_new_name:
+    call parse_filename
+    ret c
+    ld a, (type_fcb)
+    ld (ren_drive), a
+    ld hl, type_fcb + 1
+    ld de, ren_newname
+    ld bc, 11
+    ldir
+    ret                        ; carry is still clear
 
 
 
@@ -1519,28 +1752,6 @@ str_match:
     pop de
     pop hl
     xor a                      ; Set Z flag
-    ret
-
-
-; ==========================================================================
-; _era_all — Z if the parsed spec is all wildcards (ERA *.*)
-;   Out: Z set when all 11 name/extension bytes are '?'
-;   Clobbers: AF, B, HL
-; ==========================================================================
-; @proc _era_all
-; @out   zero
-; @clobbers af,b,hl
-; @end
-_era_all:
-    ld hl, type_fcb + 1
-    ld b, 11
-.era_all_loop:
-    ld a, (hl)
-    cp '?'
-    ret nz
-    inc hl
-    djnz .era_all_loop
-    xor a                      ; every byte is '?' — Z set
     ret
 
 
@@ -1883,29 +2094,9 @@ echo_sub_line:
 ; Data
 ; ==========================================================================
 
-; Command buffer for BDOS F10
-cmd_buf:
-    db 126                     ; Max characters
-    db 0                       ; Characters read (filled by BDOS)
-    ds 127                     ; Character data
-
-; Command names (uppercase, null-terminated)
-cmd_dir:    db "DIR", 0
-cmd_type:   db "TYPE", 0
-cmd_era:    db "ERA", 0
-cmd_ren:    db "REN", 0
-cmd_user:   db "USER", 0
-cmd_help:   db "HELP", 0
-
 ; Messages ('$' terminated for BDOS F9)
-msg_version:
-    db "CP/M 3.1 Mini-CCP v0.1", 0x0D, 0x0A, '$'
-
 msg_unknown:
     db "?", 0x0D, 0x0A, '$'
-
-msg_no_files:
-    db "No files", 0x0D, 0x0A, '$'
 
 msg_crlf:
     db 0x0D, 0x0A, '$'
@@ -1913,85 +2104,60 @@ msg_crlf:
 dir_sep:
     db " : ", '$'
 
-msg_type_usage:
-    db "TYPE filename.ext", 0x0D, 0x0A, '$'
-
-msg_type_nf:
-    db "File not found", 0x0D, 0x0A, '$'
-
-msg_era_usage:
-    db "ERA filespec", 0x0D, 0x0A, '$'
-
-msg_era_all:
-    db "ALL (Y/N)? $"
-
 msg_no_file:
-    db "No file", 0x0D, 0x0A, '$'
+    db "No File", 0x0D, 0x0A, '$'
+
+msg_sys_exist:
+    db "SYSTEM FILE(S) EXIST", 0x0D, 0x0A, '$'
+
+msg_dir_exist:
+    db "NON-SYSTEM FILE(S) EXIST", 0x0D, 0x0A, '$'
+
+msg_enter_file:
+    db "Enter filename:", '$'
+
+msg_erase:
+    db "ERASE ", '$'
+
+msg_yn:
+    db " (Y/N)?", '$'
 
 msg_ren_usage:
     db "REN new=old", 0x0D, 0x0A, '$'
 
 msg_ren_wild:
-    db "No wildcards", 0x0D, 0x0A, '$'
+    db "Wildcards do not correspond", 0x0D, 0x0A, '$'
 
-str_user:
-    db "User $"
+msg_ren_new:
+    db "Enter New Name:", '$'
+
+msg_ren_old:
+    db "Enter Old Name:", '$'
+
+msg_not_renamed:
+    db "Not renamed ", '$'
+
+msg_exists:
+    db " file already exists", 0x0D, 0x0A, "delete (Y/N)?", '$'
+
+msg_enter_user:
+    db "Enter User# : ", '$'
 
 msg_user_usage:
     db "USER n (0-15)", 0x0D, 0x0A, '$'
 
 msg_help:
     db "Built-in commands:", 0x0D, 0x0A
-    db "  DIR    - Directory listing (wildcards: * ?)", 0x0D, 0x0A
-    db "  TYPE   - Display file", 0x0D, 0x0A
-    db "  ERA    - Erase files (wildcards: * ?)", 0x0D, 0x0A
-    db "  REN    - Rename file (new=old)", 0x0D, 0x0A
-    db "  USER   - Show/set the user area (0-15)", 0x0D, 0x0A
-    db "  HELP   - This help", 0x0D, 0x0A
+    db "  DIR, DIRSYS (DIRS)  list files", 0x0D, 0x0A
+    db "  ERASE (ERA)  RENAME (REN)", 0x0D, 0x0A
+    db "  TYPE (TYP)   USER (USE)   HELP", 0x0D, 0x0A
+    db "d:name.typ takes * and ?.  [options]", 0x0D, 0x0A
+    db "load the .COM of the same name.", 0x0D, 0x0A
+    db "cmd1!cmd2 runs cmd1 then cmd2.", 0x0D, 0x0A
     db '$'
 
-; ------------------------------------------------------------------
-; print_hex16 — Print HL as 4-digit hex
-;   In: HL = value
-;   Clobbers: AF, BC, DE, HL
-; ------------------------------------------------------------------
-; @proc print_hex16
-; @param %val:u16 hl
-; @clobbers af,bc,de,hl
-; @end
-print_hex16:
-    ld a, h
-    call print_hex8
-    ld a, l
-    jp print_hex8
-
-; ------------------------------------------------------------------
-; print_hex8 — Print A as 2-digit hex
-;   In: A = value
-;   Clobbers: AF, BC, DE
-; ------------------------------------------------------------------
-; @proc print_hex8
-; @param %val:u8 a
-; @clobbers af,bc,de
-; @end
-print_hex8:
-    push af
-    rrca
-    rrca
-    rrca
-    rrca
-    call .nibble
-    pop af
-.nibble:
-    and 0x0F
-    add a, '0'
-    cp '9' + 1
-    jr c, .digit
-    add a, 'A' - '0' - 10
-.digit:
-    ld e, a
-    ld c, 2
-    jp BDOS
+nul_str:
+    db 0
 
 ; ------------------------------------------------------------------
 ; print_crlf — Print CR+LF
@@ -2055,52 +2221,8 @@ print_decimal_a:
 ; @clobbers af,bc,de,hl
 ; @end
 parse_filename:
-    ; Strip optional "X:" drive prefix so we can handle commands like
-    ; "a:foo" or "B:TEST" — skip the prefix and remember the drive so
-    ; we can patch FCB byte 0 (drive: 0=default, 1=A, 2=B, ...) after
-    ; parse_fcb clears the FCB.
-    xor a
-    ld b, a                    ; B = drive override (0 = default)
-    ld a, (hl)
-    or a
-    jr z, .pf_do_parse         ; empty — let parse_fcb fail
-    ; Uppercase the first char in-place for comparison (we may back out)
-    cp 'a'
-    jr c, .pf_upper_done
-    cp 'z' + 1
-    jr nc, .pf_upper_done
-    sub 32
-.pf_upper_done:
-    cp 'A'
-    jr c, .pf_do_parse
-    cp 'P' + 1
-    jr nc, .pf_do_parse
-    ; A = uppercase drive letter candidate. Peek next char for ':'.
-    push af
-    inc hl
-    ld a, (hl)
-    cp ':'
-    jr z, .pf_got_drive
-    dec hl                     ; not "X:" — restore HL, discard drive
-    pop af
-    jr .pf_do_parse
-.pf_got_drive:
-    pop af
-    sub 'A' - 1                ; drive number 1=A, 2=B, ...
-    ld b, a
-    inc hl                     ; skip past ':'
-.pf_do_parse:
-    ld de, type_fcb
-    push bc
-    call parse_fcb             ; fills type_fcb; clears FCB byte 0; carry=error
-    pop bc
-    ret c                      ; propagate parse error
-    ld a, b
-    or a                       ; clears carry
-    ret z                      ; no drive override — success, carry clear
-    ld (type_fcb), a           ; patch FCB drive byte
-    or a                       ; clear carry (success)
-    ret
+    ld de, type_fcb            ; parse_fcb also handles the "X:" prefix
+    jp parse_fcb
 
 ; ------------------------------------------------------------------
 ; parse_fcb — Parse "FILENAME.EXT" at HL into FCB at DE
@@ -2263,34 +2385,6 @@ parse_fcb:
     ret
 
 
-; FCB for TYPE command
-type_fcb:
-    ds 36
-
-; REN state: the two halves of "REN new=old" are parsed into type_fcb in
-; turn, then assembled into ren_fcb for F23 (old name 1..11, new 17..27).
-ren_new:   dw 0
-ren_old:   dw 0
-ren_drive: db 0
-ren_fcb:   ds 36
-
-; DIR state
-cur_drive:        db 0               ; Current drive (0=A:)
-dir_maxcols:      db 3               ; Columns for DIR display
-dir_display_drive: db 0              ; Drive to display in prefix (0=A:)
-
-; SCB query used by DIR to pick its column count (conwidth at 0x1A)
-scr_query_pb:
-    db 0x1A, 0                   ; SCB offset=conwidth (0x1A), op=0 (get)
-
-; FCB for DIR command
-dir_fcb:
-    ds 36
-
-; Buffer for SETDEF search path fetched via F_GET_PATH during command load
-ccp_search_buf:
-    ds 4
-
 ; "SUBMIT " prefix prepended to cmd_buf when CCP chains a .SUB hit
 ; through SUBMIT.COM.
 str_submit_prefix:
@@ -2302,8 +2396,7 @@ PROFILE_CMD_LEN equ 18
 str_profile_cmd:
     db 'SUBMIT PROFILE.SUB'
     db 0
-    assert $ - str_profile_cmd == PROFILE_CMD_LEN + 1, \
-        "PROFILE_CMD_LEN must match str_profile_cmd"
+    assert $ - str_profile_cmd == PROFILE_CMD_LEN + 1,         "PROFILE_CMD_LEN must match str_profile_cmd"
 
 ; FCB for the cold-start PROFILE.SUB search: drive 0 = default drive.
 profile_fcb:
@@ -2312,17 +2405,16 @@ profile_fcb:
     db 'SUB'
     ds 24
 
+; SCB query used by DIR to pick its column count (conwidth at 0x1A)
+scr_query_pb:
+    db 0x1A, 0                   ; SCB offset=conwidth (0x1A), op=0 (get)
+
 ccp_chain_drive:
     db 0
 ccp_chain_skip:
     db 0
 ccp_force_com:
     db 0
-
-; First 128 bytes of a PRL file's header — used to spot the 0xC9 prefix
-; before deciding how many records to skip in the loader.
-ccp_prl_header:
-    ds 128
 
 ; FCB template for A:$$$.SUB — copied into sub_fcb at each prompt
 sub_fcb_init:
@@ -2331,14 +2423,44 @@ sub_fcb_init:
     db "SUB"                   ; ext
     ds 24                      ; EX, S1, S2, RC, alloc map, CR, R0..R2 = 0
 
-sub_fcb:
-    ds 36
+; ==========================================================================
+; Uninitialised data
+;
+; Everything below is RAM the CCP only writes before it reads: it is not
+; part of CCP.COM, so it does not count against the 4K staging window.  The
+; command buffer comes first: its two header bytes are the last bytes of the
+; file and its text area follows them.
+; ==========================================================================
 
-; DMA buffer for $$$.SUB record I/O. Lives outside 0x0080 so parse_cmd's
-; command-tail setup doesn't race with an in-flight read.
-sub_dma:
-    ds 128
+; Command buffer for BDOS F10
+cmd_buf:
+    db 126                     ; Max characters
+    db 0                       ; Characters read (filled by BDOS)
 
-; Stack
-    ds 64
-ccp_stack:
+CMD_BUF_TEXT   equ cmd_buf + 2           ; 127 bytes of text
+type_fcb       equ CMD_BUF_TEXT + 127    ; FCB of the file a command names
+ren_fcb        equ type_fcb + 36         ; F23 FCB (old name 1..11, new 17..27)
+ren_chk        equ ren_fcb + 36          ; F17 FCB for "does the new name exist"
+ccp_prl_header equ ren_chk + 36          ; first 128 bytes of a PRL file's
+                                         ; header (spots the 0xC9 prefix)
+sub_fcb        equ ccp_prl_header + 128  ; working FCB for $$$.SUB
+sub_dma        equ sub_fcb + 36          ; $$$.SUB record buffer; it lives
+                                         ; outside 0x0080 so the command-tail
+                                         ; setup cannot race an in-flight read
+ccp_search_buf equ sub_dma + 128         ; SETDEF search path (F122)
+ccp_cmdp       equ ccp_search_buf + 4    ; word: start of the command word
+type_mode      equ ccp_cmdp + 2          ; word: con_mode saved by TYPE
+ren_new        equ type_mode + 2         ; word: new name text
+ren_old        equ ren_new + 2           ; word: old name text
+ren_newname    equ ren_old + 2           ; 11 bytes: new name pattern
+ren_drive      equ ren_newname + 11      ; drive of the rename (0 = default)
+ren_skip       equ ren_drive + 1         ; files a REN left alone so far
+ren_any        equ ren_skip + 1          ; non-zero once a REN renamed a file
+ren_seen       equ ren_any + 1           ; files still to step over
+dir_mode       equ ren_seen + 1          ; 0 = DIR, 0x80 = DIRSYS
+dir_shown      equ dir_mode + 1          ; non-zero once a file was listed
+dir_other      equ dir_shown + 1         ; non-zero if the other kind matched
+dir_maxcols    equ dir_other + 1         ; columns for the DIR display
+dir_display_drive equ dir_maxcols + 1    ; drive letter shown by DIR (0 = A:)
+ccp_stack_base equ dir_display_drive + 1
+ccp_stack      equ ccp_stack_base + 64   ; local stack grows down from here

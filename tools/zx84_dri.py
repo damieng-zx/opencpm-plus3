@@ -183,7 +183,7 @@ def main() -> int:
         smoke.expect("SET RW", "Read Write")
         smoke.command("ERA RO.TXT", 1500)
         smoke.command("DIR RO.TXT", 1200)
-        smoke.expect("R/O file deleted after RW", "No files")
+        smoke.expect("R/O file deleted after RW", "No File")
         print("[dri] SET ok (R/O enforced on ERA/REN)")
 
         # --- SETKEYS: parse RESET.KEY and program the key table --------

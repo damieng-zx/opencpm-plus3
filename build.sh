@@ -93,12 +93,16 @@ fi
 # (an LBR library manager) is not needed on the distribution disk.
 # PROFILE.SUB is Amstrad's start-up script; it runs here, but auto-running
 # it would copy ~10K into the 16K C: RAM disk at every cold boot.
+# SETKEYS.COM and RESET.KEY are Locomotive Software/Amstrad code ("Developed
+# by Locomotive Software Ltd."), which a clean-room CP/M must not ship; the
+# DRI harness copies both into its own scratch image instead.
 REF_FILES=()
 for ref in references/binaries/*.COM references/binaries/*.SUB; do
     case "$ref" in
         */SUBMIT.COM|*/submit.com|*/RENAME.COM|*/rename.com|\
         */NULU11.COM|*/nulu11.com|\
         */PROFILE.SUB|*/profile.sub|\
+        */SETKEYS.COM|*/setkeys.com|*/RESET.KEY|*/reset.key|\
         */PMAUTOAE.COM|*/pmautoae.com) continue ;;
     esac
     if [ -f "$ref" ]; then
