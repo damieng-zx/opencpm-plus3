@@ -294,9 +294,11 @@ disk: everything in the first table, nothing in the second.
   `FORMAT d: /Q` covers the other option from that list: it skips the
   read-back for a known-good disc.
 - **ANSI extras** — the CSI subset (see
-  [docs/ansi-subset.md](docs/ansi-subset.md)) covers cursor motion, erase
-  and save/restore; SGR (`ESC [ … m`) and the private autowrap modes
-  (`ESC [ ? 7 h/l`) are still accepted and ignored.
+  [docs/ansi-subset.md](docs/ansi-subset.md)) covers cursor motion, erase,
+  save/restore, SGR (`ESC [ … m`: bold, blink, reverse video and the 8 ANSI
+  colours) and the private autowrap modes (`ESC [ ? 7 h/l`).  What is left is
+  the hardware's own limit: faint, underline and the extended colour forms
+  have no equivalent in the Spectrum attribute register.
 - **Richer command-line file specs** (wildcards for `TYPE`, and the like).
 
 ## Technical

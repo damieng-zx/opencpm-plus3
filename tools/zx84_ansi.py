@@ -161,11 +161,118 @@ class AnsiTests:
         self.check_at("DECRC", self.s.screen(), 4, 9, "SAV")
         self.s.finish_prompt()
 
+    def phase_sgr(self) -> None:
+        self.s.log("ANSI: SGR")
+        self.s.esc("[0m")
+        self.check_attr("SGR 0 resets to white on blue", 0x0F)
+
+        self.s.esc("[31m")                      # red ink
+        self.check_attr("SGR 31 red ink", 0x0A)
+
+        self.s.esc("[42m")                      # green paper (ANSI 2 -> GRB 4)
+        self.check_attr("SGR 42 green paper", 0x22)
+
+        self.s.esc("[1m")                       # bold: both inks bright
+        self.check_attr("SGR 1 bold", 0x62)
+
+        self.s.esc("[0;37;44m")                 # white on blue
+        self.check_attr("SGR 0;37;44", 0x0F)
+
+        self.s.esc("[7m")                       # reverse: white on blue
+        self.check_attr("SGR 7 reverse", 0x39)
+
+        self.s.esc("[27m")
+        self.check_attr("SGR 27 reverse off", 0x0F)
+
+        self.s.esc("[5m")                       # blink needs both flash bits
+        self.check_attr("SGR 5 blink", 0x8F)
+
+        self.s.esc("[25m")
+        self.check_attr("SGR 25 blink off", 0x0F)
+
+        self.s.esc("[90m")                      # bright black ink
+        self.check_attr("SGR 90 bright black", 0x48)
+
+        # 38/48 introduce extended colour; the trailing numbers must not be
+        # read as attributes of their own (5 would be blink).
+        self.s.esc("[0m")
+        self.s.esc("[38;5;9m")
+        self.check_attr("SGR 38 extended colour ignored", 0x0F)
+
+        self.s.esc("[m")                        # empty parameter = 0
+        self.check_attr("SGR empty parameter resets", 0x0F)
+
+        # End to end: a character drawn after SGR 31 m must carry the red
+        # attribute in the screen's attribute file (0x5800 in bank 5).
+        self.s.esc("[0m")
+        self.s.esc("E")
+        self.s.esc("[1;1H")
+        self.s.esc("[31m")
+        self.s.mcp.call("type", {"text": "R"})
+        self.s.mcp.call("run", {"frames": 300})
+        self.s.record()
+        cell = self.s.memory(5, 0x5800, 1)[0]
+        if cell != 0x0A:
+            raise SmokeError(
+                f"SGR 31 m did not reach the screen: attribute {cell:02X}, "
+                "expected 0A")
+
+        self.s.finish_prompt()
+
+    def check_attr(self, label: str, want: int) -> None:
+        got = self.s.memory(4, self.s.scr_attr, 1)[0]
+        if got != want:
+            raise SmokeError(f"{label}: attribute {got:02X}, expected {want:02X}")
+
+    def phase_mode(self) -> None:
+        self.s.log("ANSI: private modes")
+        self.s.esc("[?3l")
+        self.s.esc("[?3h")
+        if self.s.memory(4, self.s.scr_cols, 1)[0] != 51:
+            raise SmokeError("ESC [ ? 3 h/l changed the column count")
+        self.s.esc("[?8h")
+        self.s.esc("[?8l")
+        self.s.finish_prompt()
+
+        # ?7 is autowrap: the same state ESC v/w drives.  Use 32 columns so
+        # a short line fills a row.
+        self.s.esc("30")
+        self.s.finish_prompt()
+
+        self.s.esc("[?7l")
+        if self.s.memory(4, self.s.scr_wrap, 1)[0] != 0:
+            raise SmokeError("ESC [ ? 7 l did not clear the wrap flag")
+        self.s.esc("H")
+        self.s.mcp.call("type", {"text": "X" * 40})
+        self.s.mcp.call("run", {"frames": 1200})
+        row = self.s.memory(6, self.s.cursor_row, 1)[0]
+        col = self.s.memory(6, self.s.cursor_col, 1)[0]
+        if (row, col) != (0, 31):
+            raise SmokeError(f"ESC [ ? 7 l: cursor {row}/{col}, expected 0/31")
+        self.s.finish_prompt()
+
+        self.s.esc("v")                         # wrap back on for the test
+        self.s.esc("[?7h")
+        if self.s.memory(4, self.s.scr_wrap, 1)[0] != 1:
+            raise SmokeError("ESC [ ? 7 h did not set the wrap flag")
+        self.s.esc("H")
+        self.s.mcp.call("type", {"text": "X" * 40})
+        self.s.mcp.call("run", {"frames": 1200})
+        if self.s.memory(6, self.s.cursor_row, 1)[0] == 0:
+            raise SmokeError("ESC [ ? 7 h: a 40-character line did not wrap")
+        self.s.finish_prompt()
+
+        self.s.esc("31")
+        self.s.esc("[0m")                       # leave the palette as found
+        self.check_attr("SGR reset at end of the mode phase", 0x0F)
+
     def run(self) -> None:
         self.phase_cup()
         self.phase_move()
         self.phase_erase()
         self.phase_save()
+        self.phase_sgr()
+        self.phase_mode()
 
 
 def main() -> int:

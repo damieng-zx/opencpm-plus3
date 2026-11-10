@@ -982,7 +982,7 @@ xbios_handler:
     ld (scr_ink_br), a
 
 .tsi_done:
-    jp _set_attr
+    jp _apply_attr
 
 .te_set_border:
     ; TE_SET_BORDER (0x00CE): set the screen border colour.

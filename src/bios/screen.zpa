@@ -162,13 +162,15 @@ scr_flash:    db 0             ; Computed FLASH attribute bit: 0x00 or 0x80
 scr_attr:     db DEFAULT_ATTR  ; Computed attribute byte (F B PPP III)
 scr_border_v: db BORDER_COL    ; Current border colour 0-7
 scr_cols:     db 51            ; Runtime column count (32, 51 or 64)
-scr_wrap:     db 1             ; 1 = wrap at the right edge (ESC v/w)
+scr_wrap:     db 1             ; 1 = wrap at the right edge (ESC v/w, ESC[?7h)
+scr_rev:      db 0             ; 1 = SGR reverse video has ink/paper swapped
 
 ; ANSI/VT-100 CSI parser state.  Kept in the image (not bank-6 scratch)
 ; because six parameter bytes do not fit the A730-A73F escape block.
 csi_n:        db 0             ; number of parameters collected
 csi_val:      db 0             ; parameter being accumulated
 csi_have:     db 0             ; 1 = csi_val holds at least one digit
+csi_priv:     db 0             ; 1 = the sequence began with '?' (private mode)
 csi_params:   ds 6             ; numeric parameters, 0 for empty/missing
 font_ptr:     dw 0x8000       ; Active font in bank 6 (8000=51col, 8800=32col, 9400=64col)
 ; Scroll scratch for the bank-5 fast scroll paths.  Bank 5 itself holds only
@@ -262,6 +264,7 @@ scr_reset:
     ld (scr_ink_fl), a
     ld (scr_paper_fl), a
     ld (scr_flash), a
+    ld (scr_rev), a
     ld (saved_row), a
     ld (saved_col), a
 
@@ -278,6 +281,51 @@ scr_reset:
 
     call _cancel_paging
     jr scr_init
+
+
+; ==========================================================================
+; _apply_attr — Recompute scr_attr, honouring SGR reverse video
+;   _set_attr only knows ink/paper, so reverse is done as a swap around it:
+;   the logical pair is exchanged, the attribute recomputed, then exchanged
+;   back.  The stored colours stay in their SGR order, so a later 27m or a
+;   new colour restores the plain pairing exactly.
+;   Clobbers: AF, B, C
+; ==========================================================================
+; @proc _apply_attr
+; @clobbers af,b,c
+; @end
+_apply_attr:
+    ld a, (scr_rev)
+    or a
+    jr z, .aa_plain
+    call .aa_swap
+    call _set_attr
+    jr .aa_swap
+.aa_plain:
+    jp _set_attr
+
+; Exchange the ink/paper pair, including their bright and flash flags.
+;   Clobbers: AF, C
+.aa_swap:
+    ld a, (scr_ink)
+    ld c, a
+    ld a, (scr_paper)
+    ld (scr_ink), a
+    ld a, c
+    ld (scr_paper), a
+    ld a, (scr_ink_br)
+    ld c, a
+    ld a, (scr_paper_br)
+    ld (scr_ink_br), a
+    ld a, c
+    ld (scr_paper_br), a
+    ld a, (scr_ink_fl)
+    ld c, a
+    ld a, (scr_paper_fl)
+    ld (scr_ink_fl), a
+    ld a, c
+    ld (scr_paper_fl), a
+    ret
 
 
 ; ==========================================================================
@@ -545,6 +593,7 @@ scr_putchar:
     ld (csi_n), a
     ld (csi_val), a
     ld (csi_have), a
+    ld (csi_priv), a
     ld a, ESC_CSI
 .esc_set_b:
     ld (esc_state), a
@@ -584,8 +633,10 @@ scr_putchar:
     ret
 
 .csi_private:
-    ; A leading '?' marks a private mode.  It is accepted and ignored for
-    ; now; the parameter is parsed normally, so ESC[?3h is consumed silently.
+    ; A leading '?' marks a private mode.  The parameter is parsed normally;
+    ; .csi_dispatch decides what the mode means (only ?7 has state here).
+    ld a, 1
+    ld (csi_priv), a
     ret
 
 .csi_sep:
@@ -629,6 +680,12 @@ scr_putchar:
     jp z, .csi_ed
     cp 'K'
     jp z, .csi_el
+    cp 'm'
+    jp z, .csi_sgr
+    cp 'h'
+    jp z, .csi_setmode
+    cp 'l'
+    jp z, .csi_resetmode
     cp 's'
     jp z, .esc_j
     cp 'u'
@@ -778,6 +835,221 @@ scr_putchar:
     ld (cursor_col), a
     jp _lg_autoflip
 
+; ------- SGR (ESC [ params m) -------
+; Every parameter is applied in turn, so "1;31;47m" is bold red on white.
+; An empty parameter list means 0, i.e. reset, as ANSI specifies.
+;
+; The Spectrum attribute has one BRIGHT bit and one FLASH bit for the whole
+; cell, so an intense foreground or background can only brighten everything
+; in it: SGR 1, 90-97 and 100-107 all set both inks bright.  Underline and
+; faint have no hardware at all and are accepted and ignored, as is 39/49's
+; "default" distinction (there is a single ink and a single paper here).
+.csi_sgr:
+    ld a, (csi_n)
+    or a
+    jr nz, .sgr_begin
+    call .sgr_reset
+    jr .sgr_done
+.sgr_begin:
+    ld hl, csi_params
+    ld b, a
+.sgr_loop:
+    ld a, (hl)
+    inc hl
+    push hl
+    push bc
+    cp 38
+    jr z, .sgr_extended
+    cp 48
+    jr z, .sgr_extended
+    call .sgr_param
+    pop bc
+    pop hl
+    djnz .sgr_loop
+.sgr_done:
+    jp _apply_attr
+.sgr_extended:
+    ; 38/48 introduce extended colour (38;5;n, 38;2;r;g;b).  There is no
+    ; 256-colour or 24-bit palette here, and the trailing numbers would
+    ; otherwise be read as separate attributes (5 is blink), so drop the
+    ; rest of the sequence.  Anything already applied still takes effect.
+    pop bc
+    pop hl
+    jp _apply_attr
+
+; One SGR parameter in A.  Values with no hardware equivalent are consumed
+; silently: 2/22 faint, 4/24 underline (the glyph only fills the top seven
+; scan lines), 50-89 and 98-99.
+.sgr_param:
+    or a
+    jr z, .sgr_reset
+    cp 1
+    jr z, .sgr_bold
+    cp 5
+    jr z, .sgr_blink
+    cp 7
+    jr z, .sgr_rev
+    cp 22
+    jr z, .sgr_nobold
+    cp 25
+    jr z, .sgr_noblink
+    cp 27
+    jr z, .sgr_norev
+    cp 30
+    ret c                      ; 2-4, 6, 8-21, 23-24, 26, 28-29
+    cp 38
+    jr c, .sgr_fg              ; 30-37
+    cp 39
+    jr z, .sgr_fgdef
+    cp 48
+    jr c, .sgr_bg              ; 40-47
+    cp 49
+    jp z, .sgr_bgdef
+    cp 90
+    ret c                      ; 50-89
+    cp 98
+    jr c, .sgr_fgbr            ; 90-97
+    cp 100
+    ret c                      ; 98, 99
+    cp 108
+    jr c, .sgr_bgbr            ; 100-107
+    ret
+
+; SGR 0 - back to the cold-boot palette (white on blue) and normal display
+.sgr_reset:
+    ld a, 7
+    ld (scr_ink), a
+    ld a, 1
+    ld (scr_paper), a
+    xor a
+    ld (scr_ink_br), a
+    ld (scr_paper_br), a
+    ld (scr_ink_fl), a
+    ld (scr_paper_fl), a
+    ld (scr_rev), a
+    ret
+
+.sgr_bold:
+    ld a, 1
+    ld (scr_ink_br), a
+    ld (scr_paper_br), a
+    ret
+
+.sgr_nobold:
+    xor a
+    ld (scr_ink_br), a
+    ld (scr_paper_br), a
+    ret
+
+.sgr_blink:
+    ld a, 1
+    ld (scr_ink_fl), a
+    ld (scr_paper_fl), a
+    ret
+
+.sgr_noblink:
+    xor a
+    ld (scr_ink_fl), a
+    ld (scr_paper_fl), a
+    ret
+
+; SGR 7/27 - reverse video.  Only the flag changes here; _apply_attr swaps
+; the pair around the attribute recompute so the logical colours are kept.
+.sgr_rev:
+    ld a, 1
+    ld (scr_rev), a
+    ret
+
+.sgr_norev:
+    xor a
+    ld (scr_rev), a
+    ret
+
+.sgr_fg:
+    sub 30
+    call .sgr_map
+    ld (scr_ink), a
+    ret
+
+.sgr_fgdef:
+    ld a, 7
+    ld (scr_ink), a
+    ret
+
+.sgr_fgbr:
+    sub 90
+    call .sgr_map
+    ld (scr_ink), a
+    ld a, 1
+    ld (scr_ink_br), a
+    ld (scr_paper_br), a
+    ret
+
+.sgr_bg:
+    sub 40
+    call .sgr_map
+    ld (scr_paper), a
+    ret
+
+.sgr_bgdef:
+    ld a, 1
+    ld (scr_paper), a
+    ret
+
+.sgr_bgbr:
+    sub 100
+    call .sgr_map
+    ld (scr_paper), a
+    ld a, 1
+    ld (scr_ink_br), a
+    ld (scr_paper_br), a
+    ret
+
+; A = ANSI colour 0-7 -> A = Spectrum colour, which is GRB, not ANSI's RGB.
+;   In:  A = ANSI index (0 black, 1 red, 2 green, 3 yellow, 4 blue,
+;        5 magenta, 6 cyan, 7 white)
+;   Out: A = Spectrum index (bit0 blue, bit1 red, bit2 green)
+;   Clobbers: AF, DE, HL
+.sgr_map:
+    and 0x07
+    ld e, a
+    ld d, 0
+    ld hl, .sgr_map_tbl
+    add hl, de
+    ld a, (hl)
+    ret
+.sgr_map_tbl:
+    db 0, 2, 4, 6, 1, 3, 5, 7
+
+; ------- private modes (ESC [ ? n h / l) -------
+; Only the autowrap mode has state behind it: ?7 h/l is exactly ESC v/w.
+; ?3 (DECCOLM) and ?8 (autorepeat) are accepted and ignored, and a plain
+; ESC [ 4 h (insert mode) has no meaning here, so both fall through.
+.csi_setmode:
+    ld c, 1
+    jr .csi_mode
+.csi_resetmode:
+    ld c, 0
+.csi_mode:
+    ld a, (csi_priv)
+    or a
+    ret z
+    ld a, (csi_n)
+    or a
+    ret z
+    ld hl, csi_params
+    ld b, a
+.csi_mode_loop:
+    ld a, (hl)
+    inc hl
+    cp 7
+    jr nz, .csi_mode_next
+    ld a, c
+    ld (scr_wrap), a
+.csi_mode_next:
+    djnz .csi_mode_loop
+    ret
+
 ; ED/EL - erase in display/line.  Mode 0 (default) = cursor to end,
 ; 1 = start to cursor, 2 = whole viewport/line.  Reuse the VT-52 handlers
 ; through a three-entry table; modes above 2 are ignored.
@@ -917,7 +1189,7 @@ scr_putchar:
     ld (scr_ink), a
     ld a, c
     ld (scr_ink_br), a
-    call _set_attr
+    call _apply_attr
     jr .esc_done_c          ; esc_state = normal, return
 
 .esc_pc:
@@ -930,7 +1202,7 @@ scr_putchar:
     out (PORT_ULA), a
     ld a, c
     ld (scr_paper_br), a
-    call _set_attr
+    call _apply_attr
     jr .esc_done_c          ; esc_state = normal, return
 
 .esc_v:

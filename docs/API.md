@@ -659,7 +659,10 @@ the 80-column logical screen; see 24×80 below.
 
 ### Escape Sequences (VT52-compatible subset, plus ADM-3A/Kaypro codes)
 
-Send these via BDOS F2 (one character at a time).
+Send these via BDOS F2 (one character at a time).  The `ESC [` (CSI) subset
+used by ANSI-aware programs — cursor addressing, erase, SGR colours and the
+private autowrap modes — is documented separately in
+[ansi-subset.md](ansi-subset.md).
 
 #### Cursor Movement
 

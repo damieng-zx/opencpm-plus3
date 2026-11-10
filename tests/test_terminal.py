@@ -7,6 +7,7 @@ behaviour is exercised at run time by tools/zx84_smoke.py.
 
 from __future__ import annotations
 
+import re
 import unittest
 
 from .layout import source, screen_source
@@ -57,6 +58,91 @@ class AnsiCsi(unittest.TestCase):
         for seq in ("[5;10H", "[7;20f", "[99;99H", "[H", "[0;0H",
                     "[2A", "[3B", "[4C", "[2D"):
             self.assertIn(seq, tool)
+
+
+class AnsiSgr(unittest.TestCase):
+    """SGR (ESC [ ... m) and the private autowrap mode (ESC [ ? 7 h/l)."""
+
+    def test_sgr_is_dispatched(self):
+        text = screen_source()
+        self.assertIn("cp 'm'", text)
+        self.assertIn("jp z, .csi_sgr", text)
+        self.assertIn(".csi_sgr:", text)
+
+    def test_sgr_walks_every_parameter(self):
+        text = screen_source()
+        body = text[text.index(".csi_sgr:"):text.index(".sgr_param:")]
+        self.assertIn("csi_params", body)
+        self.assertIn("djnz .sgr_loop", body)
+        self.assertIn("call .sgr_param", body)
+        self.assertIn("call .sgr_reset", body)     # an empty list means 0
+
+    def test_sgr_extended_colour_is_dropped(self):
+        text = screen_source()
+        body = text[text.index(".csi_sgr:"):text.index(".sgr_param:")]
+        # 38/48 must stop the sequence: 38;5;9 would otherwise read 5 as
+        # blink.
+        self.assertIn("cp 38", body)
+        self.assertIn("cp 48", body)
+        self.assertIn(".sgr_extended:", body)
+
+    def test_sgr_codes_have_handlers(self):
+        text = screen_source()
+        body = text[text.index(".sgr_param:"):text.index(".csi_setmode:")]
+        for code, target in ((1, ".sgr_bold"), (5, ".sgr_blink"),
+                             (7, ".sgr_rev"), (22, ".sgr_nobold"),
+                             (25, ".sgr_noblink"), (27, ".sgr_norev"),
+                             (39, ".sgr_fgdef"), (49, ".sgr_bgdef")):
+            self.assertRegex(body, rf"cp {code}\s*\n\s*j[pr] z, {re.escape(target)}")
+        for target in (".sgr_fg", ".sgr_bg", ".sgr_fgbr", ".sgr_bgbr",
+                       ".sgr_map"):
+            self.assertIn(target + ":", text)
+
+    def test_ansi_colours_map_to_grb(self):
+        text = screen_source()
+        body = text[text.index(".sgr_map:"):text.index(".csi_setmode:")]
+        # ANSI order is black, red, green, yellow, blue, magenta, cyan,
+        # white; the Spectrum index is bit0 blue, bit1 red, bit2 green.
+        self.assertIn("db 0, 2, 4, 6, 1, 3, 5, 7", body)
+
+    def test_reverse_video_swaps_around_the_recompute(self):
+        text = screen_source()
+        body = text[text.index("_apply_attr:"):text.index(".aa_swap:")]
+        self.assertIn("scr_rev", body)
+        self.assertEqual(body.count("call .aa_swap"), 1)
+        self.assertIn("call _set_attr", body)
+        self.assertIn("jr .aa_swap", body)      # ...and swap back
+        swap = text[text.index(".aa_swap:"):text.index("scr_putchar:")]
+        for pair in ("scr_ink", "scr_ink_br", "scr_ink_fl"):
+            self.assertIn(f"({pair})", swap)
+        self.assertIn("(scr_paper)", swap)
+
+    def test_colour_commands_honour_reverse_video(self):
+        text = screen_source()
+        for name in (".esc_pb:", ".esc_pc:"):
+            body = text[text.index(name):text.index("\n\n", text.index(name))]
+            self.assertIn("call _apply_attr", body)
+
+    def test_private_modes_drive_the_wrap_flag(self):
+        text = screen_source()
+        self.assertIn("cp 'h'", text)
+        self.assertIn("jp z, .csi_setmode", text)
+        self.assertIn("cp 'l'", text)
+        self.assertIn("jp z, .csi_resetmode", text)
+        body = text[text.index(".csi_mode:"):text.index(".csi_erase:")]
+        self.assertIn("csi_priv", body)          # only ESC [ ? ... counts
+        self.assertIn("ld (scr_wrap), a", body)
+        start = text.index(".csi_start:")
+        self.assertIn("ld (csi_priv), a", text[start:start + 200])
+
+    def test_harness_covers_sgr_and_private_modes(self):
+        tool = source("tools/zx84_ansi.py")
+        for seq in ("[0m", "[31m", "[42m", "[1m", "[0;37;44m", "[7m",
+                    "[27m", "[5m", "[25m", "[90m", "[38;5;9m", "[m",
+                    "[?7h", "[?7l", "[?3h", "[?8h"):
+            self.assertIn(seq, tool)
+        self.assertIn("def phase_sgr", tool)
+        self.assertIn("def phase_mode", tool)
 
 
 class EscapeTableWiring(unittest.TestCase):
