@@ -167,9 +167,9 @@ issues; the others are history):
 - **Z80ASM 1.32** sets a multi-sector count (8) with F44 and then reads its
   source once, assuming the whole block was transferred.  F20/F21 now apply
   the F44 count (1..128) to both sequential directions and report the records
-  moved in H, so the source buffer is complete and the package passes.  A
-  call also stops at a block boundary; PIP's 128 (a full 16K buffer) is
-  accepted, and its buffered copy and RAM-disk transfers still work.
+  moved in H, so the source buffer is complete and the package passes.  PIP's
+  128 (a full 16K buffer) is accepted, and its buffered copy, `[V]` verify
+  and RAM-disk transfers all work.
 
 - **Pascal/Z 4.0** compiles HELLO.PAS with `PASCAL54 HELLO` (the 54K
   compiler loads the PAS254 overlay), assembles with

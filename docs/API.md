@@ -370,14 +370,13 @@ BDOS function 124 (private, used by the CCP only):
   is reset to 1 by warm boot.  The next F20/F21 transfers up to that many
   128-byte records, advancing the DMA by 128 per record, and sets `H` to the
   number actually moved; a count of 1 keeps the CP/M 2.2 fixed-buffer
-  behaviour.  A read stops early at EOF (A=1) with the short count in `H`.
-  The count applies only to sequential I/O; the random functions always move
-  one record.  The valid range is 1..128, 128 being a full 16K buffer and the
-  count PIP asks for.  A transfer also stops at a block boundary rather than
-  running the whole count in one call, which is what DRI's non-banked BDOS
-  does ("multisector max = 1 block"), so `H` is normally 2^BSH or less.  An
-  invalid count resets it to 1 rather than leaving a stale larger value;
-  Z80ASM asks for 8 and gets its whole source block in one read.
+  behaviour.  A read stops early at EOF with A=1, `H` = the records moved
+  and `L` = 1, since callers such as PIP read `L` as the status (`dcnt`) and
+  treat 1 as end of file.  The count applies only to sequential I/O; the
+  random functions always move one record.  The valid range is 1..128, 128
+  being a full 16K buffer and the count PIP asks for.  An invalid count
+  resets it to 1 rather than leaving a stale larger value; Z80ASM asks for 8
+  and gets its whole source block in one read.
 
 #### F45 — Set BDOS Error Mode
 - **In**: E=mode

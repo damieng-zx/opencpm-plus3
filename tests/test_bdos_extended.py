@@ -92,10 +92,20 @@ class MultiSectorCount(unittest.TestCase):
         # The DMA only advances for a true multi-sector call.
         self.assertIn("ms_adv", done)
         self.assertIn(".mrd_no_dma", done)
-        # ...and a call stops at a block boundary rather than running the
-        # whole count, which is what DRI's non-banked BDOS does.
-        self.assertIn("cached_bsh", done)
-        self.assertIn(".mrd_stop", done)
+
+    def test_read_eof_reports_status_in_l(self):
+        # A short final read must report EOF in L (dcnt) as well as A, because
+        # callers read L: PIP does "retcodes(diskrd(...))" then "if dcnt <> 0"
+        # and treats 1 as end of file.  With L = 0 on a short read PIP kept
+        # reading past EOF and built an oversized file, so its [V] verify
+        # compared records that were never written.
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("multi_read:"):text.index("multi_write:")]
+        eof = body[body.index(".mr_ret:"):body.index(".mr_chk_err:")]
+        self.assertIn("ld l, 1", eof)
+        # The conditional "only when no records moved" must be gone: H keeps
+        # the count, L is always the status.
+        self.assertNotIn("jr nz, .mr_status", eof)
 
     def test_writes_transfer_the_full_count(self):
         # F21 applies the same count as F20: the loop moves up to ms_left

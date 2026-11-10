@@ -2426,12 +2426,10 @@ test23:
     ld c, 26
     call BDOS
 
-    ; --- a count of 128 is accepted and capped at one block -------------
-    ; CP/M 3 caps a multi-sector transfer at a block's worth of records
-    ; (DRI's non-banked BDOS: "multisector max = 1 block"), so asking for
-    ; 128 moves 2^(BSH+1) records per call, not 128.  The important part is
-    ; that 128 is *accepted* and moves a sane, block-limited number rather
-    ; than overrunning the caller's buffer.
+    ; --- a count of 128 moves the whole remaining file in one call -------
+    ; 128 is a full 16K buffer and the largest CP/M 3 allows.  CPM3.SYS is
+    ; over 100 records, so one F20 must transfer it all, report EOF and
+    ; leave nothing for a second call.
     ld e, 128
     ld c, 44
     call BDOS
@@ -2450,16 +2448,20 @@ test23:
     ld de, FCB1
     ld c, 20                     ; F20 with a count of 128
     call BDOS
-    or a                         ; records were moved, no error
+    cp 1                         ; the file ended inside the count
     jp nz, .t23_fail
     ld a, h
-    or a                         ; at least one record
-    jp z, .t23_fail
-    ; At most one block's worth, which is 2^BSH records: 8 on the 1K RAM
-    ; disk (BSH=3), 16 on the 2K 720K format (BSH=4).  Just bound it well
-    ; below the requested 128 so a runaway transfer is caught.
-    cp 33
-    jp nc, .t23_fail
+    cp 64                        ; well past a single block's worth
+    jp c, .t23_fail
+    ; Nothing may be left: a further read returns EOF with no records.
+    ld de, FCB1
+    ld c, 20
+    call BDOS
+    cp 1
+    jp nz, .t23_fail
+    ld a, h
+    or a
+    jp nz, .t23_fail
 
     ; The first record of that transfer must match a single-record read.
     ld de, FCB1

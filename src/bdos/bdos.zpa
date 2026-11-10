@@ -396,10 +396,13 @@ multi_read:
     ld a, b
     cp 1
     jr nz, .mr_chk_err
-    ld a, h
-    or a
-    jr nz, .mr_status
-    ld l, 1                    ; EOF with no records: HL=0001 (PIP reads L)
+    ; EOF must report dcnt = 1 in L whatever the count, because L is what
+    ; the caller reads as the status: PIP does "retcodes(diskrd(...))" and
+    ; then "if dcnt <> 0 ... end of file".  With L = 0 on a short final
+    ; read PIP saw success, kept reading past EOF and built a file far
+    ; larger than the source, so its [V] verify then compared records that
+    ; were never written.  H stays the records moved, as CP/M 3 specifies.
+    ld l, 1
     jr .mr_status
 .mr_chk_err:
     cp 0xFF
@@ -473,12 +476,11 @@ multi_init:
 ; multi_record_done - Account for one transferred record
 ;   For a true multi-sector count (>1) the DMA advances by 128 bytes, as
 ;   CP/M 3 specifies.  Count 1 deliberately leaves the DMA alone so CP/M 2.2
-;   programs that reuse one buffer keep working.  The transfer also stops at
-;   a block boundary, so one call never crosses an extent block.
-;   Out: carry set = more records remain, clear = stop here
-;   Clobbers: AF, BC, DE, HL
+;   programs that reuse one buffer keep working.
+;   Out: carry set = more records remain, clear = count exhausted
+;   Clobbers: AF, DE, HL
 ; @proc multi_record_done
-; @clobbers af,bc,de,hl
+; @clobbers af,de,hl
 ; @end
 multi_record_done:
     ld a, (ms_done)
@@ -496,36 +498,10 @@ multi_record_done:
     ld (bdos_dma), hl
     ld (scb_dma), hl
 .mrd_no_dma:
-    ; CP/M 3 ends a multi-sector transfer at a block boundary.  DRI's
-    ; non-banked BDOS says exactly that ("multisector max = 1 block",
-    ; bdos30.asm check$npr7), and it matters here: a caller may hand us a
-    ; count of 128, and running one call that far walks the DMA 16K past
-    ; the buffer it gave us.  cached_bsh is valid at this point because the
-    ; record body called setup_select_fcb.
     ld a, (ms_left)
     or a
-    jr z, .mrd_stop             ; the whole count is done
-    ld a, (cached_bsh)
-    or a
-    jr z, .mrd_block1           ; BSH=0: one record per block
-    ld b, a
-    ld a, 1
-.mrd_shift:
-    add a, a                    ; BSH shifts: 2^BSH records per block
-    djnz .mrd_shift
-    dec a                       ; block mask (7 for a 1K block)
-    jr .mrd_mask
-.mrd_block1:
-    xor a                       ; one record per block: every record ends it
-.mrd_mask:
-    ld b, a
-    ld a, (ms_done)
-    and b
-    jr z, .mrd_stop             ; at a block boundary: end this call
-    scf                         ; room left in this block: keep going
-    ret
-.mrd_stop:
-    or a                        ; CF clear = stop; the rest is a later call
+    ret z
+    scf
     ret
 
 
