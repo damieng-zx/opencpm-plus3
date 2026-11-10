@@ -358,7 +358,7 @@ BDOS function 124 (private, used by the CCP only):
 ### CP/M 3 Extended Functions
 
 #### F44 — Set Multi-Sector Count
-- **In**: E=count (1..127)
+- **In**: E=count (1..128)
 - **Out**: A=0 (accepted) or 0xFF (invalid)
 - **Note**: The count is stored in the SCB (`scb_multi`, offset 0x4A) and
   is reset to 1 by warm boot.  The next F20/F21 transfers up to that many
@@ -366,10 +366,12 @@ BDOS function 124 (private, used by the CCP only):
   number actually moved; a count of 1 keeps the CP/M 2.2 fixed-buffer
   behaviour.  A read stops early at EOF (A=1) with the short count in `H`.
   The count applies only to sequential I/O; the random functions always move
-  one record.  The valid range is 1..127.  An invalid count resets it to 1
-  rather than leaving a stale larger value: PIP asks for 128, is rejected,
-  falls back to one record and later uses smaller valid counts; Z80ASM asks
-  for 8 and gets its whole source block in one read.
+  one record.  The valid range is 1..128, 128 being a full 16K buffer and the
+  count PIP asks for.  A transfer also stops at a block boundary rather than
+  running the whole count in one call, which is what DRI's non-banked BDOS
+  does ("multisector max = 1 block"), so `H` is normally 2^BSH or less.  An
+  invalid count resets it to 1 rather than leaving a stale larger value;
+  Z80ASM asks for 8 and gets its whole source block in one read.
 
 #### F45 — Set BDOS Error Mode
 - **In**: E=mode

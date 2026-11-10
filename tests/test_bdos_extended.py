@@ -92,6 +92,10 @@ class MultiSectorCount(unittest.TestCase):
         # The DMA only advances for a true multi-sector call.
         self.assertIn("ms_adv", done)
         self.assertIn(".mrd_no_dma", done)
+        # ...and a call stops at a block boundary rather than running the
+        # whole count, which is what DRI's non-banked BDOS does.
+        self.assertIn("cached_bsh", done)
+        self.assertIn(".mrd_stop", done)
 
     def test_writes_transfer_the_full_count(self):
         # F21 applies the same count as F20: the loop moves up to ms_left
@@ -103,9 +107,10 @@ class MultiSectorCount(unittest.TestCase):
         self.assertIn("call multi_record_done", write)
         self.assertIn("jr c, .mw_loop", write)
         self.assertIn("ld h, a", write)
-        # Invalid counts fall back to one record (PIP asks for 128).
+        # The range is 1..128 (128 is PIP's full 16K buffer); only 0 and
+        # 129+ are rejected, and then the count falls back to one record.
         f44 = text[text.index("bf_f44:"):text.index("; F45: Set BDOS Error Mode")]
-        self.assertIn("cp 128", f44)
+        self.assertIn("cp 129", f44)
         bad = f44[f44.index(".f44_bad:"):]
         self.assertIn("ld (scb_multi), a", bad)
         # The on-disk tests expect four records in one call each way.
@@ -118,7 +123,7 @@ class MultiSectorCount(unittest.TestCase):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index("bf_f44:"):text.index("; F45: Set BDOS Error Mode")]
         self.assertIn("ld (scb_multi), a", body)
-        self.assertIn("cp 128", body)            # 1..127; PIP's 128 falls back
+        self.assertIn("cp 129", body)            # 1..128; 128 is PIP's 16K buffer
         self.assertIn(".f44_bad", body)
 
     def test_warm_boot_resets_count(self):

@@ -78,9 +78,9 @@ attribute and deletes.
 Recently fixed: **SLR Z80ASM 1.32** used to fail with `Line Too Long`
 because it sets a multi-sector count (8) with F44 and assumes one F20 moved
 the whole source block.  F20/F21 now apply the count to both sequential
-directions (1..127) and report the records moved in H.  An invalid count
-resets to 1, which is what lets PIP's 128 request fall back cleanly.  The
-real-world suite reports it as `PASS`.
+directions (1..128) and report the records moved in H, stopping at a block
+boundary as DRI's non-banked BDOS does.  PIP's 128 request is now accepted
+outright instead of falling back.  The real-world suite reports it as `PASS`.
 
 Recently fixed: **SuperCalc2 display**.  Its VT-100 output (`ESC[?3h`,
 `ESC[2J`, `ESC[H`, `ESC[row;colH`) used to appear in the character buffer

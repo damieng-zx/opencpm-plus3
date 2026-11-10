@@ -297,9 +297,6 @@ disk: everything in the first table, nothing in the second.
   [docs/ansi-subset.md](docs/ansi-subset.md)) covers cursor motion, erase
   and save/restore; SGR (`ESC [ … m`) and the private autowrap modes
   (`ESC [ ? 7 h/l`) are still accepted and ignored.
-- **Larger multi-sector counts** — F44 currently accepts 1..127; 128 (a full
-  16K buffer) is rejected so PIP falls back to its compatible path. Larger
-  counts may be possible once PIP's buffering is fully understood.
 - **Richer command-line file specs** (wildcards for `TYPE`, and the like).
 
 ## Technical

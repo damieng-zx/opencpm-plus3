@@ -9,6 +9,9 @@
 BDOS    EQU 0005h
 FCB1    EQU 005Ch
 DMA     EQU 0080h
+; 16K scratch buffer for the F44 test, addressed absolutely so it costs no
+; image space.  DISKTEST is ~10K at 0100h, so 8000h..BFFFh is free TPA.
+t44_buf EQU 8000h
 
 start:
     ; Print header
@@ -2315,19 +2318,24 @@ test23:
     ld c, 9
     call BDOS
 
-    ; Reject 0 and 128 (PIP's 128 is rejected so it falls back to
-    ; single-record transfers; 127 is the maximum accepted count).
+    ; The whole range is 1..128 (128 is a full 16K buffer, the count PIP
+    ; asks for).  0 and 129 are rejected and reset the count to 1.
     ld e, 0
     ld c, 44
     call BDOS
     cp 0xFF
     jp nz, .t23_fail
-    ld e, 128
+    ld e, 129
     ld c, 44
     call BDOS
     cp 0xFF
     jp nz, .t23_fail
     ld e, 127
+    ld c, 44
+    call BDOS
+    or a
+    jp nz, .t23_fail
+    ld e, 128
     ld c, 44
     call BDOS
     or a
@@ -2411,6 +2419,80 @@ test23:
     or c
     jr nz, .t23_cmp
 
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+    ld de, DMA
+    ld c, 26
+    call BDOS
+
+    ; --- a count of 128 is accepted and capped at one block -------------
+    ; CP/M 3 caps a multi-sector transfer at a block's worth of records
+    ; (DRI's non-banked BDOS: "multisector max = 1 block"), so asking for
+    ; 128 moves 2^(BSH+1) records per call, not 128.  The important part is
+    ; that 128 is *accepted* and moves a sane, block-limited number rather
+    ; than overrunning the caller's buffer.
+    ld e, 128
+    ld c, 44
+    call BDOS
+    or a
+    jp nz, .t23_fail
+    ld hl, fn_cpm3
+    call set_fcb
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    jp z, .t23_fail
+    ld de, t44_buf
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 20                     ; F20 with a count of 128
+    call BDOS
+    or a                         ; records were moved, no error
+    jp nz, .t23_fail
+    ld a, h
+    or a                         ; at least one record
+    jp z, .t23_fail
+    ; At most one block's worth, which is 2^BSH records: 8 on the 1K RAM
+    ; disk (BSH=3), 16 on the 2K 720K format (BSH=4).  Just bound it well
+    ; below the requested 128 so a runaway transfer is caught.
+    cp 33
+    jp nc, .t23_fail
+
+    ; The first record of that transfer must match a single-record read.
+    ld de, FCB1
+    ld c, 16
+    call BDOS
+    ld e, 1
+    ld c, 44
+    call BDOS
+    ld hl, fn_cpm3
+    call set_fcb
+    ld de, FCB1
+    ld c, 15
+    call BDOS
+    cp 0xFF
+    jp z, .t23_fail
+    ld de, t23_buf
+    ld c, 26
+    call BDOS
+    ld de, FCB1
+    ld c, 20
+    call BDOS
+    or a
+    jp nz, .t23_fail
+    ld hl, t44_buf
+    ld de, t23_buf
+    ld b, 128
+.t23_big_cmp:
+    ld a, (de)
+    cp (hl)
+    jp nz, .t23_fail
+    inc hl
+    inc de
+    djnz .t23_big_cmp
     ld de, FCB1
     ld c, 16
     call BDOS
