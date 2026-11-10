@@ -583,6 +583,23 @@ tst_f17:
     cp 0xFF
     jr nz, .f17_fail        ; Should NOT find it
 
+    ; A '?' in the drive byte asks for every directory entry, whatever the
+    ; name says (CP/M 3 match-all; DIR.COM scans the directory this way).
+    ; "ZZZZZZZZZZZ" matches no real file, so only the '?' can make this work.
+    call clear_test_fcb
+    ld hl, fn_zzz
+    ld de, 0x005D
+    ld bc, 11
+    ldir
+    ld a, '?'
+    ld (0x005C), a
+
+    ld de, 0x005C
+    ld c, 17
+    call BDOS
+    cp 0xFF
+    jr z, .f17_fail         ; match-all must find something
+
     ld de, msg_pass_short
     ld c, 9
     call BDOS
@@ -2034,6 +2051,7 @@ msg_skip_no_input: DB "SKIP (no char ready)$"
 msg_skip_blocks:   DB "SKIP (blocks)$"
 
 fn_cpm3sys: DB "CPM3    SYS"
+fn_zzz:     DB "ZZZZZZZZZZZ"
 fn_smoke: DB "SMOKE   TXT"
 fn_nofile:  DB "NOFILE  XXX"
 fn_temp:    DB "TEMP    $$$"

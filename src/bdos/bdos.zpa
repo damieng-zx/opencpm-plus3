@@ -1598,6 +1598,30 @@ select_fcb_drive:
 
 
 ; ==========================================================================
+; @proc f17_select_drive
+; @out   carry
+; @clobbers af,bc,de,hl,iy
+; @end
+; f17_select_drive — select the drive for a Search First/Next.
+;   In:  IX = FCB (fcb_buf)
+;   Out: CF=0 success, CF=1 invalid drive
+;
+;   A '?' in the drive byte asks for every directory entry on the current
+;   drive whatever its name or user — CP/M 3's directory scan, which
+;   DIR.COM and DIRSYS use to build their file list.  It is not a drive
+;   number, so it must not reach select_fcb_drive (0x3F would be drive 62).
+; ==========================================================================
+f17_select_drive:
+    ld a, (ix + 0)
+    cp '?'
+    jr z, .current
+    jr select_fcb_drive
+.current:
+    ld a, (cur_disk)
+    jp select_drive
+
+
+; ==========================================================================
 ; @proc drive_ro_status
 ; @param %drive:u8 a
 ; @out   a

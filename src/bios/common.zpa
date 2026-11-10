@@ -1481,8 +1481,8 @@ bf_f17:
     ld hl, 0
     ld (search_pos), hl        ; Start from entry 0
 
-    ; Make sure drive is selected
-    call select_fcb_drive
+    ; Make sure drive is selected ('?' is the match-all directory scan)
+    call f17_select_drive
     jr c, .f17_bad
 
     jr search_next_entry
@@ -1575,6 +1575,14 @@ search_next_entry:
 ;   Out: Z = match, NZ = no match
 ;   Clobbers: AF, BC, DE, HL
 match_fcb:
+    ; CP/M 3: a '?' in the drive byte of the search FCB matches every
+    ; directory entry, including the label and timestamp entries that a
+    ; normal filename search skips.  DIR.COM relies on that to read the
+    ; whole directory in one pass.
+    ld a, (de)
+    cp '?'
+    jr z, .match_all
+
     ; Byte 0 of directory entry = user number.  Valid values 0-15 are
     ; real user areas; 0x10-0x1F are reserved for disc labels / timestamps
     ; in CP/M 3; 0xE5 means "deleted"; anything else is garbage (e.g. a
@@ -1625,6 +1633,10 @@ match_fcb:
     pop hl
 .no_match:
     or 1                       ; Clear Z
+    ret
+
+.match_all:
+    xor a                      ; Set Z
     ret
 
 

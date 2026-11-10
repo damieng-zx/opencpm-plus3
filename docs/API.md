@@ -281,10 +281,16 @@ BDOS function 124 (private, used by the CCP only):
 - **Out**: A=entry index (0-3) or 0xFF (not found)
 - **Note**: Copies matching 128-byte directory sector to DMA.
   Return value 0-3 = offset into DMA (entry = DMA + index*32).
+- **Note**: A `'?'` in the drive byte (FCB+0) asks for *every* directory
+  entry on the current drive, whatever its name or user, and behaves like a
+  full directory scan. This is how `DIR.COM` and `DIRSYS` build their file
+  list (CP/M 3 Programmer's Guide, Function 152/17); the caller filters
+  user numbers and attributes itself.
 
 #### F18 — Search Next
 - **Out**: A=entry index (0-3) or 0xFF (no more matches)
 - **Note**: Continues from previous F17. Same FCB must remain at 005Ch.
+  A `'?'` drive byte from F17 keeps matching every entry.
 
 #### F19 - Delete File
 - **In**: DE=FCB address (supports wildcards)
