@@ -1432,6 +1432,38 @@
       "notes": "The only package that touches the tape device: TAPEDISC lists the cassette as drive T: and copies files off it to disc.  With no tape running it prints 'Searching...' and waits, which is where the automated run stops; the value is the T: drive appearing at all and the tool not falling over when the tape is empty."
     },
     {
+      "id": "c80",
+      "title": "Software Toolworks C/80 3.1",
+      "url": "http://www.retroarchive.org/cpm/lang/c80v31.zip",
+      "archive": "zip",
+      "members": [
+        "C.COM",
+        "AS.COM",
+        "CLIBRARY.ASM",
+        "PRINTF.C"
+      ],
+      "fixtures": [{"C80HELLO.C": "HELLO.C"}],
+      "command": "C HELLO",
+      "expect": [
+        "C/80 Compiler 3.1",
+        "0 errors in compilation"
+      ],
+      "frames": 4500,
+      "steps": [
+        {
+          "text": "AS HELLO",
+          "frames": 4000,
+          "expect": ["8080 AS 2.3", "0  Assembly errors"]
+        },
+        {
+          "text": "HELLO",
+          "frames": 2500,
+          "expect": ["Hi, sailor. New in town?"]
+        }
+      ],
+      "notes": "End to end: C compiles HELLO.C to HELLO.ASM, AS assembles it to HELLO.COM and the program prints 'Hi, sailor. New in town?'.  Two staging rules.  The compiler #includes its library *source* at compile time, so PRINTF.C has to be on the disk or the compile stops with \"Can't find file\"; the fixture therefore starts with #include \"printf.c\" (the repo's plain HELLO.C compiles but assembles with an undefined printf).  And AS needs CLIBRARY.ASM, not just CLIBRARY.REL: it opens the .ASM to pull in the library.  The .REL files are not needed at all.  This is a fifth C toolchain alongside Aztec, BDS and the BASIC/FORTRAN/Pascal families, and it targets 8080 rather than Z80 code."
+    },
+    {
       "id": "bdsc",
       "title": "BDS C 1.60",
       "url": "https://www.bdsoft.com/dist/bdsc-all.zip",

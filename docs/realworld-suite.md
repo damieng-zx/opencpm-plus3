@@ -60,6 +60,7 @@ separate, explicitly triggered workflow.
 | `clck3` | Spectrum +3 clock extractor | Self-extract, `CLOCKCLR` | Pass (FID not loaded) |
 | `salvage` | SALVAGE 1.00 (John Elliott) | Self-extract, then a live disc drive picker | Pass |
 | `tapedisc` | TAPEDISC (John Elliott) | Self-extract, then the tape device as drive T: | Pass |
+| `c80` | Software Toolworks C/80 3.1 | `C` → `AS` → `HELLO.COM` prints a line | Pass |
 | `bdsc` | BDS C 1.60 | `CC` → `CLINK` → `HELLO.COM` prints `HELLO, WORLD` | Pass |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
@@ -221,8 +222,11 @@ issues; the others are history):
 
 The assembler/compiler packages use fixtures from
 `tests/realworld/fixtures/` (`HELLO.MAC`, `CHELLO.FOR`, `CHELLO.BAS`,
-`CHELLO.C`, `HELLO.Z80`).  They are CRLF text files because the CP/M
-tools read them directly (see `.gitattributes`).
+`CHELLO.C`, `HELLO.Z80`, `HELLO.COB`, `HELLO.PAS`, `C80HELLO.C`).  They are
+CRLF text files because the CP/M tools read them directly (see
+`.gitattributes`).  `C80HELLO.C` is separate from `HELLO.C` because C/80
+resolves `printf` by `#include`ing `PRINTF.C`, and the package stages it as
+`HELLO.C` through a `fixtures` mapping.
 
 SuperCalc2 used to leave its VT-100 escape output visible in the character
 buffer (`[?3h[2J[H`); the CSI subset now parses those sequences, so the
@@ -257,6 +261,12 @@ CP/M file.  For `dsk`, `members` names files inside the image's CP/M
 directory; they are extracted with `tools/mkdsk.py` (which reads both plain
 and extended CPCEMU containers).  `fixtures` refers to
 `tests/realworld/fixtures/`.
+
+A `fixtures` entry is either a name or a one-entry mapping when the file has
+to land under a different on-disk name: `{"C80HELLO.C": "HELLO.C"}` stages
+the fixture as `HELLO.C` for a program that looks for that exact name, which
+is better than renaming it at the prompt (a `REN` leaves the old name on the
+disk).
 
 Set `"format": "720k"` and a matching per-package `base` to build on the
 720K layout instead of 180K.

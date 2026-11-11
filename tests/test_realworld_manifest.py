@@ -57,7 +57,9 @@ class RealWorldManifestTests(unittest.TestCase):
                         self.assertIsInstance(count, int)
                         self.assertGreater(count, 0)
                 for name in pkg.get("fixtures", []):
-                    self.assertTrue((fixtures / name).exists(), name)
+                    # A fixture is a name, or {"SRC.NAME": "ON.DISK.NAME"}.
+                    src = name if isinstance(name, str) else next(iter(name))
+                    self.assertTrue((fixtures / src).exists(), src)
 
     def test_known_issues_have_text(self) -> None:
         for pkg in self.data["packages"]:

@@ -179,7 +179,11 @@ It does not help WordStar, whose 80-column layout is unchanged.
 - [x] Microsoft COBOL-80 4.65 - works end to end on a 720K image (automated as `cobol80`)
 - [x] Aztec C 1.06D - works (automated)
 - [x] BDS C 1.60 - works end to end (automated as `bdsc`)
-- [ ] Software Toolworks C80 3.1
+- [x] Software Toolworks C80 3.1 - works end to end (automated as `c80`);
+  the compiler `#include`s its library source, so `PRINTF.C` and
+  `CLIBRARY.ASM` must be on the disk.  The repo fixture is a separate
+  `C80HELLO.C` so the package can stage it as `HELLO.C` without disturbing
+  the shared one.
 - [ ] Tiny C
 - [ ] JRT Pascal 3.0
 - [x] Pascal/Z 4.0 - works (automated as `pascalz`)

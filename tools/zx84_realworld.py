@@ -213,13 +213,24 @@ def prepare_package(manifest: dict, pkg: dict, refresh: bool) -> list[Path]:
         raise SetupError(f"{pkg_id}: unsupported archive type {archive!r}")
 
     fixtures_dir = ROOT / manifest.get("fixtures", "tests/realworld/fixtures")
-    for name in pkg.get("fixtures", []):
+    for entry in pkg.get("fixtures", []):
+        # A fixture is a plain name, or a {"file": "ON.DISK"} mapping when the
+        # staged name has to differ (e.g. a C source the compiler looks for by
+        # a hard-coded name).  The mapping mirrors `save_as` for file archives.
+        if isinstance(entry, dict):
+            if len(entry) != 1:
+                raise SetupError(
+                    f"{pkg_id}: fixture mapping must have one key: {entry}")
+            (name, staged_name), = entry.items()
+        else:
+            name = staged_name = entry
         src = fixtures_dir / name
         if not src.exists():
             raise SetupError(f"{pkg_id}: fixture not found: {src}")
-        dst = files_dir / name
+        dst = files_dir / staged_name
         if dst.exists():
-            raise SetupError(f"{pkg_id}: fixture collides with package file {name}")
+            raise SetupError(
+                f"{pkg_id}: fixture collides with package file {staged_name}")
         shutil.copyfile(src, dst)
 
     files = sorted(files_dir.iterdir())

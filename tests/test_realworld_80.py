@@ -36,6 +36,37 @@ class RealWorld24x80(unittest.TestCase):
         self.assertIn('pkg.get("setup", [])', runner)
         self.assertIn('rw.wait_for(setup["expect"]', runner)
 
+    def test_manifest_fixtures_may_rename(self):
+        """A fixture can be staged under a different on-disk name.
+
+        C/80's compiler looks for its library by hard-coded names, so the
+        fixture has to land as HELLO.C rather than C80HELLO.C; declaring
+        the mapping beats a `REN` step that leaves the old name behind.
+        """
+        runner = source("tools/zx84_realworld.py")
+        self.assertIn("fixture mapping must have one key", runner)
+        self.assertIn('(name, staged_name), = entry.items()', runner)
+        self.assertIn("dst = files_dir / staged_name", runner)
+
+        c80 = self.packages["c80"]
+        self.assertEqual(c80["fixtures"], [{"C80HELLO.C": "HELLO.C"}])
+        # No REN workaround in the setup list.
+        self.assertNotIn("REN", json.dumps(c80.get("setup", [])))
+
+    def test_c80_stages_the_source_closure(self):
+        """C/80 #includes its library source, so PRINTF.C must be present.
+
+        Without it the compile stops with "Can't find file"; without
+        CLIBRARY.ASM the assembler cannot resolve the library.  Both were
+        confirmed by running the package with each file omitted.
+        """
+        c80 = self.packages["c80"]
+        for member in ("C.COM", "AS.COM", "CLIBRARY.ASM", "PRINTF.C"):
+            self.assertIn(member, c80["members"])
+        self.assertEqual(c80["command"], "C HELLO")
+        self.assertIn("Hi, sailor. New in town?", json.dumps(c80["steps"]))
+
+
     def test_sgr_is_asserted_at_run_time(self):
         """The docs claim SGR now takes effect for SuperCalc2.
 
