@@ -369,7 +369,7 @@ need conversion first.
 | Microsoft COBOL-80 4.65 | [mscobol.zip](http://www.retroarchive.org/cpm/lang/mscobol.zip) - automated as `cobol80` (720K) |
 | Aztec C 1.06D | [AZ106D.ZIP](http://www.retroarchive.org/cpm/lang/az106d.zip) - automated as `aztec106` |
 | BDS C user group | [BDSCUG.ZIP](http://www.retroarchive.org/cpm/lang/BDSCUG.ZIP) |
-| Software Toolworks C80 3.1 | [C80V31.ZIP](http://www.retroarchive.org/cpm/lang/c80v31.zip) |
+| Software Toolworks C80 3.1 | [C80V31.ZIP](http://www.retroarchive.org/cpm/lang/c80v31.zip) - automated as `c80` |
 | Tiny C | [TINY_C.ZIP](http://www.retroarchive.org/cpm/lang/TINY_C.ZIP) |
 | JRT Pascal 3.0 | [JRTPAS30.ZIP](http://www.retroarchive.org/cpm/lang/JRTPAS30.ZIP) |
 | Pascal/Z 4.0 | [PASCALZ4.ZIP](http://www.retroarchive.org/cpm/lang/PASCALZ4.ZIP) - automated as `pascalz` |
@@ -390,7 +390,7 @@ need conversion first.
 | SpellStar 3.30 | [SPELSTAR.ZIP](http://www.retroarchive.org/cpm/text/SPELSTAR.ZIP) |
 | SuperWriter 1.02 | [S_writer.zip](http://www.retroarchive.org/cpm/text/S_writer.zip) |
 | T/Maker 4.03 | [D1](http://www.retroarchive.org/cpm/text/T-MAKER403_D1.ZIP), [D2](http://www.retroarchive.org/cpm/text/T-MAKER403_D2.ZIP) |
-| Magic Wand | [Magicwnd.zip](http://www.retroarchive.org/cpm/text/Magicwnd.zip) |
+| Magic Wand | [Magicwnd.zip](http://www.retroarchive.org/cpm/text/Magicwnd.zip) - automated as `magicwand` |
 | DataStar | [Datastar.zip](http://www.retroarchive.org/cpm/text/Datastar.zip) |
 | WordStar 4.0 | [WS4.ARK](http://www.retroarchive.org/cpm/text/WS4.ARK) — ARC, needs unpacking |
 
@@ -450,9 +450,9 @@ hosts runnable self-extracting +3 utilities:
 - [P3CPMSEA.COM](https://www.seasip.info/Cpm/software/p3cpmsea.com) — reboot/+3DOS tools
 - [P3GIFSEA.COM](https://www.seasip.info/Cpm/software/p3gifsea.com) — GIF viewer
 - [P3BMPSEA.COM](https://www.seasip.info/Cpm/software/p3bmpsea.com) — BMP viewer
-- [TDISCSEA.COM](https://www.seasip.info/Cpm/software/tdiscsea.com) — tape-to-disk
-- [DSKWRSEA.COM](https://www.seasip.info/Cpm/software/dskwrsea.com) — write `.DSK` images
-- [SALVGSEA.COM](https://www.seasip.info/Cpm/software/salvgsea.com) — sector recovery
+- [TDISCSEA.COM](https://www.seasip.info/Cpm/software/tdiscsea.com) — tape-to-disk - automated as `tapedisc`
+- [DSKWRSEA.COM](https://www.seasip.info/Cpm/software/dskwrsea.com) — write `.DSK` images - automated as `dskwrite`
+- [SALVGSEA.COM](https://www.seasip.info/Cpm/software/salvgsea.com) — sector recovery - automated as `salvage`
 - [CRTPLSEA.COM](https://www.seasip.info/Cpm/software/crtplsea.com) — enhanced screen driver
 - [FSWPSEA.COM](https://www.seasip.info/Cpm/software/fswp_sea.com) — file sweep
 - [NEWDRV2.ZIP](https://www.seasip.info/Cpm/software/newdrv2.zip) — extra drive support
