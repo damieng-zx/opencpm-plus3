@@ -51,6 +51,11 @@ class RealWorldManifestTests(unittest.TestCase):
                 for step in pkg.get("steps", []):
                     self.assertTrue(
                         "key" in step or "text" in step or step.get("wait"))
+                    # expect_attrs maps attribute hex -> minimum cell count.
+                    for key, count in step.get("expect_attrs", {}).items():
+                        self.assertRegex(key, r"^[0-9A-F]{2}$")
+                        self.assertIsInstance(count, int)
+                        self.assertGreater(count, 0)
                 for name in pkg.get("fixtures", []):
                     self.assertTrue((fixtures / name).exists(), name)
 

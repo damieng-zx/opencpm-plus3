@@ -110,9 +110,12 @@ issues; the others are history):
   half.  Kaypro terminal escapes still leave stray `1` characters.
 - **SuperCalc2 1.00** the `supercalc2_80` variant fits the banner and the
   80-column grid and flips to the right half, and its VT-100 output is
-  consumed by the CSI subset (see [ansi-subset.md](ansi-subset.md)).  SGR
-  attribute requests are still ignored, so the cells carry no colour or
-  reverse video.
+  consumed by the CSI subset (see [ansi-subset.md](ansi-subset.md)).  SGR is
+  honoured too: in the 51-column run the grid's column-header row draws 64
+  bright cells plus 6 reversed ones (the current-column marker), where every
+  cell used to be plain.  The program only ever asks for `ESC[0m`, `ESC[1m`
+  and `ESC[7m`, which the Spectrum attribute register can express exactly, and
+  both packages assert the attributes with a step's `expect_attrs`.
 - **Multiplan 1.05** needs the `MP80` data overlay plus `MP.OVR`,
   `MP.HLP`, `DEFAULT.FK` and `RFILE`; `MP.COM` reports
   "no data file present (MP80 or MP40)" without it.  The

@@ -400,6 +400,40 @@ class RealWorld:
             raise RunError(
                 f"{label}: missing {missing!r}\n{screen}")
 
+    def attribute_counts(self) -> dict[str, int]:
+        """Histogram of the 768 attribute bytes currently on screen.
+
+        Keys are two-digit hex strings in the BIOS attribute order
+        (F B PPP III).  This is how an SGR assertion is expressed: a
+        program that switches attributes leaves more than one value here,
+        and one that only ever writes plain text leaves exactly `0F`.
+        """
+        data = self.memory(5, 0x5800, 768)
+        if len(data) < 768:
+            raise RunError(f"short attribute read: {len(data)} bytes")
+        counts: dict[str, int] = {}
+        for value in data:
+            key = f"{value:02X}"
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
+    def expect_attrs(self, spec: dict, label: str = "attributes") -> None:
+        """Require attribute values on screen.
+
+        `spec` maps attribute hex -> minimum cell count, e.g.
+        `{"4F": 64, "79": 6}`.  Only minimums are checked, so a program
+        may add cells as it redraws.
+        """
+        counts = self.attribute_counts()
+        short = {k: (counts.get(k, 0), v) for k, v in spec.items()
+                 if counts.get(k, 0) < v}
+        if short:
+            detail = ", ".join(f"{k}: have {h}, want >= {w}"
+                               for k, (h, w) in short.items())
+            raise RunError(
+                f"{label}: {detail}; on screen {counts}")
+
+
     def wait_for(self, needles: list[str], frames: int = 500,
                  attempts: int = 6, label: str = "screen") -> str:
         for _ in range(attempts):
@@ -441,6 +475,8 @@ class RealWorld:
         self.record()
         if step.get("expect"):
             self.wait_for(step["expect"], label="step")
+        if step.get("expect_attrs"):
+            self.expect_attrs(step["expect_attrs"], label="step attrs")
 
     def fdc_errors(self) -> list[str]:
         log = self.mcp.call("fdc_log", {})

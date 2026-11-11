@@ -36,6 +36,47 @@ class RealWorld24x80(unittest.TestCase):
         self.assertIn('pkg.get("setup", [])', runner)
         self.assertIn('rw.wait_for(setup["expect"]', runner)
 
+    def test_sgr_is_asserted_at_run_time(self):
+        """The docs claim SGR now takes effect for SuperCalc2.
+
+        That claim used to be wrong in the other direction (the docs said
+        SGR was ignored), so it is checked from both ends: the manifest
+        asks for particular attribute values and the runner has the helper
+        to verify them.
+        """
+        runner = source("tools/zx84_realworld.py")
+        self.assertIn("def attribute_counts(", runner)
+        self.assertIn("def expect_attrs(", runner)
+        self.assertIn('step.get("expect_attrs")', runner)
+        # 0x5800 is the Spectrum attribute file.
+        self.assertIn("self.memory(5, 0x5800, 768)", runner)
+
+        # The 51-column run is where both attribute values are on screen.
+        sc2 = self.packages["supercalc2"]
+        wanted = [s.get("expect_attrs") for s in sc2.get("steps", [])]
+        wanted = [w for w in wanted if w]
+        self.assertTrue(wanted, "supercalc2 must assert its SGR attributes")
+        self.assertEqual(wanted[0].get("4F"), 64)   # bright column headers
+        self.assertEqual(wanted[0].get("79"), 6)    # reversed cell marker
+
+        # The 80-column variant can only see the bright ones.
+        sc2_80 = self.packages["supercalc2_80"]
+        wanted80 = [s.get("expect_attrs") for s in sc2_80.get("steps", [])]
+        wanted80 = [w for w in wanted80 if w]
+        self.assertTrue(wanted80, "supercalc2_80 must assert its SGR attributes")
+        self.assertEqual(wanted80[0].get("4F"), 64)
+        self.assertNotIn("79", wanted80[0])
+
+    def test_docs_do_not_claim_sgr_is_ignored(self):
+        for name in ("docs/compatibility.md", "docs/realworld-suite.md"):
+            text = source(name)
+            self.assertNotIn("SGR attribute switching is still ignored", text,
+                             name)
+            self.assertNotIn("SGR\n  attribute requests are still ignored",
+                             text, name)
+            self.assertNotIn("SGR, `ESC [ . m`) are still consumed", text, name)
+
+
 
 class ScreenReaderModes(unittest.TestCase):
     """`RealWorld.screen()` must handle every width and the 24x80 window.

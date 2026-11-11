@@ -83,7 +83,14 @@
         "Version"
       ],
       "frames": 3000,
-      "notes": "Spreadsheet with overlays and VT-100 screen output."
+      "steps": [
+        {
+          "key": "enter",
+          "frames": 2500,
+          "expect_attrs": {"4F": 64, "79": 6}
+        }
+      ],
+      "notes": "Spreadsheet with overlays and VT-100 screen output.  The grid step asserts SGR took effect: the column-header row draws as 64 bright cells (4F) plus 6 reversed ones (79, the current-column marker at row 1, columns 2-7).  Before SGR was implemented every cell was plain 0F."
     },
     {
       "id": "multiplan",
@@ -156,10 +163,11 @@
         {
           "key": "enter",
           "frames": 2500,
-          "expect": ["Width:", "Memory:", "? for HELP"]
+          "expect": ["Width:", "Memory:", "? for HELP"],
+          "expect_attrs": {"4F": 64}
         }
       ],
-      "notes": "24x80 variant: the banner and the grid fit 80 columns and the VT-100 escapes are consumed (the CSI subset in docs/ansi-subset.md).  The grid step asserts '? for HELP', which starts at column 43 and runs past column 51 - in the 51-column window it is cut to '? for HEL', so the check only passes now that the harness reads the 80-column logical screen."
+      "notes": "24x80 variant: the banner and the grid fit 80 columns and the VT-100 escapes are consumed (the CSI subset in docs/ansi-subset.md).  The grid step asserts '? for HELP', which starts at column 43 and runs past column 51 - in the 51-column window it is cut to '? for HEL', so the check only passes now that the harness reads the 80-column logical screen.  It also asserts SGR took effect: 64 bright cells (4F) in the column-header row.  The reversed current-column marker (79) is only checked by the 51-column package, because EXTEND+Enter leaves that part of row 1 off the visible window here."
     },
     {
       "id": "wordstar30",

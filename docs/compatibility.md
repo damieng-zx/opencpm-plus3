@@ -28,7 +28,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 | **Microsoft COBOL-80** | 4.65 | `COBOL` compiles `=HELLO`, `L80` links it, `HELLO` prints `HELLO, WORLD` | Full chain on a 720K image: the 4.65 set does not fit the 174 KB data area of a 180K disc, and the 4.01 archive has no `CRTDRV.REL` |
 | **3CLCK** | 2.10 | Extractor writes `CLOCK.FID`/`CLOCK.F64`/`CLOCK.DOC`/`CLOCKCLR.COM`; CLOCKCLR reports the FID state | The clock FID is not loaded at boot; see below |
 | **BDS C** | 1.60 | `CC HELLO.C` compiles to `HELLO.CRL`, `CLINK HELLO` links it, and `HELLO` prints `HELLO, WORLD` | Full chain. `DEFF2.CRL` (the part-II library) must be on the disk or `CLINK` stops at `Missing function(s): PUTCHAR` |
-| **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | Its VT-100 output (`ESC[?3h`, `ESC[2J`, `ESC[H`) is consumed by the [CSI subset](ansi-subset.md); SGR attribute switching is still ignored, so colour/reverse requests have no effect |
+| **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | Its VT-100 output (`ESC[?3h`, `ESC[2J`, `ESC[H`) is consumed by the [CSI subset](ansi-subset.md), and SGR takes effect: the column-header row draws bright and the current-column marker reversed |
 | **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
 | **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE wraps on the 51-column screen; TINST+`SCREEN 64` or `turbo3_80` (24x80) fit it, though Kaypro escapes leave stray `1` characters |
 | **WordStar** | 3.0 | Banner and no-file menu appear; `INSTALL` patches terminals and writes `WS.COM` | 80-column layout wraps on the 51-column screen by default; `wordstar30_80` runs it under `SET24X80`, where the menu and right half are readable (Visual 200 escape artifacts remain) |
@@ -87,10 +87,18 @@ it as `PASS`.
 Recently fixed: **SuperCalc2 display**.  Its VT-100 output (`ESC[?3h`,
 `ESC[2J`, `ESC[H`, `ESC[row;colH`) used to appear in the character buffer
 as printable text; the [CSI subset](ansi-subset.md) now parses it, so the
-banner and grid are drawn through the escape sequences instead.  Attribute
-requests (SGR, `ESC [ … m`) are still consumed and ignored, so colour and
-reverse have no effect, and `supercalc2_80` remains the run that fits the
-banner in 80 columns.
+banner and grid are drawn through the escape sequences instead, and
+`supercalc2_80` remains the run that fits the banner in 80 columns.
+
+Its SGR requests used to be consumed and ignored, so every cell was plain
+white-on-blue.  Now that SGR is implemented, `supercalc2` draws 64 bright
+cells (`4F`, the column headers) and 6 reversed ones (`79`, the
+current-column marker at row 1, columns 2-7) instead of 768 identical `0F`
+cells.  SuperCalc2 emits only `ESC[0m`, `ESC[1m` and `ESC[7m`, which is
+exactly what the Spectrum attribute register can express.  Both packages
+assert this at run time; the 80-column variant checks the bright cells only,
+because EXTEND+Enter leaves the reversed part of row 1 off the visible
+window.
 
 ## Debuggers and RST 7
 
