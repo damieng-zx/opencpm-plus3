@@ -1494,6 +1494,50 @@
       "notes": "A 1980 word processor from Small Business Applications, installed for an H19/Z19 terminal.  Pressing return at the 'Mount disks' prompt draws its status screen, which is fully 80 columns wide: 'Line Width: 80', the tab ruler and the character counts.  It is a compact package (41 KB) and a different program class from the WordStar/WordMaster/SuperWriter set already covered."
     },
     {
+      "id": "dskwrite",
+      "title": "DSKWRITE (John Elliott)",
+      "url": "https://www.seasip.info/Cpm/software/dskwrsea.com",
+      "archive": "file",
+      "save_as": "DSKWRSEA.COM",
+      "command": "DSKWRSEA",
+      "expect": [
+        "PMsfx v2.11",
+        "DSKWRITE writes .DSK files to a floppy",
+        "Extract? (Y/N)"
+      ],
+      "frames": 2500,
+      "steps": [
+        {
+          "key": "shift+y",
+          "frames": 3000,
+          "expect": [
+            "DSKWRITE.COM Extracting OK",
+            "DSKWRITE.TXT Extracting OK",
+            "Extract this only if you want to modify DSKWRITE.",
+            "Extract? (Y/N)"
+          ]
+        },
+        {
+          "key": "shift+y",
+          "frames": 3000,
+          "expect": [
+            "DSKWRITE.Z80 Extracting OK",
+            "DSKWRITE.ASM Extracting OK"
+          ]
+        },
+        {
+          "text": "DSKWRITE",
+          "frames": 2000,
+          "expect": [
+            "To turn a .DSK into a working disc, insert a blank",
+            "DSKWRITE filename A:",
+            "DSKWRITE filename B:"
+          ]
+        }
+      ],
+      "notes": "The only package that discretely extracts in two stages: PMsfx v2.11 asks once for the binaries (DSKWRITE.COM and .TXT) and then again, separately, for the Z80 source.  Answering yes to both is the point - it exercises the extractor's repeated prompt.  The tool then prints its usage, which is where the automated run stops: writing a disc would need a blank floppy.  DSKWRITE is the counterpart to DISKCOPY.COM, so it is worth having on the list."
+    },
+    {
       "id": "bdsc",
       "title": "BDS C 1.60",
       "url": "https://www.bdsoft.com/dist/bdsc-all.zip",

@@ -241,7 +241,8 @@ It does not help WordStar, whose 80-column layout is unchanged.
   as drive T: and the tool waits for a tape
 - [x] +3 SALVAGE - automated as `salvage`: self-extracts, then draws its
   drive picker from the raw sector reader
-- [ ] +3 DSKWRITE
+- [x] +3 DSKWRITE - automated as `dskwrite`: two-stage self-extract, then
+  the tool's usage text
 - [ ] +3 CRT+ screen driver
 - [ ] +3 FSWP file sweep
 - [ ] +3 NEWDRV2

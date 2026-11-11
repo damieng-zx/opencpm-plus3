@@ -62,6 +62,7 @@ separate, explicitly triggered workflow.
 | `tapedisc` | TAPEDISC (John Elliott) | Self-extract, then the tape device as drive T: | Pass |
 | `c80` | Software Toolworks C/80 3.1 | `C` → `AS` → `HELLO.COM` prints a line | Pass |
 | `magicwand` | Magic Wand 1.1 (text editor) | Menu, then the 80-column status screen | Pass |
+| `dskwrite` | DSKWRITE (John Elliott) | Two-stage self-extract, then its usage text | Pass |
 | `bdsc` | BDS C 1.60 | `CC` → `CLINK` → `HELLO.COM` prints `HELLO, WORLD` | Pass |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
