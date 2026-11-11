@@ -232,7 +232,8 @@ It does not help WordStar, whose 80-column layout is unchanged.
 - [ ] +3 P3CPM utilities
 - [ ] +3 P3GIF viewer
 - [ ] +3 P3BMP viewer
-- [ ] +3 TDISC tape reader
+- [x] +3 TDISC tape reader - automated as `tapedisc`: the cassette shows up
+  as drive T: and the tool waits for a tape
 - [x] +3 SALVAGE - automated as `salvage`: self-extracts, then draws its
   drive picker from the raw sector reader
 - [ ] +3 DSKWRITE

@@ -1399,6 +1399,39 @@
       "notes": "John Elliott's disc salvage tool: a self-extracting +3 archive, then a live full-screen drive picker. Exercises the DD_* XBIOS calls (it reads raw sectors past the filesystem), the BREAK key and a clock in the corner. Nothing is salvaged by the automated run - it stops at the drive menu, which keeps the check deterministic."
     },
     {
+      "id": "tapedisc",
+      "title": "TAPEDISC (John Elliott)",
+      "url": "https://www.seasip.info/Cpm/software/tdiscsea.com",
+      "archive": "file",
+      "save_as": "TDISCSEA.COM",
+      "command": "TDISCSEA",
+      "expect": [
+        "PMsfx v2.10",
+        "TAPEDISC copies Spectrum or ZX81 cassette files",
+        "Extract? (Y/N)"
+      ],
+      "frames": 2500,
+      "steps": [
+        {
+          "key": "shift+y",
+          "frames": 3000,
+          "expect": [
+            "TAPEDISC.COM Extracting OK",
+            "TAPEDISC.DOC Extracting OK"
+          ]
+        },
+        {
+          "text": "TAPEDISC",
+          "frames": 3000,
+          "expect": [
+            "Copying from T: to A:. Press BREAK to finish.",
+            "Searching..."
+          ]
+        }
+      ],
+      "notes": "The only package that touches the tape device: TAPEDISC lists the cassette as drive T: and copies files off it to disc.  With no tape running it prints 'Searching...' and waits, which is where the automated run stops; the value is the T: drive appearing at all and the tool not falling over when the tape is empty."
+    },
+    {
       "id": "bdsc",
       "title": "BDS C 1.60",
       "url": "https://www.bdsoft.com/dist/bdsc-all.zip",
