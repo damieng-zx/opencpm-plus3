@@ -382,7 +382,9 @@ parse_cmd:
     jr nc, .dirsys_plain
     ; DIRSYS [options] is DIR [SYS options]: put SYS first in the option list
     ; and let DIR.COM do the work.
-    call insert_sys
+    ld c, 4                    ; HL = the text after the '['
+    ld de, str_sys_opt
+    call insert_text
     jp c, .com_unknown         ; no room in the line for it
     ld hl, str_dir_com
     jp .do_load_com
@@ -432,19 +434,14 @@ parse_cmd:
     ld c, F_SCB
     call BDOS
     inc a                      ; conwidth+1 = actual column count
-    ld c, 0                    ; C = column count
-.div16:
-    sub 16
-    jr c, .div_done
-    inc c
-    jr .div16
-.div_done:
-    ld a, c
-    or a
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x0F                   ; / 16
     jr nz, .cols_ok
-    inc c                      ; Minimum 1 column
+    inc a                      ; Minimum 1 column
 .cols_ok:
-    ld a, c
     ld (dir_maxcols), a
 
     ; Search first
@@ -456,17 +453,9 @@ parse_cmd:
 
     ld b, 0                    ; B = column counter (0-based)
 .dir_loop:
-    ; A = index (0-3) of match in DMA buffer; the entry is at DMA + A*32
+    ; A = index (0-3) of match in DMA buffer
     push bc
-    ld l, a
-    ld h, 0
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl                 ; HL = A * 32
-    ld de, DMA
-    add hl, de                 ; HL = entry address
+    call dir_entry             ; HL = entry address
 
     ; Skip entries with extent > 0 (avoid duplicate filenames)
     push hl
@@ -675,14 +664,7 @@ parse_cmd:
     call print_word
     ld de, msg_yn
     call pstr
-    ld c, F_CIN
-    call BDOS
-    and 0xDF                   ; upper case
-    push af
-    ld de, msg_crlf
-    call pstr
-    pop af
-    cp 'Y'
+    call ask_yes
     ret nz                     ; anything but Y: nothing is erased
 .era_delete:
     ld de, type_fcb
@@ -771,18 +753,14 @@ parse_cmd:
     ld b, 11
 .ren_wcheck:
     ld a, (hl)
-    cp '?'
-    ld a, 0
-    jr nz, .ren_nw
-    inc a
-.ren_nw:
+    xor '?'
+    cp 1
+    sbc a, a                   ; 0xFF where the new name has a '?'
     ld c, a
     ld a, (de)
-    cp '?'
-    ld a, 0
-    jr nz, .ren_ow
-    inc a
-.ren_ow:
+    xor '?'
+    cp 1
+    sbc a, a
     xor c
     jp nz, .ren_wild
     inc hl
@@ -805,15 +783,7 @@ parse_cmd:
 .ren_scan:
     cp 0xFF
     jp z, .ren_end
-    ld l, a
-    ld h, 0
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    ld de, DMA
-    add hl, de                 ; HL = directory entry
+    call dir_entry             ; HL = directory entry
     push hl
     ld de, 12
     add hl, de
@@ -893,14 +863,7 @@ parse_cmd:
     call print_name11
     ld de, msg_exists
     call pstr
-    ld c, F_CIN
-    call BDOS
-    and 0xDF
-    push af
-    ld de, msg_crlf
-    call pstr
-    pop af
-    cp 'Y'
+    call ask_yes
     jr nz, .ren_left           ; keep the old file, leave this one alone
     ld de, ren_chk
     ld c, 19                   ; F19: Delete the existing file
@@ -1088,157 +1051,31 @@ parse_cmd:
     ; parse_cmd so the regular load path runs SUBMIT.COM (which the PRL
     ; loader now handles). SUBMIT will create A:$$$.SUB and the prompt
     ; loop's existing $$$.SUB drain takes over from there.
-    xor a
-    ld (ccp_chain_drive), a
-    ld (ccp_chain_skip), a
-    ld a, (type_fcb)
+    pop hl                     ; discard the ORDER dispatcher's return
+    ld a, (type_fcb)           ; the drive the search path found it on
     or a
-    jr z, .com_chain_len
-    ld (ccp_chain_drive), a
-    call .com_chain_has_drive
-    jr nc, .com_chain_len
-    xor a
-    ld (ccp_chain_drive), a
-.com_chain_len:
-    ld a, (ccp_chain_drive)
-    or a
-    call nz, .com_chain_count_spaces
-    ld a, (cmd_buf + 1)
-    ld b, a
-    ld a, (ccp_chain_skip)
-    ld c, a
-    ld a, b
-    sub c
-    add a, 7                   ; "SUBMIT " adds 7 chars
-    ld b, a
-    ld a, (ccp_chain_drive)
-    or a
-    ld a, b
-    jr z, .com_chain_len_ready
-    add a, 2                   ; injected "X:"
-.com_chain_len_ready:
-    cp 127
-    jp nc, .com_unknown        ; rewritten command wouldn't fit
-    push af                    ; save new length
-
-    ; Move the original command text up in-place. LDDR is safe here because
-    ; the destination is higher than the source. If a drive prefix is being
-    ; injected, leading spaces are trimmed so the tail becomes "X:NAME".
-    ld a, (cmd_buf + 1)
-    ld b, a
-    ld a, (ccp_chain_skip)
-    ld c, a
-    ld a, b
-    sub c
-    or a
-    jr z, .com_chain_no_orig_shift
-    ld c, a
-    ld b, 0
-    ld hl, cmd_buf + 2
-    ld a, (ccp_chain_skip)
-    add a, l
-    ld l, a
-    jr nc, .com_chain_src_start
-    inc h
-.com_chain_src_start:
-    ld de, cmd_buf + 9
-    ld a, (ccp_chain_drive)
-    or a
-    jr z, .com_chain_dst_start
-    inc de
-    inc de
-.com_chain_dst_start:
-    push bc
-    dec bc
-    add hl, bc
-    ex de, hl
-    add hl, bc
-    ex de, hl
-    pop bc
-    lddr
-.com_chain_no_orig_shift:
-
-    ; cmd_buf+2 ← "SUBMIT " plus optional matched-drive prefix.
-    ld hl, str_submit_prefix
-    ld de, cmd_buf + 2
-    ld bc, 7
-    ldir
-
-    ld a, (ccp_chain_drive)
-    or a
-    jr z, .com_chain_no_drive_back
+    jr z, .sub_prefix          ; the current drive: nothing to add
     add a, 'A' - 1
-    ld (de), a
-    inc de
-    ld a, ':'
-    ld (de), a
-    inc de
-.com_chain_no_drive_back:
-    pop af
-    ld (cmd_buf + 1), a
-    pop hl                     ; discard ORDER-dispatcher return
+    ld (sub_drive_text), a
+    ld hl, (ccp_cmdp)
+    inc hl
+    ld a, (hl)
+    dec hl
+    cp ':'
+    jr z, .sub_prefix          ; the line names the drive itself
+    ld de, sub_drive_text      ; "X:" in front of the name
+    ld c, 2
+    call insert_text
+    jp c, .com_unknown         ; the rewritten line would not fit
+.sub_prefix:
+    ld hl, cmd_buf + 2
+    ld de, str_submit_prefix
+    ld c, 7
+    call insert_text
+    jp c, .com_unknown
     ld a, 1
     ld (ccp_force_com), a      ; load SUBMIT.COM regardless of ORDER
     jp parse_cmd
-
-; .com_chain_has_drive — Check whether the original command already starts
-;   with an explicit A:..P: drive after any leading spaces.
-;   Out: CF=1 if a drive prefix is already present, CF=0 otherwise.
-.com_chain_has_drive:
-    ld hl, cmd_buf + 2
-    ld a, (cmd_buf + 1)
-    ld b, a
-.chd_skip:
-    ld a, b
-    or a
-    jr z, .chd_no
-    ld a, (hl)
-    cp ' '
-    jr nz, .chd_check
-    inc hl
-    djnz .chd_skip
-.chd_no:
-    or a
-    ret
-.chd_check:
-    ld a, b
-    cp 2
-    jr c, .chd_no
-    ld a, (hl)
-    call to_upper
-    cp 'A'
-    jr c, .chd_no
-    cp 'P' + 1
-    jr nc, .chd_no
-    inc hl
-    ld a, (hl)
-    cp ':'
-    jr nz, .chd_no
-    scf
-    ret
-
-; .com_chain_count_spaces — Count leading spaces in cmd_buf for the SUBMIT
-;   rewrite. Used only when injecting a matched search-path drive.
-;   Out: ccp_chain_skip = count of leading spaces.
-.com_chain_count_spaces:
-    ld hl, cmd_buf + 2
-    ld a, (cmd_buf + 1)
-    ld b, a
-    ld c, 0
-.ccs_loop:
-    ld a, b
-    or a
-    jr z, .ccs_done
-    ld a, (hl)
-    cp ' '
-    jr nz, .ccs_done
-    inc hl
-    inc c
-    djnz .ccs_loop
-.ccs_done:
-    ld a, c
-    ld (ccp_chain_skip), a
-    ret
 
 .com_clear_fcb_tail:
     ld hl, type_fcb + 12
@@ -1353,27 +1190,12 @@ parse_cmd:
 
     ; --- Parse arguments into FCB1 (005Ch) and FCB2 (006Ch) ---
     ; HL still points into cmd_buf after .com_found_space / .com_no_args.
-    ; Re-scan from command tail to find the first argument.
-    ld hl, cmd_buf + 2
-.com_skip_cmd:
-    ld a, (hl)
-    or a
+    ; Find the first argument after the command word.
+    call skip_arg
     jr z, .com_args_done       ; No args at all
-    cp ' '
-    jr z, .com_found_arg_space
-    inc hl
-    jr .com_skip_cmd
-.com_found_arg_space:
-    ; Skip spaces between command and first arg
-    inc hl
-    ld a, (hl)
-    cp ' '
-    jr z, .com_found_arg_space
 
     ; Parse first argument into FCB1 at 005Ch
     ld de, 0x005C
-    or a                       ; Check if null (no arg)
-    jr z, .com_clear_fcb2
     call parse_fcb             ; HL advanced past first arg
 
     ; Skip spaces between first and second arg
@@ -1406,7 +1228,7 @@ parse_cmd:
     ; --- Set up command tail at 0080h ---
     ; Done here (after FCB parsing) so clear_fcb_de on FCB2 at 006Ch
     ; doesn't clobber the tail at 0080h (006Ch + 36 = 0090h).
-    ld hl, cmd_buf + 2
+    ld hl, (ccp_cmdp)
 .com_skip_name:
     ld a, (hl)
     or a
@@ -1474,27 +1296,11 @@ parse_cmd:
 
 .stub_fcb_addr: dw 0          ; Patched FCB address in high TPA
 
-    ; Helper: clear 36-byte FCB at DE (drive=0, name/ext=spaces, rest=0)
+    ; Helper: clear the 36-byte FCB at DE (drive=0, name/ext=spaces, rest=0):
+    ; parsing the empty string does exactly that.
 .clear_fcb_de:
-    push de
-    ld h, d
-    ld l, e
-    ld (hl), 0
-    inc de
-    ld b, 11
-    ld a, ' '
-.clr_name:
-    ld (de), a
-    inc de
-    djnz .clr_name
-    xor a
-    ld b, 24
-.clr_rest:
-    ld (de), a
-    inc de
-    djnz .clr_rest
-    pop de
-    ret
+    ld hl, nul_str
+    jp parse_fcb
 
     ; The stub is position-independent (JR=relative, CALL/JP=absolute).
     ; The FCB address in the LD DE below is patched by the CCP before jumping here.
@@ -1631,54 +1437,52 @@ find_opt:
     scf
     ret
 
-; insert_sys — put "SYS " into the command line at HL (just after a '['), so
-;   the option list DIR.COM sees starts with SYS
-;   In:  HL = text after the '['
-;   Out: carry set if the line has no room for four more characters
-; @proc insert_sys
+; insert_text — put C characters from DE into the command line at HL
+;   In:  HL = a position in cmd_buf's text, DE = the text, C = its length
+;   Out: carry set if the line would not fit (126 characters); otherwise the
+;        text is in, cmd_buf+1 is the new length and the line ends in a NUL
+; @proc insert_text
 ; @param %at:u16 hl
+; @param %src:u16 de
+; @param %n:u8 c
 ; @out   carry
 ; @clobbers af,bc,de,hl
 ; @end
-insert_sys:
+insert_text:
+    ld a, (cmd_buf + 1)
+    add a, c
+    cp 127
+    ccf
+    ret c                      ; no room
+    ld (cmd_buf + 1), a
+    push de                    ; the text
+    push bc                    ; its length
+    push hl                    ; the position
+    ld e, a
+    ld d, 0
+    ld hl, cmd_buf + 2
+    add hl, de                 ; HL = the NUL that ends the new line
+    ex de, hl                  ; DE = that NUL
+    ld h, d
+    ld l, e
+    ld b, 0
+    or a
+    sbc hl, bc                 ; HL = the NUL that ended the old line
+    pop bc                     ; BC = the position
     push hl
-    ld d, h
-    ld e, l
-.find_end:
-    ld a, (de)
     or a
-    jr z, .have_end
-    inc de
-    jr .find_end
-.have_end:                     ; DE = the NUL that ends the line
-    ld hl, CMD_BUF_TEXT + 122  ; the text area holds 127 bytes with its NUL
-    or a
-    sbc hl, de
-    jr nc, .room
-    pop hl
-    ret                        ; carry set: it does not fit
-.room:
-    pop hl                     ; HL = insert position
-    push hl
-    ex de, hl
-    or a
-    sbc hl, de                 ; NUL address - position
+    sbc hl, bc
     inc hl
     ld b, h
-    ld c, l                    ; BC = the text and its NUL
-    dec hl
-    add hl, de                 ; HL = the NUL again
-    ld d, h
-    ld e, l
-    inc de
-    inc de
-    inc de
-    inc de
-    lddr                       ; open four bytes (the ranges overlap)
-    pop de                     ; DE = insert position
-    ld hl, str_sys_opt
-    ld bc, 4
-    ldir
+    ld c, l                    ; BC = the tail and its NUL
+    pop hl
+    lddr                       ; move the tail up (ends with DE just below it)
+    pop bc                     ; C = the length of the text
+    ld b, 0
+    pop hl                     ; HL = the text
+    add hl, bc
+    dec hl                     ; its last character
+    lddr                       ; fills the gap, backwards
     or a
     ret
 
@@ -1889,7 +1693,9 @@ to_upper:
 ; @clobbers af,bc,de,hl
 ; @end
 profile_cmd:
-    ld de, profile_fcb
+    ld hl, str_profile_cmd + 7 ; "PROFILE.SUB", default drive
+    call parse_filename
+    ld de, type_fcb
     ld c, 17                   ; F17: Search First on the default drive
     call BDOS
     inc a                      ; 0xFF (not found) wraps to zero
@@ -1929,10 +1735,9 @@ profile_cmd:
 ; @clobbers af,bc,de,hl
 ; @end
 try_sub:
-    ld hl, sub_fcb_init
+    ld hl, str_sub_name
     ld de, sub_fcb
-    ld bc, 36
-    ldir
+    call parse_fcb
 
     ; SUBMIT creates $$$.SUB on the current drive, not necessarily A:.
     ld c, 25                   ; F25: Return Current Disk
@@ -1966,23 +1771,7 @@ try_sub:
     dec hl                     ; HL = index of last record
 
 .scan:
-    ld a, l
-    ld (sub_fcb + 33), a
-    ld a, h
-    ld (sub_fcb + 34), a
-    xor a
-    ld (sub_fcb + 35), a
-
-    push hl
-    ld de, sub_dma
-    ld c, 26                   ; F26: Set DMA
-    call BDOS
-
-    ld de, sub_fcb
-    ld c, 33                   ; F33: Read Random
-    call BDOS
-    or a
-    pop hl
+    call sub_read
     jp nz, .abort              ; read error
 
     ld a, (sub_dma)
@@ -2013,16 +1802,9 @@ try_sub:
     xor a
     ld (de), a                 ; NUL-terminate for parse_cmd
 .copied:
-    ; Mark this record consumed (byte 0 = 0xFF), write back to same record.
-    ; HL is the record index and the collection below needs it, so keep it
-    ; across the BDOS call.
-    ld a, 0xFF
-    ld (sub_dma), a
-    push hl
-    ld de, sub_fcb
-    ld c, 34                   ; F34: Write Random
-    call BDOS
-    pop hl
+    ; Mark this record consumed, keeping the record index for the
+    ; collection below.
+    call sub_consume
 
     ; CP/M Plus feeds a program with the '<' lines that follow its command.
     ; Collect them now (the program cannot read the file itself) and queue
@@ -2034,22 +1816,7 @@ try_sub:
     jr z, .collect_done        ; the command was record 0: nothing follows
     dec hl
 .collect_scan:
-    ; FCB random record = HL
-    ld a, l
-    ld (sub_fcb + 33), a
-    ld a, h
-    ld (sub_fcb + 34), a
-    xor a
-    ld (sub_fcb + 35), a
-    push hl
-    ld de, sub_dma
-    ld c, 26                   ; F26: Set DMA
-    call BDOS
-    ld de, sub_fcb
-    ld c, 33                   ; F33: Read Random
-    call BDOS
-    pop hl
-    or a
+    call sub_read
     jr nz, .collect_done       ; read error: leave the rest to the CCP
 
     ld a, (sub_dma)
@@ -2072,13 +1839,7 @@ try_sub:
     ld c, F_SUBIN
     call BDOS
     pop hl
-    ld a, 0xFF
-    ld (sub_dma), a
-    push hl
-    ld de, sub_fcb
-    ld c, 34                   ; F34: Write Random
-    call BDOS
-    pop hl
+    call sub_consume
 .collect_next:
     ld a, h
     or l
@@ -2114,6 +1875,79 @@ try_sub:
     ret
 
 
+; dir_entry — address of a directory entry that F17/F18 returned
+;   In:  A = its index (0-3) in the DMA buffer at 0080h
+;   Out: HL = 0080h + A * 32
+; @proc dir_entry
+; @param %idx:u8 a
+; @out   hl
+; @clobbers af
+; @end
+dir_entry:
+    rrca
+    rrca
+    rrca                       ; A * 32 for A < 8
+    add a, DMA                 ; 0080h + 96 at most: no carry
+    ld l, a
+    ld h, 0
+    ret
+
+; ask_yes — read one key as the answer to a (Y/N) question
+;   Out: Z set if it was Y or y
+; @proc ask_yes
+; @out   zero
+; @clobbers af,bc,de,hl
+; @end
+ask_yes:
+    ld c, F_CIN
+    call BDOS
+    and 0xDF                   ; upper case
+    push af
+    call print_crlf
+    pop af
+    cp 'Y'
+    ret
+
+; sub_read — read record HL of $$$.SUB into sub_dma
+;   In:  HL = record index
+;   Out: Z set if it was read; HL unchanged
+; @proc sub_read
+; @param %rec:u16 hl
+; @out   zero
+; @clobbers af,bc,de
+; @end
+sub_read:
+    ld (sub_fcb + 33), hl      ; random record = HL (R0, R1)
+    xor a
+    ld (sub_fcb + 35), a       ; R2
+    push hl
+    ld de, sub_dma
+    ld c, 26                   ; F26: Set DMA
+    call BDOS
+    ld de, sub_fcb
+    ld c, 33                   ; F33: Read Random
+    call BDOS
+    pop hl
+    or a
+    ret
+
+; sub_consume — mark the record just read as used (byte 0 = 0xFF) and write
+;   it back
+;   In:  HL = record index (kept)
+; @proc sub_consume
+; @param %rec:u16 hl
+; @clobbers af,bc,de
+; @end
+sub_consume:
+    ld a, 0xFF
+    ld (sub_dma), a
+    push hl
+    ld de, sub_fcb
+    ld c, 34                   ; F34: Write Random
+    call BDOS
+    pop hl
+    ret
+
 ; ------------------------------------------------------------------
 ; restore_dma — point the BDOS DMA back at 0x0080 after $$$.SUB I/O.
 ;   The CCP's DIR built-in (and loaded programs) expect 0x0080.
@@ -2142,22 +1976,11 @@ echo_sub_line:
     ld hl, cmd_buf + 2
 .loop:
     ld a, (hl)
-    push hl
-    push bc
-    ld e, a
-    ld c, F_COUT
-    call BDOS
-    pop bc
-    pop hl
+    call putc                  ; keeps BC and HL
     inc hl
     djnz .loop
 .crlf:
-    ld e, 0x0D
-    ld c, F_COUT
-    call BDOS
-    ld e, 0x0A
-    ld c, F_COUT
-    jp BDOS
+    jp print_crlf
 
 
 ; ==========================================================================
@@ -2241,15 +2064,11 @@ str_sys_opt:
 ; print_crlf — Print CR+LF
 ; ------------------------------------------------------------------
 ; @proc print_crlf
-; @clobbers af,bc,de
+; @clobbers af,bc,de,hl
 ; @end
 print_crlf:
-    ld e, 0x0D
-    ld c, 2
-    call BDOS
-    ld e, 0x0A
-    ld c, 2
-    jp BDOS
+    ld de, msg_crlf
+    jp pstr
 
 
 ; ------------------------------------------------------------------
@@ -2275,15 +2094,11 @@ print_decimal_a:
     or a
     jr z, .pda_no_tens
     add a, '0'
-    ld e, a
-    ld c, F_COUT
-    call BDOS
+    call putc
 .pda_no_tens:
     pop af
     add a, '0'
-    ld e, a
-    ld c, F_COUT
-    jp BDOS
+    jp putc
 
 
 ; ------------------------------------------------------------------
@@ -2476,30 +2291,18 @@ str_profile_cmd:
     db 0
     assert $ - str_profile_cmd == PROFILE_CMD_LEN + 1,         "PROFILE_CMD_LEN must match str_profile_cmd"
 
-; FCB for the cold-start PROFILE.SUB search: drive 0 = default drive.
-profile_fcb:
-    db 0
-    db 'PROFILE '
-    db 'SUB'
-    ds 24
-
 ; SCB query used by DIR to pick its column count (conwidth at 0x1A)
 scr_query_pb:
     db 0x1A, 0                   ; SCB offset=conwidth (0x1A), op=0 (get)
 
-ccp_chain_drive:
-    db 0
-ccp_chain_skip:
-    db 0
+sub_drive_text:
+    db 0, ':'                  ; "X:", the letter filled in when a .SUB is chained
 ccp_force_com:
     db 0
 
-; FCB template for A:$$$.SUB — copied into sub_fcb at each prompt
-sub_fcb_init:
-    db 1                       ; drive 1 = A: (we only look on A:)
-    db "$$$     "              ; name, space-padded to 8
-    db "SUB"                   ; ext
-    ds 24                      ; EX, S1, S2, RC, alloc map, CR, R0..R2 = 0
+; Name of the submit file; try_sub parses it into sub_fcb at each prompt.
+str_sub_name:
+    db "$$$.SUB", 0
 
 ; ==========================================================================
 ; Uninitialised data

@@ -2164,6 +2164,16 @@ class Smoke:
             self.expect("SUBMIT file", "of the same name.", "CPM3     SYS", "A>")
             self.command("SMOKE", 2000)
             self.expect("SUBMIT chain", "of the same name.", "CPM3     SYS", "A>")
+            # Chained from another drive: the search path finds it on A: and
+            # the CCP puts "A:" in front of the name; leading spaces are fine.
+            self.command("SETDEF A:,*", 600)
+            self.command("C:", 600)
+            self.command("  SMOKE", 2500)
+            # The submit file is on A:, the listing it runs is of C:.
+            self.expect("SUBMIT chain from another drive", "of the same name.",
+                        "C: ", "C>")
+            self.command("A:", 600)
+            self.command("SETDEF *", 600)
             self.command("SUBMIT NOPE.SUB", 900)
             self.expect("SUBMIT missing", "No 'SUB' File Found", "A>")
             if "PARAM    SUB" in listing:
@@ -2425,6 +2435,12 @@ class Smoke:
                     "Used/Max Dir Entries For Drive A:")
         self.command("DIR SMOKE.TXT [SIZE]", 800)
         self.expect("DIR [SIZE]", "A: SMOKE    TXT", "Total 1K Blocks =     1")
+
+        # Leading spaces: the program's command tail starts after the command
+        # word, not at the start of the line.
+        self.command("   DIR SMOKE.TXT [SIZE]", 800)
+        self.expect("DIR after leading spaces", "A: SMOKE    TXT",
+                    "Total 1K Blocks =     1")
 
         # Abbreviations, more than one filespec, and the one-option-list rule.
         self.command("DIR *.SUB *.TXT [SI,NOPAGE]", 900)

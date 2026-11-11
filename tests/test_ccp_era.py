@@ -51,10 +51,13 @@ class Handler(unittest.TestCase):
         self.assertIn("db \"ERASE \", '$'", text)
         self.assertIn("db \" (Y/N)?\", '$'", text)
         # Anything but Y returns without deleting.
-        asked = body[body.index("and 0xDF"):body.index(".era_delete:")]
-        self.assertIn("cp 'Y'", asked)
+        asked = body[body.index("call ask_yes"):body.index(".era_delete:")]
         self.assertIn("ret nz", asked)
-        self.assertIn("ld c, F_CIN", body)
+        helper = text[text.index("ask_yes:"):]
+        helper = helper[:helper.index("\n\n")]
+        self.assertIn("ld c, F_CIN", helper)
+        self.assertIn("and 0xDF", helper)
+        self.assertIn("cp 'Y'", helper)
 
     def test_option_list_loads_the_transient(self):
         body = self.body()

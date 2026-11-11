@@ -47,8 +47,9 @@ class ProfileSubmit(unittest.TestCase):
         self.assertIn("F17", body)                 # Search First
         self.assertIn("PROFILE_CMD_LEN + 1", body)  # text plus NUL
         self.assertIn("db 'SUBMIT PROFILE.SUB'", text)
-        self.assertIn("db 'PROFILE '", text)
-        self.assertIn("db 'SUB'", text)
+        # The FCB is parsed from the "PROFILE.SUB" part of that command.
+        self.assertIn("ld hl, str_profile_cmd + 7", body)
+        self.assertIn("call parse_filename", body)
 
     def test_stock_profile_is_not_shipped(self):
         """It works, but would copy ~10K into C: at every cold boot."""

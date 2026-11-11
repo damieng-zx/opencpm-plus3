@@ -140,7 +140,7 @@ class DirsysOptions(unittest.TestCase):
     def test_dirsys_with_options_loads_dir_com(self):
         text = source("src/ccp/miniccp.zpa")
         body = text[text.index(".do_dirsys:"):text.index(".dirsys_plain:")]
-        self.assertIn("call insert_sys", body)
+        self.assertIn("call insert_text", body)
         self.assertIn("ld hl, str_dir_com", body)
         self.assertIn("jp .do_load_com", body)
         self.assertIn('str_dir_com:\n    db "DIR", 0', text)
@@ -148,7 +148,9 @@ class DirsysOptions(unittest.TestCase):
     def test_the_inserted_option_is_sys(self):
         text = source("src/ccp/miniccp.zpa")
         self.assertIn('str_sys_opt:\n    db "SYS "', text)
-        self.assertIn("ld bc, 4", text[text.index("insert_sys:"):])
+        body = text[text.index(".do_dirsys:"):text.index(".dirsys_plain:")]
+        self.assertIn("ld c, 4", body)
+        self.assertIn("ld de, str_sys_opt", body)
 
     def test_a_full_line_is_refused(self):
         text = source("src/ccp/miniccp.zpa")
