@@ -166,7 +166,8 @@ It does not help WordStar, whose 80-column layout is unchanged.
 - [ ] SpellStar 3.30
 - [ ] SuperWriter 1.02
 - [ ] T/Maker 4.03
-- [ ] Magic Wand
+- [x] Magic Wand - automated as `magicwand`: menu, then the 80-column status
+  screen (`Line Width: 80`, tab ruler, character counts)
 - [ ] DataStar
 - [x] VEDIT Plus 2.33 - works (automated: CRT installer + editor)
 - [ ] PeachText / PeachCalc
