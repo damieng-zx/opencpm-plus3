@@ -472,7 +472,9 @@ class Smoke:
         def showed(value: int) -> bytes:
             self.mcp.call("write_memory", {
                 "address": "%04X" % minute_addr,
-                "hex_bytes": "%02X%02X" % (value & 0xFF, value >> 8),
+                # scb_sec follows scb_minute: zero it too, or two seconds
+                # from a late second would roll 23:59 over to 00:00.
+                "hex_bytes": "%02X%02X00" % (value & 0xFF, value >> 8),
                 "bank": 3})
             self.mcp.call("run", {"frames": 120})
             cols = self.memory(4, self.scr_cols, 1)[0]
@@ -2245,6 +2247,14 @@ class Smoke:
         self.expect("DIRS lists SYS files", "SYS1     TXT")
         self.command("DIRSYS CPM3.SYS", 500)
         self.expect("DIRSYS reports non-SYS", "NON-SYSTEM FILE(S) EXIST")
+        # DIRSYS with an option list is DIR [SYS,...] through DIR.COM.
+        self.command("DIRSYS SYS1.TXT [FULL]", 800)
+        self.expect("DIRSYS [FULL]", "Name         Bytes    Recs  Attributes",
+                    "SYS1     TXT", "Sys RW", "Files Found     =     1")
+        self.command("DIRS [SIZE,RO]", 800)
+        self.expect("DIRS [SIZE,RO] filters", "No File")
+        self.command("DIRS CPM3.SYS [FULL]", 800)
+        self.expect("DIRS [FULL] other kind", "No File")
         self.command("ERASE SYS1.TXT", 500)
         self.command("DIRS SYS1.TXT", 500)
         self.expect("SYS file erased", "No File")
@@ -2358,6 +2368,231 @@ class Smoke:
         self.expect("REN cleanup", "No File")
         self.command("DIR WB?.TXT", 500)
         self.expect("REN wildcard cleanup", "No File")
+
+    def since(self, cmd: str) -> str:
+        """The screen from the last prompt line that shows cmd onwards."""
+        text = self.text()
+        at = text.rfind("A>" + cmd)
+        return text[at:] if at >= 0 else text     # scrolled off: all of it
+
+    def run_erase_confirm(self) -> None:
+        """ERASE.COM: the [CONFIRM] option the built-in ERA hands over."""
+        self.command("DIR PIP.COM", 500)
+        if "PIP      COM" not in self.text():
+            self.log("PIP.COM not on the disk; skipping the ERASE [CONFIRM] checks")
+            return
+        for name in ("EC1.TXT", "EC2.TXT", "EC3.DAT"):
+            self.command(f"PIP {name}=SMOKE.TXT", 800)
+
+        # ERA is an abbreviation: the program loaded is ERASE.COM.  Each match
+        # is asked about in turn; Y erases it, anything else keeps it.
+        self.command("ERA EC?.TXT [CONFIRM]", 800)
+        self.expect("ERASE [CONFIRM] asks", "A:EC1.TXT (Y/N)?")
+        self.key("y", 200)
+        self.expect("ERASE [CONFIRM] asks about the next", "A:EC2.TXT (Y/N)?")
+        self.key("n", 200)
+        self.mcp.call("run", {"frames": 400})
+        self.command("DIR EC*.*", 500)
+        self.expect("ERASE [CONFIRM] erased the Y file only", "EC2      TXT")
+        if "EC1      TXT" in self.since("DIR EC*.*"):
+            raise SmokeError("ERASE [CONFIRM] kept a file answered Y: " + self.text())
+        self.expect("ERASE [CONFIRM] left the non-matching file", "EC3      DAT")
+
+        # A plain name asks nothing without the option, and one question with
+        # it; the abbreviation C is enough.
+        self.command("ERASE EC3.DAT [C]", 700)
+        self.expect("ERASE [C] asks", "A:EC3.DAT (Y/N)?")
+        self.key("y", 200)
+        self.mcp.call("run", {"frames": 400})
+        self.command("ERASE EC3.DAT [C]", 700)
+        self.expect("ERASE [C] on a missing file", "No File")
+        self.command("ERASE EC2.TXT [X]", 600)
+        self.expect("ERASE bad option", "Invalid option")
+        self.command("DIR EC2.TXT", 500)
+        self.expect("a bad option erased nothing", "EC2      TXT")
+        self.command("ERASE EC2.TXT", 600)
+        self.command("DIR EC*.*", 500)
+        self.expect("ERASE [CONFIRM] cleanup", "No File")
+
+    def run_dir_options(self) -> None:
+        """DIR.COM: the option list the built-in DIR hands over."""
+        # FULL is the default format of the option form.
+        self.command("DIR SMOKE.TXT [FULL]", 800)
+        self.expect("DIR [FULL]", "Directory For Drive A:  User  0",
+                    "Name         Bytes    Recs  Attributes",
+                    "SMOKE    TXT", "1  Dir RW",
+                    "Total Bytes", "Files Found     =     1",
+                    "Used/Max Dir Entries For Drive A:")
+        self.command("DIR SMOKE.TXT [SIZE]", 800)
+        self.expect("DIR [SIZE]", "A: SMOKE    TXT", "Total 1K Blocks =     1")
+
+        # Abbreviations, more than one filespec, and the one-option-list rule.
+        self.command("DIR *.SUB *.TXT [SI,NOPAGE]", 900)
+        self.expect("DIR two filespecs", "PARAM    SUB", "SMOKE    SUB",
+                    "SMOKE    TXT")
+        if "SYSGEN" in self.since("DIR *.SUB *.TXT [SI,NOPAGE]"):
+            raise SmokeError("DIR listed a file no filespec matches: " + self.text())
+        self.command("DIR [S]", 500)
+        self.expect("DIR ambiguous abbreviation", "Invalid option")
+        self.command("DIR [BOGUS]", 500)
+        self.expect("DIR unknown option", "Invalid option")
+        self.command("DIR [FULL] [SIZE]", 500)
+        self.expect("DIR two option lists", "Invalid option")
+        self.command("DIR [DATE] SMOKE.TXT", 800)
+        self.expect("DIR [DATE]", "Date and Time Stamping Inactive",
+                    "SMOKE    TXT")
+
+        # Sorted by default, directory order with NOSORT; the sort is by
+        # name, so PARAM comes before SMOKE.
+        self.command("DIR *.SUB [SIZE,NOPAGE]", 800)
+        text = self.since("DIR *.SUB [SIZE,NOPAGE]")
+        if not 0 <= text.find("PARAM    SUB") < text.find("SMOKE    SUB"):
+            raise SmokeError("DIR did not sort: " + text)
+        self.command("DIR *.SUB [SIZE,NOSORT,NOPAGE]", 800)
+        self.expect("DIR [NOSORT]", "SMOKE    SUB", "PARAM    SUB")
+
+        # [NOPAGE] must not leave a pause waiting for the next command.
+        self.command("DIR [NOPAGE,SIZE]", 1500)
+        self.expect("DIR [NOPAGE] ends at the prompt", "Files Found", "A>")
+        if "Press RETURN" in self.since("DIR [NOPAGE,SIZE]"):
+            raise SmokeError("DIR [NOPAGE] left a pause pending: " + self.text())
+        self.command("DIR [LENGTH=5,NOPAGE]", 1500)
+        if self.since("DIR [LENGTH=5,NOPAGE]").count("Name         Bytes") < 2:
+            raise SmokeError("DIR [LENGTH=5] did not repeat the heading: "
+                             + self.text())
+        self.command("DIR [LENGTH=4]", 500)
+        self.expect("DIR [LENGTH] below 5", "Invalid option")
+
+        # Drive and user lists; only user 0 on A: holds files here.
+        self.command("DIR SMOKE.TXT [DRIVE=A,USER=(0,1,2),MESSAGE]", 900)
+        self.expect("DIR [DRIVE,USER,MESSAGE]", "Searching drive A: user 1",
+                    "Searching drive A: user 2", "SMOKE    TXT")
+        self.command("DIR SMOKE.TXT [USER=ALL,DRIVE=ALL,SIZE]", 1500)
+        self.expect("DIR [USER=ALL,DRIVE=ALL]", "A: SMOKE    TXT",
+                    "Files Found     =     1")
+        self.command("DIR [USER=16]", 500)
+        self.expect("DIR user out of range", "Invalid option")
+        self.command("DIR [DRIVE=(A,B]", 500)
+        self.expect("DIR unterminated drive list", "Invalid option")
+
+        # Attribute filters, with a scratch file set R/O then SYS.
+        self.command("DIR PIP.COM", 500)
+        if "PIP      COM" not in self.text():
+            self.log("PIP.COM not on the disk; skipping the DIR attribute filters")
+            return
+        self.command("PIP AT1.TXT=SMOKE.TXT", 800)
+        self.command("PIP AT2.TXT=SMOKE.TXT", 800)
+        self.command("STAT AT1.TXT $R/O", 700)
+        self.command("DIR AT*.* [RO]", 800)
+        self.expect("DIR [RO]", "AT1      TXT", "Dir RO")
+        if "AT2      TXT" in self.since("DIR AT*.* [RO]"):
+            raise SmokeError("DIR [RO] listed a Read-Write file: " + self.text())
+        self.command("DIR AT*.* [RW]", 800)
+        self.expect("DIR [RW]", "AT2      TXT", "Dir RW")
+        if "AT1      TXT" in self.since("DIR AT*.* [RW]"):
+            raise SmokeError("DIR [RW] listed a Read-Only file: " + self.text())
+        self.command("DIR AT*.* [SYS]", 600)
+        self.expect("DIR [SYS] with no SYS files", "No File")
+        self.command("STAT AT2.TXT $SYS", 700)
+        self.command("DIR AT*.* [SYS]", 800)
+        self.expect("DIR [SYS]", "AT2      TXT", "Sys RW")
+        if "AT1      TXT" in self.since("DIR AT*.* [SYS]"):
+            raise SmokeError("DIR [SYS] listed a Dir file: " + self.text())
+        self.command("DIR AT*.* [DIR]", 800)
+        self.expect("DIR [DIR]", "AT1      TXT", "Dir RO")
+        if "AT2      TXT" in self.since("DIR AT*.* [DIR]"):
+            raise SmokeError("DIR [DIR] listed a SYS file: " + self.text())
+        self.command("DIR AT*.* [RW,SYS]", 800)
+        self.expect("DIR [RW,SYS] combines", "AT2      TXT", "Files Found     =     1")
+        self.command("DIR AT*.* [RO,SYS]", 600)
+        self.expect("DIR [RO,SYS] combines", "No File")
+        self.command("DIR AT*.* [NOPAGE,SIZE]", 800)
+        self.expect("DIR with options lists DIR and SYS files",
+                    "AT1      TXT", "AT2      TXT")
+
+        # EXCLUDE lists what the filespecs do not match.
+        self.command("DIR [EX,SI,NOP] *.*", 1500)
+        self.expect("DIR [EXCLUDE] of everything", "No File")
+        self.command("DIR [EX,SI,NOP] *.COM *.SYS *.BIN *.FID *.TXT", 1500)
+        self.expect("DIR [EXCLUDE] lists the rest", "PARAM    SUB")
+        rest = self.since("DIR [EX,SI,NOP] *.COM *.SYS *.BIN *.FID *.TXT")
+        if "AT1      TXT" in rest or "SMOKE    TXT" in rest:
+            raise SmokeError("DIR [EXCLUDE] listed an excluded file: " + self.text())
+
+        self.command("STAT AT1.TXT $R/W", 700)
+        self.command("STAT AT2.TXT $R/W", 700)
+        self.command("ERA AT?.TXT", 600)
+        self.key("y", 200)
+        self.mcp.call("run", {"frames": 400})
+        self.command("DIR AT*.*", 500)
+        self.expect("DIR attribute cleanup", "No File")
+
+    def run_device(self) -> None:
+        """DEVICE.COM: show and assign the logical devices, console size."""
+        self.command("DEVICE NAMES", 600)
+        self.expect("DEVICE NAMES", "CON", "CONO", "LST", "AUX", "NONE IO")
+        self.command("DEVICE VALUES", 600)
+        self.expect("DEVICE VALUES", "CONIN:   = CON", "CONOUT:  = CON",
+                    "AUXIN:   = AUX", "AUXOUT:  = AUX", "LST:     = LST")
+
+        # LST: -> CON sends printer output to the screen, NULL drops it.
+        self.command("DEVICE LST:=CON", 500)
+        self.command("DEVICE LST", 500)
+        self.expect("DEVICE LST: = CON", "LST:     = CON")
+        self.command("DIR PIP.COM", 500)
+        have_pip = "PIP      COM" in self.text()
+        if have_pip:
+            self.command("PIP LST:=SMOKE.TXT", 800)
+            self.expect("LST: reaches the screen when assigned to CON",
+                        "SMOKE OK", screen=self.since("PIP LST:=SMOKE.TXT"))
+        self.command("DEVICE LST:=NULL", 500)
+        self.command("DEVICE VALUES", 600)
+        self.expect("DEVICE LST:=NULL", "LST:     = Null Device")
+        if have_pip:
+            self.command("PIP LST:=SMOKE.TXT", 800)
+            if "SMOKE OK" in self.since("PIP LST:=SMOKE.TXT"):
+                raise SmokeError("LST: still printed after NULL: " + self.text())
+        self.command("DEVICE LST:=LST", 500)
+        self.command("DEVICE LST", 500)
+        self.expect("DEVICE LST:=LST restores", "LST:     = LST")
+
+        # A device must suit the direction, and the console is fixed.
+        self.command("DEVICE AUXIN:=CONO", 500)
+        self.expect("DEVICE AUXIN:=CONO", "CONO cannot be used")
+        self.command("DEVICE CONOUT:=LST", 500)
+        self.expect("DEVICE CONOUT:=LST", "can only be assigned to CON")
+        self.command("DEVICE LPT", 500)
+        self.expect("DEVICE unknown name", "Invalid device name")
+        self.command("DEVICE LST [9600]", 500)
+        self.expect("DEVICE speed on a parallel device", "Not a serial device")
+        self.command("DEVICE LST:=LPT", 500)
+        self.expect("DEVICE assign to unknown", "Invalid device name")
+
+        # The console size.
+        self.command("DEVICE CONSOLE [LINES=12]", 500)
+        self.command("DEVICE CONSOLE [PAGE]", 500)
+        self.expect("DEVICE CONSOLE [LINES]", "Page length   = 12")
+        self.command("DEVICE CONSOLE [LINES=30]", 500)
+        self.expect("DEVICE CONSOLE lines range", "Lines must be 4 to 24")
+        self.command("DEVICE CONSOLE [COLUMNS=40]", 500)
+        self.expect("DEVICE CONSOLE columns range", "Columns must be 32, 51 or 64")
+        self.command("DEVICE CONSOLE [LINES=24]", 500)
+        self.command("DEVICE CONSOLE [PAGE]", 500)
+        self.expect("DEVICE CONSOLE [LINES=24]", "Page length   = 24",
+                    "Console width = 51")
+
+        # The bare command shows everything and asks for an assignment.
+        self.command("DEVICE", 800)
+        if "Press RETURN" in self.text():
+            self.key("enter", 300)
+        self.expect("DEVICE prompt", "Physical Devices:", "Current Assignments:",
+                    "Enter new assignment or hit RETURN:")
+        self.mcp.call("type", {"text": "LST:=CON"})
+        self.mcp.call("key", {"name": "enter"})
+        self.mcp.call("run", {"frames": 600})
+        self.command("DEVICE LST", 500)
+        self.expect("DEVICE prompt assignment", "LST:     = CON")
+        self.command("DEVICE LST:=LST", 500)
 
     def run_user(self) -> None:
         """USER: prompt, switch user areas, reject out-of-range values."""
@@ -2648,6 +2883,9 @@ class Smoke:
         self.run_ccp_names()
         self.run_era()
         self.run_ren()
+        self.run_erase_confirm()
+        self.run_dir_options()
+        self.run_device()
         self.run_user()
         self.run_screen64()
         self.run_terminal_escapes()

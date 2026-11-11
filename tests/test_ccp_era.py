@@ -59,7 +59,7 @@ class Handler(unittest.TestCase):
     def test_option_list_loads_the_transient(self):
         body = self.body()
         self.assertIn("call find_opt", body)
-        self.assertIn("jp c, .opt_com", body)
+        self.assertIn("jp c, .opt_era", body)
 
     def test_wildcard_guard_covers_the_whole_name_and_extension(self):
         text = source("src/ccp/miniccp.zpa")

@@ -72,6 +72,7 @@ UTILITIES = {
     "build/setdef.com", "build/submit.com", "build/screen.com",
     "build/set24x80.com", "build/format.com", "build/diskcopy.com",
     "build/stat.com", "build/sysgen.com",
+    "build/erase.com", "build/dir.com", "build/device.com",
 }
 # Built for the benchmark (it runs on Locomotive's disk too) but only shipped
 # on the test image, like the other test programs.

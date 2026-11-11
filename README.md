@@ -91,9 +91,9 @@ SETDEF search path.
 
 | Command | Action |
 |---|---|
-| `DIR [filespec]` | list the files without the SYS attribute (wildcards `*` and `?`; a name with no type matches only a blank type; the column count follows the screen width); `SYSTEM FILE(S) EXIST` when SYS files match |
-| `DIRSYS` / `DIRS [filespec]` | list the files with the SYS attribute; `NON-SYSTEM FILE(S) EXIST` when others match |
-| `ERASE` / `ERA [filespec]` | delete files; any wildcard asks `ERASE spec (Y/N)?` first; no name asks `Enter filename:` |
+| `DIR [filespec] [[options]]` | list the files without the SYS attribute (wildcards `*` and `?`; a name with no type matches only a blank type; the column count follows the screen width); `SYSTEM FILE(S) EXIST` when SYS files match; with an option list `DIR.COM` takes over (below) |
+| `DIRSYS` / `DIRS [filespec] [[options]]` | list the files with the SYS attribute; `NON-SYSTEM FILE(S) EXIST` when others match; with an option list it runs `DIR.COM` as `DIR [SYS,...]` |
+| `ERASE` / `ERA [filespec] [[CONFIRM]]` | delete files; any wildcard asks `ERASE spec (Y/N)?` first; no name asks `Enter filename:`; `[CONFIRM]` asks about each file (`ERASE.COM`) |
 | `RENAME` / `REN new=old` | rename files (`REN new old` also works; the wildcards of both names must correspond, as in `REN A*.T*=S*.T*`); an existing target asks `delete (Y/N)?`; no name asks `Enter New Name:` / `Enter Old Name:` |
 | `TYPE` / `TYP [filespec] [[NO PAGE]]` | display a text file; no name asks `Enter filename:`; `[NO PAGE]` turns the page pause off |
 | `USER` / `USE [n]` | set the user area (0-15); no number asks `Enter User# :`; the prompt shows a non-zero user as `3A>` |
@@ -102,9 +102,11 @@ SETDEF search path.
 `cmd1!cmd2` runs the commands one after the other, each after its own prompt
 (up to 126 characters after the first `!`).  An unknown command is repeated
 followed by `?`.  The built-ins give a name with an option list
-(`DIR [FULL]`, `ERA x.* [CONFIRM]`) to the program of the same name
-(`DIR.COM`, `ERASE.COM`, `RENAME.COM`), as the CP/M 3 User's Guide describes;
-none of those is shipped yet, so such a line answers `DIR?`.
+(`DIR [FULL]`, `ERA x.* [CONFIRM]`) to the related transient, as the CP/M 3
+User's Guide describes: `DIR.COM` and `ERASE.COM` are shipped (`ERA` loads
+`ERASE.COM`); `RENAME.COM` is not, so `REN x=y [...]` answers `RENAME?`.
+`DIRSYS [options]` is not in the manual's option table; here it means `DIR`
+with `SYS` added to the list (`DIRS [FULL]`).
 
 `A:`, `B:` and `C:` prefixes are accepted wherever a filespec is expected.
 
@@ -144,6 +146,39 @@ for the API references.
 
 ## Tools
 
+- `DIR.COM` — `DIR` with options, the list taking any place in the line (one
+  list only; each option may be shortened while unambiguous):
+
+  | Option | Effect |
+  |---|---|
+  | `FULL` | name, allocated K, records, attributes (`Dir`/`Sys`, `RW`/`RO`), then totals and `Used/Max Dir Entries`; the default |
+  | `SIZE` | name and K only, several to a line |
+  | `ATT` | also the user attributes F1-F4 |
+  | `DIR` / `SYS` | only files without / with the SYS attribute (both or neither: all) |
+  | `RO` / `RW` | only Read-Only / Read-Write files |
+  | `DRIVE=ALL`, `d` or `(d,d)` | the drives to list (`DISK=` is the same); `ALL` is every logged-in drive plus those named in the filespecs |
+  | `USER=ALL`, `n` or `(n,n)` | the user areas to list |
+  | `EXCLUDE` | the files the filespecs do **not** match |
+  | `NOSORT` | directory order instead of alphabetical |
+  | `LENGTH=n` | repeat the `FULL` heading every *n* lines (5 or more) |
+  | `MESSAGE` | name each drive and user area as it is searched |
+  | `NOPAGE` / `FF` | no pause when the screen fills (there is no printer for `FF`'s form feed) |
+  | `DATE` | prints `Date and Time Stamping Inactive`: directory labels and stamps are not supported |
+
+  Several filespecs may be given (`DIR *.COM *.SUB [SIZE]`); each directory is
+  read once, so a file two specs match is listed once.
+- `ERASE.COM` — what `ERA`/`ERASE` load for `[CONFIRM]` (abbreviated `C`):
+  `A:NAME.TYP (Y/N)?` for each matching file, Y erases it.  It also works run
+  directly.
+- `DEVICE.COM` — shows and assigns the character devices (`DEVICE`,
+  `DEVICE NAMES`, `DEVICE VALUES`, `DEVICE LST`, `DEVICE LST:=CON`,
+  `DEVICE LST:=NULL`, `DEVICE CONSOLE [PAGE | LINES=n | COLUMNS=n]`).  The
+  physical devices are the BIOS table (`CON`, `CONO`, `LST`, `AUX`); an
+  assignment writes the SCB redirection vector, which the BIOS applies to
+  `LST:` and `AUX:` (an unassigned device is a sink).  `CONIN:` and `CONOUT:`
+  take only `CON`; none of the devices is a serial port, so `[XON, 9600]`
+  style options are refused.  `LINES` sets the page length the pause uses
+  (4-24); `COLUMNS` is 32, 51 or 64 (`SET24X80` gives 80).
 - `SCREEN.COM` — show or set the screen width (32, 51 or 64 columns).
 - `SET24X80.COM` — enter (`ON` or no argument) or leave (`OFF`) the virtual
   80-column screen.

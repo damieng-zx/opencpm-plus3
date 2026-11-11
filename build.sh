@@ -76,6 +76,9 @@ echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/diskcopy.com src/tools/diskcopy.asm
 "$SJASMPLUS" --raw=build/stat.com src/tools/stat.asm
 "$SJASMPLUS" --raw=build/sysgen.com src/tools/sysgen.asm
+"$SJASMPLUS" --raw=build/erase.com src/tools/erase.asm
+"$SJASMPLUS" --raw=build/dir.com src/tools/dir.asm
+"$SJASMPLUS" --raw=build/device.com src/tools/device.asm
 
 echo "  Assembling FID modules..."
 "$SJASMPLUS" --raw=build/RAMDISK.FID src/fid/ramdisk.asm
@@ -123,7 +126,7 @@ python3 tools/mkdsk.py create build/cpm3.dsk \
     build/format.com \
     build/diskcopy.com \
     build/stat.com \
-    build/sysgen.com \
+    build/sysgen.com build/erase.com build/dir.com build/device.com \
     "${REF_FILES[@]}" \
     $EXTRAFILES
 
@@ -155,7 +158,7 @@ python3 tools/mkdsk.py create build/cpm3-test.dsk \
     build/format.com \
     build/diskcopy.com \
     build/stat.com \
-    build/sysgen.com \
+    build/sysgen.com build/erase.com build/dir.com build/device.com \
     build/bdostest.com build/xtetest.com \
     build/disktest.com build/termtest.com build/systest.com build/regtest.com \
     build/inptest.com build/biostest.com build/chaintest.com \
@@ -186,7 +189,7 @@ python3 tools/mkdsk.py create build/cpm3-dist720.dsk \
     build/format.com \
     build/diskcopy.com \
     build/stat.com \
-    build/sysgen.com \
+    build/sysgen.com build/erase.com build/dir.com build/device.com \
     "${REF_FILES[@]}" \
     $EXTRAFILES
 

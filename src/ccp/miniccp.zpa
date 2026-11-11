@@ -362,12 +362,31 @@ parse_cmd:
     ld hl, (ccp_cmdp)
     jp .do_load_com
 
+; ERA and REN are abbreviations: the program they load is ERASE.COM /
+; RENAME.COM, whatever the line was typed as.  The command tail the program
+; sees is still taken from the line itself.
+.opt_era:
+    ld hl, str_erase_com
+    jp .do_load_com
+.opt_ren:
+    ld hl, str_rename_com
+    jp .do_load_com
+
 ; ==========================================================================
 ; DIR / DIRSYS [d:][filespec]
 ;   DIR lists the files without the SYS attribute, DIRSYS those with it.  A
 ;   name with no type matches only a blank type; * and ? are wildcards.
 ; ==========================================================================
 .do_dirsys:
+    call find_opt
+    jr nc, .dirsys_plain
+    ; DIRSYS [options] is DIR [SYS options]: put SYS first in the option list
+    ; and let DIR.COM do the work.
+    call insert_sys
+    jp c, .com_unknown         ; no room in the line for it
+    ld hl, str_dir_com
+    jp .do_load_com
+.dirsys_plain:
     ld a, 0x80                 ; list SYS files
     jr .dir_go
 .do_dir:
@@ -638,7 +657,7 @@ parse_cmd:
 
 .do_era:
     call find_opt
-    jp c, .opt_com
+    jp c, .opt_era
     call get_arg               ; prompts "Enter filename:" when missing
     ret z
     push hl
@@ -683,7 +702,7 @@ parse_cmd:
 
 .do_ren:
     call find_opt
-    jp c, .opt_com
+    jp c, .opt_ren
     ld hl, ren_fcb             ; clear ren_fcb and ren_chk (72 bytes)
     ld de, ren_fcb + 1
     ld bc, 71
@@ -1612,6 +1631,57 @@ find_opt:
     scf
     ret
 
+; insert_sys — put "SYS " into the command line at HL (just after a '['), so
+;   the option list DIR.COM sees starts with SYS
+;   In:  HL = text after the '['
+;   Out: carry set if the line has no room for four more characters
+; @proc insert_sys
+; @param %at:u16 hl
+; @out   carry
+; @clobbers af,bc,de,hl
+; @end
+insert_sys:
+    push hl
+    ld d, h
+    ld e, l
+.find_end:
+    ld a, (de)
+    or a
+    jr z, .have_end
+    inc de
+    jr .find_end
+.have_end:                     ; DE = the NUL that ends the line
+    ld hl, CMD_BUF_TEXT + 122  ; the text area holds 127 bytes with its NUL
+    or a
+    sbc hl, de
+    jr nc, .room
+    pop hl
+    ret                        ; carry set: it does not fit
+.room:
+    pop hl                     ; HL = insert position
+    push hl
+    ex de, hl
+    or a
+    sbc hl, de                 ; NUL address - position
+    inc hl
+    ld b, h
+    ld c, l                    ; BC = the text and its NUL
+    dec hl
+    add hl, de                 ; HL = the NUL again
+    ld d, h
+    ld e, l
+    inc de
+    inc de
+    inc de
+    inc de
+    lddr                       ; open four bytes (the ranges overlap)
+    pop de                     ; DE = insert position
+    ld hl, str_sys_opt
+    ld bc, 4
+    ldir
+    or a
+    ret
+
 ; putc — print the character in A, keeping BC and HL
 ; @proc putc
 ; @param %ch:u8 a
@@ -2158,6 +2228,14 @@ msg_help:
 
 nul_str:
     db 0
+str_erase_com:
+    db "ERASE", 0
+str_rename_com:
+    db "RENAME", 0
+str_dir_com:
+    db "DIR", 0
+str_sys_opt:
+    db "SYS "
 
 ; ------------------------------------------------------------------
 ; print_crlf — Print CR+LF

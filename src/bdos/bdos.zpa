@@ -550,7 +550,7 @@ bdos_con_out:
     jp nz, con_out             ; a program is being fed: never page-pause
     ld a, (con_mode)
     and CON_MODE_PAGE
-    jr z, .tick                ; paging disabled → just count and emit
+    jr z, .unpaged             ; paging disabled → emit, keep the count at 0
     ld a, (bdos_page_row)
     ld hl, scb_conpage
     cp (hl)                    ; A < conpage (page not full)?
@@ -561,6 +561,11 @@ bdos_con_out:
     ld c, 0x0A
     call con_out
     jr bdos_page_pause       ; page full → pause (resets counter)
+.unpaged:
+    ld (bdos_page_row), a      ; A = 0: lines printed unpaged must not make
+                               ; the next paged line pause at once
+    ld c, 0x0A
+    jp con_out
 .tick:
     ld a, (bdos_page_row)
     inc a

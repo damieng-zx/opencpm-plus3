@@ -137,7 +137,8 @@ tests, which are the parts that reboot other images.
 The CCP checks cover `DIR`, `TYPE SMOKE.TXT`, `HELP`, the `SCREEN` utility
 (`SCREEN 32`/`SCREEN 51`),
 the short names (`TYP`, `DIRS`, `ERASE`, `USE`), `DIRSYS` with and without a
-SYS file (made with `STAT $SYS`), the `NOSUCH?` echo and a `DIRSYS!SETDEF!TYP`
+SYS file (made with `STAT $SYS`, also with `[FULL]`/`[SIZE,RO]` options),
+the `NOSUCH?` echo and a `DIRSYS!SETDEF!TYP`
 chain across a program,
 `ERA` (the `Enter filename:` prompt, `No File`, the `ERASE spec (Y/N)?` guard
 for any wildcard and a real delete), `REN`
@@ -158,6 +159,22 @@ implicit `SMOKE` -> `SUBMIT SMOKE.SUB` chain, the missing-file path,
 missing-parameter error. When the untracked reference binaries are on the
 image, it checks a third-party `RENAME` (added to a scratch copy of the DSK)
 with wildcard `DIR`, and the C: PIP/DATE flow.
+
+`ERASE.COM`, `DIR.COM` and `DEVICE.COM` have their own checks (`run_erase_confirm`,
+`run_dir_options`, `run_device`).  `ERA EC?.TXT [CONFIRM]` must ask about each
+file in turn (Y erases, N keeps), `[C]` must do for a single name, a missing
+name must say `No File` and a bad option must erase nothing.  `DIR` with
+options is checked for `[FULL]` (heading, row, totals, `Used/Max Dir Entries`),
+`[SIZE]`, abbreviations, several filespecs, the ambiguous/unknown/second-list
+rejections, `[DATE]`, `[NOSORT]` against the default sort, `[LENGTH=n]`
+repeating the heading, `[NOPAGE]` leaving no pause behind for the next command,
+`[DRIVE=]`/`[USER=]` lists with `[MESSAGE]`, and - with PIP on the disk - the
+`[RO]`/`[RW]`/`[SYS]`/`[DIR]` filters and their combinations (a scratch file
+made R/O then SYS with `STAT`) and `[EXCLUDE]`.  `DEVICE` is checked for the
+`NAMES`/`VALUES` displays, `LST:=CON` (a `PIP LST:=SMOKE.TXT` must then reach
+the screen), `LST:=NULL` (it must not), the direction and console refusals, the
+serial-option refusal, `CONSOLE [LINES=n]`/`[PAGE]` and its range errors, and
+the bare command's prompt.
 
 Pagination is checked with `SETDEF [PAGE]` and the 30-line `PAGE.TXT`
 fixture: `TYPE PAGE.TXT` must stop at `LINE 24` with the pager prompt shown

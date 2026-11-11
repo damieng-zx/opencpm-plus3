@@ -18,7 +18,7 @@ Three +3 images are produced from the same system files, plus a data image:
 - `build/cpm3.dsk` — **distribution** (180K single-sided): system, the
   utilities we build
   (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`,
-  `FORMAT`, `DISKCOPY`) and
+  `FORMAT`, `DISKCOPY`, `DIR`, `ERASE`, `DEVICE`) and
   the local `references/binaries/` utilities (BBC BASIC, ED, PIP, ...).  No
   test programs.
 - `build/cpm3-dist720.dsk` — the same CP/M files on a **720K** PCW DS/DD
@@ -264,6 +264,18 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   `close_dir_update`) live at the end of `common.asm` instead, in common
   memory, to leave room in the 16K bank-4 image; see `docs/boot.md`
 - `src/ccp/miniccp.zpa` — CCP with the CP/M 3 built-ins DIR, DIRSYS, ERASE, RENAME, TYPE and USER (and their short forms DIRS, ERA, REN, TYP, USE) plus HELP, `cmd1!cmd2` chaining (the rest of the line is kept by private BDOS F125) and `.COM` loading; built as `CCP.COM`.  Its work buffers are `equ` addresses above the image, so they do not count against the 4K staging window.  On a cold start it submits `PROFILE.SUB` from the default drive — the SCB byte at `0x0A` (`scb_coldboot`) marks a cold boot and the CCP clears it, so a warm boot does not run the profile again.  Lines of a submit file that begin with `<` are queued for the running program (BDOS F124, a private CCP helper) and served by `con_in`/`con_status` as console input
+- `src/tools/dir.asm` — `DIR.COM`, the option form of DIR that the CCP's
+  built-in hands over (`FULL`, `SIZE`, `ATT`, `DIR`/`SYS`/`RO`/`RW`,
+  `DRIVE=`, `USER=`, `EXCLUDE`, `NOSORT`, `LENGTH=`, `MESSAGE`, `NOPAGE`/`FF`,
+  `DATE`).  Reads each drive's whole directory in one pass (`?` in the FCB's
+  drive byte matches every user, so no user number is switched), applies the
+  filespecs, user list and filters itself, merges extents by name and user,
+  sorts through a pointer table and prints
+- `src/tools/erase.asm` — `ERASE.COM`: `[CONFIRM]` for ERA/ERASE (collects
+  every match first, because a delete disturbs the search state)
+- `src/tools/device.asm` — `DEVICE.COM`: reads the BIOS character device table
+  (BIOS fn 20 through F50) and assigns logical devices by writing the SCB
+  redirection vectors (F49); the BIOS honours `LSTVEC`/`AUXOVEC` only
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
 - `src/tools/set24x80.asm` — `SET24X80.COM`, enter/leave the virtual 80x24 screen
 - `src/tools/setkeys.asm` — `SETKEYS.COM`, apply a +3 key-definition file
