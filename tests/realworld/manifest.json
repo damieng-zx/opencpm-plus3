@@ -1363,6 +1363,42 @@
       "notes": "The self-extractor and CLOCKCLR work. The clock itself is CLOCK.FID, installed at boot; this BIOS only loads RAMDISK.FID, so CLOCKCLR reports that it is not loaded. A generic +3 FID loader is the remaining piece."
     },
     {
+      "id": "salvage",
+      "title": "SALVAGE 1.00 (John Elliott)",
+      "url": "https://www.seasip.info/Cpm/software/salvgsea.com",
+      "archive": "file",
+      "save_as": "SALVGSEA.COM",
+      "command": "SALVGSEA",
+      "expect": [
+        "PMsfx v2.10",
+        "Requires Amstrad PCW / CPC / Spectrum+3",
+        "Extract? (Y/N)"
+      ],
+      "frames": 2500,
+      "steps": [
+        {
+          "key": "shift+y",
+          "frames": 3000,
+          "expect": [
+            "SALVAGE .COM Extracting OK",
+            "SALVAGE .DOC Extracting OK"
+          ]
+        },
+        {
+          "text": "SALVAGE",
+          "frames": 2500,
+          "expect": [
+            "SALVAGE v1.00",
+            "attempt to salvage data",
+            "Choose floppy drive, BREAK to quit",
+            "Drive A:",
+            "Drive B:"
+          ]
+        }
+      ],
+      "notes": "John Elliott's disc salvage tool: a self-extracting +3 archive, then a live full-screen drive picker. Exercises the DD_* XBIOS calls (it reads raw sectors past the filesystem), the BREAK key and a clock in the corner. Nothing is salvaged by the automated run - it stops at the drive menu, which keeps the check deterministic."
+    },
+    {
       "id": "bdsc",
       "title": "BDS C 1.60",
       "url": "https://www.bdsoft.com/dist/bdsc-all.zip",

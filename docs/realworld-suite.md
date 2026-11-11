@@ -58,6 +58,7 @@ separate, explicitly triggered workflow.
 | `vedit` | VEDIT Plus 2.33 (CRT) | Installer (VT-52), then open/edit a file | Pass |
 | `cobol80` | Microsoft COBOL-80 4.65 | `COBOL` → `L80` → `HELLO.COM` prints `HELLO, WORLD` (720K image) | Pass |
 | `clck3` | Spectrum +3 clock extractor | Self-extract, `CLOCKCLR` | Pass (FID not loaded) |
+| `salvage` | SALVAGE 1.00 (John Elliott) | Self-extract, then a live disc drive picker | Pass |
 | `bdsc` | BDS C 1.60 | `CC` → `CLINK` → `HELLO.COM` prints `HELLO, WORLD` | Pass |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
