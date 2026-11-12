@@ -4,6 +4,16 @@
 ; Non-blocking calls are executed and return value shown.
 ; Blocking calls (F1, F3, F10) are skipped unless console has input.
 ;
+; The file and drive tests work on the drive the program is run from (its
+; "home"), not always A:: F13 selects A: again, so each test that follows an F13
+; selects home back first.  The write tests create and delete files there, so
+; run it from a scratch disc.
+;
+; Runs on this system and on Locomotive's CP/M Plus.  Here the printer and the
+; serial port are null devices that are always ready; elsewhere there may be
+; nothing attached and F4, F5 and F112 would wait for ever, so they ask the
+; BIOS for the device's status first and show SKIP if it is not ready.
+;
 ; Build: sjasmplus --raw=build/bdostest.com src/test/bdostest.asm
 
     ORG 0100h
@@ -14,6 +24,22 @@ BDOS        EQU 0005h
 ; Entry
 ; ============================================================
 start:
+    ; Is this our CP/M 3?  F120 (the SETDEF order byte) is ours, 0-3; any other
+    ; CP/M 3 answers an unknown function with FFh.
+    ld e, 0
+    ld c, 120
+    call BDOS
+    cp 4
+    ld a, 0
+    jr nc, .foreign
+    inc a
+.foreign:
+    ld (ours), a
+
+    ld c, 25                ; F25: the drive this is run from
+    call BDOS
+    ld (home), a
+
     ld de, msg_header
     ld c, 9
     call BDOS
@@ -71,6 +97,76 @@ start:
 ; cons_stat: last result from F11 (0=no char, FF=char ready)
 ; ============================================================
 cons_stat: DB 0
+ours:      DB 0                 ; 1 = this is our CP/M 3
+home:      DB 0                 ; the drive it was run from (0 = A:)
+
+; reselect_home: F14 to the home drive (F13 leaves A: selected).
+reselect_home:
+    ld a, (home)
+    ld e, a
+    ld c, 14
+    jp BDOS
+
+; home_mask: A = login-vector bit of the home drive (1 for A:, 2 for B:)
+; Clobbers: B
+home_mask:
+    ld a, (home)
+    ld b, a
+    ld a, 1
+    inc b
+.shift:
+    dec b
+    ret z
+    add a, a
+    jr .shift
+
+; ============================================================
+; device_ready: is the device whose BIOS status function is A ready?
+;   Ours are always ready (null devices).  Elsewhere ask the BIOS.
+;   In:  A = BIOS function (15 LISTST, 19 AUXOST)
+;   Out: NZ = ready
+;   Clobbers: AF, BC, DE, HL
+; ============================================================
+device_ready:
+    ld b, a
+    ld a, (ours)
+    or a
+    ret nz                  ; NZ: ready
+    ld a, b
+    ld l, a
+    ld h, 0
+    ld e, l
+    ld d, h
+    add hl, hl
+    add hl, de              ; 3 * function
+    ex de, hl
+    ld hl, (0x0001)         ; WBOOT entry = BIOS base + 3
+    dec hl
+    dec hl
+    dec hl
+    add hl, de              ; HL = the BIOS entry
+    ; lint-exempt: stack  ; indirect jump; the BIOS returns to our caller
+    jp (hl)
+
+; ============================================================
+; skip_ours: print "SKIP (this system only)" and the line end, unless this is
+;   our CP/M 3.  Out: returns to the caller's caller only when skipping.
+; ============================================================
+; ours_only: A = 1 if this is our CP/M 3
+; ============================================================
+; skip_device: print "SKIP (device not ready)" and the line end
+; ============================================================
+skip_device:
+    ld de, msg_skip_device
+    ld c, 9
+    call BDOS
+    jp print_crlf
+
+skip_foreign:
+    ld de, msg_skip_foreign
+    ld c, 9
+    call BDOS
+    jp print_crlf
 
 ; ============================================================
 ; F2: Console Output
@@ -170,6 +266,9 @@ tst_f03:
 tst_f04:
     ld de, lbl_f04
     call print_label
+    ld a, 19                ; AUXOST
+    call device_ready
+    jp z, skip_device
 
     ld e, 'X'               ; Output char 'X' to aux
     ld c, 4
@@ -188,6 +287,9 @@ tst_f04:
 tst_f05:
     ld de, lbl_f05
     call print_label
+    ld a, 15                ; LISTST
+    call device_ready
+    jp z, skip_device
 
     ld e, 'X'               ; Output char 'X' to list
     ld c, 5
@@ -264,6 +366,9 @@ tst_f07:
 tst_f08:
     ld de, lbl_f08
     call print_label
+    ld a, (ours)               ; CP/M 3 has no IOBYTE calls: F8 does nothing and
+    or a                       ; F7 returns 0.  We keep them from CP/M 2.2.
+    jp z, skip_foreign
 
     ; First save current IOBYTE via F7
     ld c, 7
@@ -409,11 +514,13 @@ tst_f13:
     cp 'Z' + 1
     jr nc, .f13_fail        ; Above 'Z' = not a filename char
 
+    call reselect_home
     ld de, msg_pass_short
     ld c, 9
     call BDOS
     jp print_crlf
 .f13_fail:
+    call reselect_home
     ld de, msg_fail_short
     ld c, 9
     call BDOS
@@ -428,16 +535,15 @@ tst_f14:
     ld de, lbl_f14
     call print_label
 
-    ; Select drive A: then verify with F25 (return current disk)
-    ld e, 0                 ; Drive A
-    ld c, 14
-    call BDOS
+    ; Select the home drive then verify with F25 (return current disk)
+    call reselect_home
 
-    ; F25 returns current disk in A (0=A:)
+    ; F25 returns the current disk in A
     ld c, 25
     call BDOS
-    or a
-    jr nz, .f14_fail        ; Should be 0 (A:)
+    ld hl, home
+    cp (hl)
+    jr nz, .f14_fail        ; Should be the home drive
 
     ld de, msg_pass_short
     ld c, 9
@@ -1043,10 +1149,11 @@ tst_f24:
     ld c, 9
     call BDOS
 
-    ; Check bit 0 is set (drive A: logged in)
+    ; The home drive's bit must be set (it is logged in)
     ld c, 24
     call BDOS
-    bit 0, l
+    call home_mask
+    and l
     jr z, .f24_fail
 
     ld de, msg_pass_suffix
@@ -1075,7 +1182,8 @@ tst_f25:
     ld c, 9
     call BDOS
     pop af
-    or a
+    ld hl, home
+    cp (hl)                 ; still the home drive
     jr nz, .f25_fail
 
     ld de, msg_pass_suffix
@@ -1186,15 +1294,17 @@ tst_f28:
     ld c, 28
     call BDOS
 
-    ; Check RO vector — bit 0 should be set
+    ; Check RO vector — the home drive's bit should be set
     ld c, 29
     call BDOS
-    bit 0, l
+    call home_mask
+    and l
     jp z, .f28_fail
 
-    ; Reset disk system to clear RO
+    ; Reset disk system to clear RO (and back to A:)
     ld c, 13
     call BDOS
+    call reselect_home
 
     ; Verify RO vector is cleared
     ld c, 29
@@ -1668,6 +1778,9 @@ tst_f35:
 tst_f59:
     ld de, lbl_f59
     call print_label
+    ld a, (ours)               ; F59 needs the system's loader module and its
+    or a                       ; calling convention is not the same on every
+    jp z, skip_foreign         ; CP/M 3
 
     ; Create TEMP.$$$ and write a 128-byte pattern (128..1).
     call clear_test_fcb
@@ -1796,6 +1909,7 @@ tst_f104:
     ld c, 26               ; F26 Set DMA
     call BDOS
 
+    ld de, dat_out         ; F105 takes the buffer in DE; F26 need not keep it
     ld c, 105              ; F105 Get Date/Time
     call BDOS
 
@@ -1882,21 +1996,23 @@ print_hex_a:
 tst_f37:
     ld de, lbl_f37
     call print_label
-    ld de, 1                   ; reset A:
+    call home_mask
+    ld e, a
+    ld d, 0                    ; reset the home drive
     ld c, 37
     call BDOS
-    ; F37 has no defined A result; its effect is that A: is logged out.
+    ; F37 has no defined A result; its effect is that the drive is logged out.
     ld c, 24                   ; F24: login vector
     call BDOS
-    ld a, l
-    and 1
+    call home_mask
+    and l
     jr nz, .fail
     ld c, 31                   ; F31: select the current drive, logging it in
     call BDOS
     ld c, 24
     call BDOS
-    ld a, l
-    and 1
+    call home_mask
+    and l
     jr z, .fail
     ld de, msg_pass_short
     ld c, 9
@@ -1941,6 +2057,9 @@ tst_f107:
     call BDOS
     or a
     jr nz, .fail
+    ld a, (ours)               ; the serial number is each system's own
+    or a                       ; ("OPNCP3" here): elsewhere it only has to answer
+    jr z, .f107_ok
     ld hl, f107_buf
     ld de, serial_expect
     ld b, 6
@@ -1951,6 +2070,7 @@ tst_f107:
     inc hl
     inc de
     djnz .cmp
+.f107_ok:
     ld de, msg_pass_short
     ld c, 9
     call BDOS
@@ -1968,6 +2088,9 @@ tst_f107:
 tst_f112:
     ld de, lbl_f112
     call print_label
+    ld a, 15                ; LISTST
+    call device_ready
+    jp z, skip_device
     ld de, f112_cb
     ld c, 112
     call BDOS
@@ -2039,7 +2162,7 @@ f09_test_str:   DB "TEST$"
 
 msg_visual_ok:  DB "] visual OK$"
 msg_h:          DB "h$"
-msg_fd_wait: db "FDh wait: ", '$'
+msg_fd_wait: db "FDh wait: press K ", '$'
 msg_fd_ok:   db "OK (blocked)", '$'
 msg_fd_bad:  db "FAIL (did not block)", '$'
 msg_h_ret:      DB "h (ret)$"
@@ -2049,6 +2172,8 @@ msg_pass_short:    DB "PASS$"
 msg_fail_short:    DB "FAIL$"
 msg_skip_no_input: DB "SKIP (no char ready)$"
 msg_skip_blocks:   DB "SKIP (blocks)$"
+msg_skip_device:   DB "SKIP (device not ready)$"
+msg_skip_foreign:  DB "SKIP (this system only)$"
 
 fn_cpm3sys: DB "CPM3    SYS"
 fn_zzz:     DB "ZZZZZZZZZZZ"

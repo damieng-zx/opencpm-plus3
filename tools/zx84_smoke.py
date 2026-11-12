@@ -2043,7 +2043,7 @@ class Smoke:
                 self.mcp.call("run", {"frames": 1500})
                 continue
             # F6 E=FDh blocks on a key; the program prints this prompt first.
-            if "FDh wait:" in screen and not screen.split("FDh wait:")[-1].strip():
+            if "FDh wait:" in screen and not screen.split("FDh wait: press K")[-1].strip():
                 self.mcp.call("key", {"name": "k"})
                 self.mcp.call("run", {"frames": 300})
                 continue

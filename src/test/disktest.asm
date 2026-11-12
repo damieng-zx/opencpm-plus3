@@ -14,6 +14,23 @@ DMA     EQU 0080h
 t44_buf EQU 8000h
 
 start:
+    ; The drive under test is the one this is run from, not always A:.
+    ld c, 25                   ; F25: current disc
+    call BDOS
+    ld (home), a
+
+    ; Is this our CP/M 3?  F120 (the SETDEF order byte) is ours, 0-3; any other
+    ; CP/M 3 answers an unknown function with FFh.
+    ld e, 0
+    ld c, 120
+    call BDOS
+    cp 4
+    ld a, 0
+    jr nc, .foreign
+    inc a
+.foreign:
+    ld (ours), a
+
     ; Print header
     ld de, msg_hdr
     ld c, 9
@@ -636,7 +653,8 @@ test10:
     ld hl, fn_test
     call delete_name
 
-    ld e, 0                    ; A:
+    ld a, (home)
+    ld e, a                    ; the drive under test
     ld c, 46
     call BDOS
     or a
@@ -693,7 +711,8 @@ test10:
     ld de, DMA
     ld c, 26
     call BDOS
-    ld e, 0
+    ld a, (home)
+    ld e, a
     ld c, 46
     call BDOS
     or a
@@ -718,7 +737,8 @@ test10:
     ld de, DMA
     ld c, 26
     call BDOS
-    ld e, 0
+    ld a, (home)
+    ld e, a
     ld c, 46
     call BDOS
     or a
@@ -1213,8 +1233,8 @@ test13:
     ld c, 9
     call BDOS
 
-    ; F45 = 1 so a R/O error returns 0xFF instead of aborting the test.
-    ld e, 1
+    ; F45 = FFh so a R/O error returns 0xFF instead of aborting the test.
+    ld e, 0xFF
     ld c, 45
     call BDOS
 
@@ -1366,7 +1386,7 @@ test15:
     call BDOS
 
     ; F45 = 1: return errors instead of aborting
-    ld e, 1
+    ld e, 0xFF
     ld c, 45
     call BDOS
 
@@ -1389,6 +1409,7 @@ test15:
     ; Clear the R/O bit and restore error mode
     ld c, 13
     call BDOS
+    call reselect_home         ; F13 leaves A: selected
     ld e, 0
     ld c, 45
     call BDOS
@@ -1400,6 +1421,7 @@ test15:
 .t15_fail:
     ld c, 13
     call BDOS
+    call reselect_home         ; F13 leaves A: selected
     ld e, 0
     ld c, 45
     call BDOS
@@ -1415,7 +1437,7 @@ test16:
     call BDOS
 
     ; F45 = 1: return errors
-    ld e, 1
+    ld e, 0xFF
     ld c, 45
     call BDOS
 
@@ -1620,8 +1642,9 @@ test18:
     or a
     jp nz, .t18_fail
 
-    ; F49 get conwidth (offset 0x1A) -> columns-1: 31, 50, 63 or 79 (24x80).
-    ; DISKTEST must work at any supported screen width, so accept all four.
+    ; F49 get conwidth (offset 0x1A) -> columns-1: 31, 50, 63 or 79 (24x80),
+    ; or 49 (Locomotive's CP/M Plus counts its console as 50 columns).
+    ; DISKTEST must work at any supported screen width, so accept them all.
     ld hl, scb_pb
     ld (hl), 0x1A
     inc hl
@@ -1631,6 +1654,8 @@ test18:
     call BDOS
     ld (t18_conwidth), a
     cp 50
+    jr z, .t18_width_ok
+    cp 49
     jr z, .t18_width_ok
     cp 31
     jr z, .t18_width_ok
@@ -1647,7 +1672,11 @@ test18:
     jp .t18_fail
 .t18_width_ok:
 
-    ; F49 invalid offset 0x63 -> A=0xFF
+    ; F49 invalid offset 0x63 -> A=0xFF.  How big the SCB is is the system's own
+    ; (Locomotive's has a field at 63h), so only here.
+    ld a, (ours)
+    or a
+    jp z, .t18_f109
     ld hl, scb_pb
     ld (hl), 0x63
     inc hl
@@ -1658,6 +1687,7 @@ test18:
     cp 0xFF
     jp nz, .t18_fail
 
+.t18_f109:
     ; F109 get/set/restore console mode
     ld de, 0xFFFF
     ld c, 109
@@ -1683,6 +1713,10 @@ test18:
     cp '$'
     jp nz, .t18_fail
 
+    ; F120-F123 are our private SETDEF functions: any other CP/M 3 has none.
+    ld a, (ours)
+    or a
+    jp z, .t18_f50
     ; F120/F121 SETDEF order
     ld c, 120
     call BDOS
@@ -1724,6 +1758,7 @@ test18:
     ld c, 123
     call BDOS
 
+.t18_f50:
     ; F50 direct BIOS call: DEVTBL (fn 20) -> HL != 0
     ld hl, f50_pb
     ld b, 8
@@ -1770,6 +1805,12 @@ test19:
     ; === T19: file functions reject an invalid drive ===
     ld de, msg_t19
     ld c, 9
+    call BDOS
+
+    ; A bad drive is a BDOS error: ask for the code back (F45 = FFh), as the
+    ; default on CP/M 3 is to print "Invalid Drive" and end the program.
+    ld e, 0xFF
+    ld c, 45
     call BDOS
 
     ; D:CPM3.SYS (FCB drive code 4; 1=A, 2=B, 3=C, 4=D)
@@ -1857,12 +1898,18 @@ test19:
     or a
     jp z, .t19_fail
 
+    ld e, 0                  ; the normal error mode again
+    ld c, 45
+    call BDOS
     ld de, msg_pass
     ld c, 9
     call BDOS
     ret
 
 .t19_fail:
+    ld e, 0
+    ld c, 45
+    call BDOS
     ld de, msg_step
     ld c, 9
     call BDOS
@@ -1872,6 +1919,13 @@ test19:
     ld c, 9
     call BDOS
     ret
+
+; reselect_home - F14 to the drive under test (F13 selects A: again)
+reselect_home:
+    ld a, (home)
+    ld e, a
+    ld c, 14
+    jp BDOS
 
 test20:
     ; === T20: directory full ===
@@ -2086,6 +2140,15 @@ test22:
     ld de, msg_t22
     ld c, 9
     call BDOS
+    ; F40 zero fill: Locomotive's leaves the stale block contents.
+    ld a, (ours)
+    or a
+    jr nz, .t22_here
+    ld de, msg_skip_ours
+    ld c, 9
+    call BDOS
+    ret
+.t22_here:
 
     ; --- 1. A fresh block: F40 zeroes the records around the target.
     ld hl, fn_test3
@@ -2364,9 +2427,15 @@ test23:
     call BDOS
     or a
     jp nz, .t23_fail
+    ; H = the number of records moved is how our BDOS answers; CP/M 3 only
+    ; promises it on an error, and Locomotive's leaves H alone on success.
+    ld a, (ours)
+    or a
+    jr z, 1F
     ld a, h
     cp 4                       ; the whole F44 count was transferred
     jp nz, .t23_fail
+1:
 
     ; Back to one record; reopen and read the same four records separately.
     ld e, 1
@@ -2521,6 +2590,15 @@ test24:
     ld de, msg_t24
     ld c, 9
     call BDOS
+    ; F108: what a set returns is our BDOS's own.
+    ld a, (ours)
+    or a
+    jr nz, .t24_here
+    ld de, msg_skip_ours
+    ld c, 9
+    call BDOS
+    ret
+.t24_here:
 
     ld de, 0x1234
     ld c, 108
@@ -2588,6 +2666,15 @@ test26:
     ld de, msg_t26
     ld c, 9
     call BDOS
+    ; F59: the loader's calling convention differs.
+    ld a, (ours)
+    or a
+    jr nz, .t26_here
+    ld de, msg_skip_ours
+    ld c, 9
+    call BDOS
+    ret
+.t26_here:
 
     ld hl, fn_smoke
     call set_fcb
@@ -2687,9 +2774,15 @@ test27:
     call BDOS
     or a
     jp nz, .t27_fail
+    ; H = the number of records moved is how our BDOS answers; CP/M 3 only
+    ; promises it on an error, and Locomotive's leaves H alone on success.
+    ld a, (ours)
+    or a
+    jr z, 1F
     ld a, h
     cp 4                       ; all four records moved in one call
     jp nz, .t27_fail
+1:
 
     ld e, 1
     ld c, 44
@@ -2807,9 +2900,15 @@ test28:
     call BDOS
     or a
     jp nz, .t28_fail
+    ; H = the number of records moved is how our BDOS answers; CP/M 3 only
+    ; promises it on an error, and Locomotive's leaves H alone on success.
+    ld a, (ours)
+    or a
+    jr z, 1F
     ld a, h
     cp 4                       ; all four records moved in one call
     jp nz, .t28_fail
+1:
 
     ld e, 1
     ld c, 44
@@ -2887,6 +2986,15 @@ test29:
     ld de, msg_t29
     ld c, 9
     call BDOS
+    ; F99: Locomotive's does not shorten the file as ours does.
+    ld a, (ours)
+    or a
+    jr nz, .t29_here
+    ld de, msg_skip_ours
+    ld c, 9
+    call BDOS
+    ret
+.t29_here:
 
     ld hl, fn_test6
     call delete_name
@@ -2894,7 +3002,8 @@ test29:
     ld de, DMA
     ld c, 26
     call BDOS
-    ld e, 0                    ; F46 for A:
+    ld a, (home)
+    ld e, a                    ; F46 for the drive under test
     ld c, 46
     call BDOS
     or a
@@ -3141,6 +3250,15 @@ test30:
     ld de, msg_t30
     ld c, 9
     call BDOS
+    ; 16-bit blocks via F99 (see T29).
+    ld a, (ours)
+    or a
+    jr nz, .t30_here
+    ld de, msg_skip_ours
+    ld c, 9
+    call BDOS
+    ret
+.t30_here:
 
     ; Remember the default drive and select B:.  Only run when B: is a
     ; 2K-block disk with 16-bit block numbers (DSM > 255); otherwise skip.
@@ -3549,6 +3667,8 @@ fn_test5: db "TEST5   TMP"
 fn_test6: db "TEST6   TMP"
 fn_b16:   db "B16A    TMP"
 t10_before: dw 0
+home: db 0                    ; the drive under test
+ours: db 0                    ; 1 = this is our CP/M 3
 t10_recs: dw 0
 t25_cb:   dw t25_text
           dw t25_end - t25_text
@@ -3573,6 +3693,7 @@ t30_save_drive: db 0
 msg_hdr:  db "DISKTEST v7", 13, 10, "$"
 msg_pass: db " PASS", 13, 10, "$"
 msg_fail: db " FAIL", 13, 10, "$"
+msg_skip_ours: db " SKIP (this system only)", 13, 10, "$"
 msg_end:  db "All tests done.", 13, 10, "$"
 msg_t1:   db "T1 Search$"
 msg_t2:   db "T2 Open+Read$"
