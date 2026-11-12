@@ -1028,7 +1028,7 @@ print_dec:
     jp putc
 
 ; --------------------------------------------------------------------------
-; clear_screen - ANSI ED2 + home
+; clear_screen - ESC E (clear) + ESC H (home)
 ; --------------------------------------------------------------------------
 clear_screen:
     ld de, s_clear
@@ -1117,7 +1117,7 @@ th_symbols:  db 'Symbols in use', 0
 th_maths:    db 'Maths in use', 0
 th_controls: db 'Controls & limits', 0
 
-s_clear:       db ESC, '[2J', ESC, '[H', 0
+s_clear:       db ESC, 'E', ESC, 'H', 0   ; clear, home: the Amstrad codes, not ANSI
 
 ; --------------------------------------------------------------------------
 ; Text (generated from the Amstrad CP/M Plus Language 0 code page)
