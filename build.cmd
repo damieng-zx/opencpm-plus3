@@ -83,7 +83,7 @@ if errorlevel 1 goto :fail
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\biostest.com src\test\biostest.asm
 if errorlevel 1 goto :fail
-%SJASMPLUS% --raw=build\chaintest.com src\test\chaintest.asm
+%SJASMPLUS% --raw=build\chaintst.com src\test\chaintest.asm
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\fonttest.com src\test\fonttest.asm
 if errorlevel 1 goto :fail
@@ -169,7 +169,7 @@ if defined PMAUTOAE_FILE echo   PMAUTOAE.COM: %PMAUTOAE_FILE% (local copy)
 python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\setkeys.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\erase.com build\dir.com build\device.com !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
-python3 tools\mkdsk.py create build\cpm3-test.dsk --format 720k --boot build\bootsect720.bin --system build\loader720.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\setkeys.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\erase.com build\dir.com build\device.com build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com build\biostest.com build\chaintest.com build\fonttest.com build\screenbm.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !PMAUTOAE_FILE! !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3-test.dsk --format 720k --boot build\bootsect720.bin --system build\loader720.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\setkeys.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\erase.com build\dir.com build\device.com build\bdostest.com build\xtetest.com build\disktest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com build\biostest.com build\chaintst.com build\fonttest.com build\screenbm.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !PMAUTOAE_FILE! !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 python3 tools\mkdsk.py create build\cpm3_720.dsk --format 720k --add src\test\hello16.txt

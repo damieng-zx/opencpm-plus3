@@ -2115,9 +2115,9 @@ class Smoke:
                 raise SmokeError("BIOSTEST did not report " + marker)
 
     def run_chaintest(self) -> None:
-        """CHAINTEST: F47 hands a command tail to the CCP and warm-boots."""
-        self.log("CHAINTEST")
-        self.command("CHAINTEST", 1200)
+        """CHAINTST: F47 hands a command tail to the CCP and warm-boots."""
+        self.log("CHAINTST")
+        self.command("CHAINTST", 1200)
         self.wait_for(["Mode: 51 columns", "A>"], frames=500, attempts=10)
         if any("CHAINTEST RETURNED" in l for l in self.history):
             raise SmokeError("F47 returned instead of chaining")

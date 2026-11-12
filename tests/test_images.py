@@ -45,7 +45,7 @@ class DistributionImage(unittest.TestCase):
         names11 = names(DIST)
         for stripped in (b"BDOSTESTCOM", b"XTETEST COM", b"DISKTESTCOM",
                          b"TERMTESTCOM", b"SYSTEST COM", b"REGTEST COM",
-                         b"BIOSTESTCOM", b"CHAINTESCOM",
+                         b"BIOSTESTCOM", b"CHAINTSTCOM",
                          b"SMOKE   TXT", b"PAGE    TXT",
                          b"SMOKE   SUB", b"PARAM   SUB"):
             self.assertNotIn(stripped, names11)
@@ -86,7 +86,7 @@ class Distribution720Image(unittest.TestCase):
         names11 = names(DIST720)
         for stripped in (b"BDOSTESTCOM", b"XTETEST COM", b"DISKTESTCOM",
                          b"TERMTESTCOM", b"SYSTEST COM", b"REGTEST COM",
-                         b"BIOSTESTCOM", b"CHAINTESCOM", b"SCREENBMCOM",
+                         b"BIOSTESTCOM", b"CHAINTSTCOM", b"SCREENBMCOM",
                          b"SMOKE   TXT", b"PAGE    TXT",
                          b"SMOKE   SUB", b"PARAM   SUB",
                          b"PMAUTOAECOM"):
@@ -134,7 +134,7 @@ class TestImage(unittest.TestCase):
         names11 = names(TEST)
         for wanted in (b"BDOSTESTCOM", b"XTETEST COM", b"DISKTESTCOM",
                        b"TERMTESTCOM", b"SYSTEST COM", b"REGTEST COM",
-                       b"BIOSTESTCOM", b"CHAINTESCOM",
+                       b"BIOSTESTCOM", b"CHAINTSTCOM",
                        b"SMOKE   TXT", b"PAGE    TXT",
                        b"SMOKE   SUB", b"PARAM   SUB"):
             self.assertIn(wanted, names11)

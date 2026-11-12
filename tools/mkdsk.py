@@ -354,6 +354,12 @@ class DSKImage:
             name_part, ext_part = filename.rsplit('.', 1)
         else:
             name_part, ext_part = filename, ''
+        if len(name_part) > 8 or len(ext_part) > 3:
+            # A CP/M name is 8.3.  Truncating silently made CHAINTEST.COM land
+            # on the disc as CHAINTES.COM, which real CP/M then reports as
+            # "CHAINTEST?" because it never shortens a command word.
+            print(f"mkdsk: warning: {filename!r} is longer than 8.3 and is "
+                  f"stored as {name_part[:8]}.{ext_part[:3]}", file=sys.stderr)
         name = name_part[:8].ljust(8).encode('ascii')
         ext = ext_part[:3].ljust(3).encode('ascii')
         return name, ext
