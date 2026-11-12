@@ -427,7 +427,7 @@ CP/M 3's BIOS specification includes a notion of **write types** to optimise deb
 The size of block numbers in the allocation map depends on DSM:
 
 - **DSM ≤ 255**: Block numbers are 1 byte. 16 entries per extent.
-- **DSM > 255**: Block numbers are 2 bytes, high byte first (big-endian).
+- **DSM > 255**: Block numbers are 2 bytes, low byte first (little-endian).
   8 entries per extent.
 
 This means a single extent can track:

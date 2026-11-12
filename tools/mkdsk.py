@@ -8,7 +8,7 @@ Produces standard CPCEMU .DSK files.  Two CP/M formats are supported:
         64 directory entries, 8-bit block numbers (DSM=174).
   720k  PCW DS/DD: 80 cylinders, 2 sides, 9 x 512-byte sectors,
         2K blocks, 128 directory entries, 16-bit block numbers
-        (DSM=351, high byte first).
+        (DSM=351, low byte first, as on a real PCW / Locomotive disc).
 
 Usage:
     python mkdsk.py create output.dsk [--format 720k] [--boot boot.bin]
@@ -299,7 +299,7 @@ class DSKImage:
     def _entry_blocks(self, entry):
         if self.block_bits == 8:
             return [b for b in entry[16:32] if b]
-        return [(entry[16 + 2 * i] << 8) | entry[17 + 2 * i]
+        return [entry[16 + 2 * i] | (entry[17 + 2 * i] << 8)
                 for i in range(8)
                 if entry[16 + 2 * i] or entry[17 + 2 * i]]
 
@@ -309,8 +309,8 @@ class DSKImage:
                 entry[16 + i] = blk
             return
         for i, blk in enumerate(blocks):
-            entry[16 + 2 * i] = (blk >> 8) & 0xFF
-            entry[17 + 2 * i] = blk & 0xFF
+            entry[16 + 2 * i] = blk & 0xFF
+            entry[17 + 2 * i] = (blk >> 8) & 0xFF
 
     def _get_used_blocks(self):
         used = set()

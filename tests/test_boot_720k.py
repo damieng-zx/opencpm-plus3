@@ -28,11 +28,13 @@ class LoaderFormats(unittest.TestCase):
                 "SIDED       equ 1", "SIDED       equ 0"):
             self.assertIn(token, self.loader, token)
 
-    def test_16bit_block_numbers_are_high_byte_first(self):
+    def test_16bit_block_numbers_are_low_byte_first(self):
+        """The standard CP/M order, which Locomotive's CP/M Plus also reads: a
+        high-byte-first image made a real +3 run off the end of the disc."""
         body = self.loader[self.loader.index("block_number:"):
                             self.loader.index("NAME_SYS:")]
-        self.assertIn("ld d, (ix + 16)", body)
-        self.assertIn("ld e, (ix + 17)", body)
+        self.assertIn("ld e, (ix + 16)", body)
+        self.assertIn("ld d, (ix + 17)", body)
 
     def test_sided_disks_select_the_head_per_logical_track(self):
         body = self.loader[self.loader.index("seek_logical:"):

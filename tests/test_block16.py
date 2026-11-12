@@ -1,7 +1,7 @@
 """16-bit block-number support (CP/M 3, DSM > 255).
 
 A 720K PCW DS/DD disk has 2K blocks and 352 blocks, so the directory and
-FCB allocation maps hold eight 16-bit block numbers, high byte first.
+FCB allocation maps hold eight 16-bit block numbers, low byte first.
 These checks pin the BDOS accessors and the mkdsk 720K builder.
 """
 
@@ -37,21 +37,31 @@ class BlockAccessors(unittest.TestCase):
         self.assertIn("ld a, 16", body)
         self.assertIn("ld a, 8", body)
 
-    def test_fcb_and_dir_reads_are_big_endian(self):
+    def test_fcb_and_dir_reads_are_low_byte_first(self):
         text = source("src/bdos/bdos.zpa")
         for name, end in (("get_fcb_block:", "put_fcb_block:"),
                           ("get_dir_block:", "set_alloc_bit:")):
             body = text[text.index(name):text.index(end)]
-            self.assertIn("ld a, (hl)", body, name)
-            self.assertIn("ld l, (hl)", body, name)
-            self.assertIn("ld h, a", body, name)
+            self.assertIn("ld a, (hl)", body, name)     # low byte
+            self.assertIn("ld h, (hl)", body, name)     # then the high byte
+            self.assertIn("ld l, a", body, name)
 
-    def test_fcb_store_is_big_endian(self):
+    def test_fcb_store_is_low_byte_first(self):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index("put_fcb_block:"):text.index("get_dir_block:")]
-        self.assertIn("ld a, d", body)
-        self.assertIn("ld (hl), a", body)
-        self.assertIn("ld a, e", body)
+        self.assertIn("ld (hl), e", body)
+        self.assertIn("ld (hl), d", body)
+        self.assertLess(body.index("ld (hl), e"), body.index("ld (hl), d"))
+
+    def test_a_block_above_255_is_stored_low_byte_first(self):
+        """Block 0x0143 is bytes 43 01.  Read the other way round it is block
+        0x4301, far off the end of a 720K disc; that is the 'Track 200,
+        sector 2 missing address mark' Locomotive's CP/M reported."""
+        dsk = mkdsk.DSKImage("720k")
+        entry = bytearray(32)
+        dsk._set_entry_blocks(entry, [0x0143, 0x0002])
+        self.assertEqual(bytes(entry[16:20]), bytes([0x43, 0x01, 0x02, 0x00]))
+        self.assertEqual(dsk._entry_blocks(entry), [0x0143, 0x0002])
 
     def test_alloc_vector_ops_take_16bit_blocks(self):
         text = source("src/bdos/bdos.zpa")
@@ -106,8 +116,8 @@ class MkDsk720k(unittest.TestCase):
             entry = loaded._read_dir_entry(0)
             self.assertEqual(entry[1:12], b"B16     TXT")
             self.assertEqual(entry[15], 8)            # RC
-            # Big-endian block number in the first slot (block 2).
-            self.assertEqual((entry[16], entry[17]), (0x00, 0x02))
+            # Little-endian block number in the first slot (block 2).
+            self.assertEqual((entry[16], entry[17]), (0x02, 0x00))
             self.assertEqual(loaded._entry_blocks(entry), [2])
 
     def test_multiple_blocks_and_extent_entries(self):

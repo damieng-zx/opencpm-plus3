@@ -105,8 +105,8 @@ class Extents(unittest.TestCase):
         for _, entry in extents:
             blocks = dsk._entry_blocks(entry)
             for i, block in enumerate(blocks):
-                self.assertEqual(entry[16 + 2 * i], (block >> 8) & 0xFF)
-                self.assertEqual(entry[17 + 2 * i], block & 0xFF)
+                self.assertEqual(entry[16 + 2 * i], block & 0xFF)
+                self.assertEqual(entry[17 + 2 * i], (block >> 8) & 0xFF)
                 high_seen |= block > 0xFF
         self.assertTrue(high_seen, "no allocation block above 255")
         self.assertEqual(extents[-1][1][15], 64)  # four 2K blocks = 64 records

@@ -40,7 +40,7 @@ BIOS_ADDR   equ 0xC000        ; Where to load the system file
     IFDEF DS720
 BLK_SECTORS equ 4             ; 512-byte sectors per 2K block
 DIR_SECTORS equ 8             ; 128 directory entries
-BLK16       equ 1             ; 16-bit big-endian block numbers
+BLK16       equ 1             ; 16-bit block numbers, low byte first
 SIDED       equ 1             ; alternating sides
     ELSE
 BLK_SECTORS equ 2             ; 512-byte sectors per 1K block
@@ -380,8 +380,8 @@ load_file:
 ; ==========================================================================
 block_number:
     IF BLK16
-    ld d, (ix + 16)
-    ld e, (ix + 17)            ; 16-bit block numbers are high byte first
+    ld e, (ix + 16)
+    ld d, (ix + 17)            ; 16-bit block numbers are low byte first
     ELSE
     ld e, (ix + 16)
     ld d, 0

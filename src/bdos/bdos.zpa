@@ -174,7 +174,7 @@ cached_drive: equ 0xA6F7       ; Drive the cached_* above refer to (0xFF = none)
                                ; same drive, avoiding a full directory scan per
                                ; F20/F21/F33/F40 record. F13 invalidates it.
 cached_blk16: equ 0xA6F8       ; 1 = DSM > 255: eight 16-bit block numbers per
-                               ; extent, high byte first, instead of sixteen
+                               ; extent, low byte first, instead of sixteen
                                ; 8-bit ones (CP/M 3 16-bit block format).
 
 ; Scratch for the allocation-map loops (build_alv, F19, F99).
@@ -1806,7 +1806,9 @@ build_alv:
 ; Allocation-map access (8-bit or 16-bit block numbers)
 ;
 ; CP/M 3 uses sixteen 8-bit block numbers per extent when DSM <= 255, and
-; eight 16-bit block numbers (high byte first) when DSM > 255.  The FCB map
+; eight 16-bit block numbers (low byte first, as everywhere on the Z80 and
+; as the Amstrad and Locomotive CP/M Plus disks have them) when DSM > 255.
+; The FCB map
 ; (bytes 16-31) and the directory entry map use the same encoding, so the
 ; accessors below work on either 32-byte block.
 ; --------------------------------------------------------------------------
@@ -1860,10 +1862,10 @@ get_fcb_block:
     ld a, (cached_blk16)
     or a
     jr z, .byte
-    ld a, (hl)                     ; high byte first
+    ld a, (hl)                     ; low byte first
     inc hl
-    ld l, (hl)                     ; low byte
-    ld h, a
+    ld h, (hl)                     ; high byte
+    ld l, a
     ret
 .byte:
     ld a, (hl)
@@ -1888,11 +1890,9 @@ put_fcb_block:
     ld a, (cached_blk16)
     or a
     jr z, .byte
-    ld a, d
-    ld (hl), a                     ; high byte first
+    ld (hl), e                     ; low byte first
     inc hl
-    ld a, e
-    ld (hl), a
+    ld (hl), d
     ret
 .byte:
     ld (hl), e
@@ -1910,10 +1910,10 @@ get_dir_block:
     ld a, (cached_blk16)
     or a
     jr z, .byte
-    ld a, (hl)                     ; high byte first
+    ld a, (hl)                     ; low byte first
     inc hl
-    ld l, (hl)                     ; low byte
-    ld h, a
+    ld h, (hl)                     ; high byte
+    ld l, a
     ret
 .byte:
     ld a, (hl)

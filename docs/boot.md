@@ -61,7 +61,7 @@ DI not yet asserted.
   so neither the 16K system image (`C000-FFFF`) nor the bank-6 staging
   (`8000-BFFF`) can trample it.
 - One source builds both disc layouts; `-DDS720` selects 2K blocks, 16-bit
-  big-endian block numbers, 128 directory entries and alternating sides for
+  little-endian block numbers, 128 directory entries and alternating sides for
   `build/loader720.bin`, used by the 720K test image.
 - Scans the directory for each file in turn: `FONT51.BIN` to `8000`,
   `FONT32.BIN` to `8800`, `FONT64.BIN` to `9400`, `CCP.COM` to `B000`
