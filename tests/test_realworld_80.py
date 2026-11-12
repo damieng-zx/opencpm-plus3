@@ -36,6 +36,34 @@ class RealWorld24x80(unittest.TestCase):
         self.assertIn('pkg.get("setup", [])', runner)
         self.assertIn('rw.wait_for(setup["expect"]', runner)
 
+    def test_plan80_is_not_called_turbo_pascal(self):
+        """PLAN80 is Sorcim PASCAL/M, not Turbo Pascal.
+
+        An earlier note claimed it was a Turbo Pascal overlay-loader error.
+        The binaries say otherwise: the loader names SORCIM, OV1 is the
+        compiled program and OV2 is the PASCAL/M library.  Guard the docs
+        against that mistake coming back.
+        """
+        text = source("docs/compatibility.md")
+        section = text[text.index("## PLAN80 and PASCAL/M"):]
+        section = section[:section.index("\n## ", 10)]
+        self.assertIn("Sorcim", section)
+        self.assertIn("PASCAL/M", section)
+        self.assertIn("04/22/80", section)
+        self.assertIn("VERSION 2.4", section)
+        # The evidence that cleared our BDOS must stay recorded.
+        self.assertIn("byte for byte", section)
+        self.assertIn("File PLAN80.OVx not found", section)
+
+        # ...and it must not be described as Turbo Pascal anywhere.
+        for name in ("docs/compatibility.md", "docs/realworld-suite.md"):
+            self.assertNotIn("Turbo Pascal overlay", source(name), name)
+
+        pkg = self.packages["plan80"]
+        self.assertTrue(pkg.get("known_issue"))
+        self.assertIn("PASCAL/M", pkg["known_issue"])
+        self.assertEqual(pkg["expect"], ["PLAN80 Graphic Analysis"])
+
     def test_manifest_fixtures_may_rename(self):
         """A fixture can be staged under a different on-disk name.
 

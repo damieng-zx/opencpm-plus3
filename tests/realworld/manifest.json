@@ -1538,6 +1538,22 @@
       "notes": "The only package that discretely extracts in two stages: PMsfx v2.11 asks once for the binaries (DSKWRITE.COM and .TXT) and then again, separately, for the Z80 source.  Answering yes to both is the point - it exercises the extractor's repeated prompt.  The tool then prints its usage, which is where the automated run stops: writing a disc would need a blank floppy.  DSKWRITE is the counterpart to DISKCOPY.COM, so it is worth having on the list."
     },
     {
+      "id": "plan80",
+      "title": "Plan-80 (Sorcim PASCAL/M)",
+      "url": "http://www.retroarchive.org/cpm/business/PLAN80.ZIP",
+      "archive": "zip",
+      "members": [
+        "PLAN80.COM",
+        "PLAN80.OV1",
+        "PLAN80.OV2"
+      ],
+      "command": "PLAN80",
+      "expect": ["PLAN80 Graphic Analysis"],
+      "frames": 4000,
+      "known_issue": "The PASCAL/M runtime stops with '! Non-existent Proc/Seg called; At PC= D736h SP= CC94h' instead of drawing its title ('PLAN80 Graphic Analysis'), so the package asserts the title and never finds it.  Both overlays are found and read correctly (a probe read all 37,888 bytes of OV1 and 9,728 of OV2 byte for byte), removing either changes the message to 'File PLAN80.OVx not found', and fragmentation, the 720K layout and the RAM disk all behave the same.  The library is dated 04/22/80 and the program is (C) 1982, so the archive itself most likely pairs mismatched PASCAL/M versions.  See docs/compatibility.md, 'PLAN80 and PASCAL/M'.",
+      "notes": "Sorcim PASCAL/M P-code, not Turbo Pascal: PLAN80.COM is the loader, OV1 the compiled program and OV2 the runtime library.  It is in the suite as a known issue because the loader's behaviour (finding and reading overlays, then reporting a P-code fault) is itself worth regression coverage, and because a future change to the overlay path would show up here."
+    },
+    {
       "id": "bdsc",
       "title": "BDS C 1.60",
       "url": "https://www.bdsoft.com/dist/bdsc-all.zip",

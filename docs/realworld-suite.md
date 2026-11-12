@@ -63,6 +63,7 @@ separate, explicitly triggered workflow.
 | `c80` | Software Toolworks C/80 3.1 | `C` → `AS` → `HELLO.COM` prints a line | Pass |
 | `magicwand` | Magic Wand 1.1 (text editor) | Menu, then the 80-column status screen | Pass |
 | `dskwrite` | DSKWRITE (John Elliott) | Two-stage self-extract, then its usage text | Pass |
+| `plan80` | Plan-80 (Sorcim PASCAL/M) | PASCAL/M overlay loader; the runtime reports a missing Proc/Seg | Known issue (see below) |
 | `bdsc` | BDS C 1.60 | `CC` → `CLINK` → `HELLO.COM` prints `HELLO, WORLD` | Pass |
 | `wordstar30` | WordStar 3.0 | Full-screen editor, terminal escapes | Pass (80-column caveat) |
 | `wordstar30_80` | WordStar 3.0 (24x80) | 80-column menu, EXTEND+Enter right half | Pass (escape artifacts) |
@@ -201,6 +202,19 @@ issues; the others are history):
 - **Sargon** is copy-protected.  It issues raw uPD765 `READ DATA` commands
   against the boot track (C=1, R=1..N, polled on port `2FFD`) and loops forever
   waiting for the original disk's sector IDs, so it never draws its title.
+
+- **Plan-80** is Sorcim PASCAL/M P-code, not Turbo Pascal: `PLAN80.COM` is a
+  loader, `PLAN80.OV1` the compiled program (`VERSION 2.4 (C) 1982`) and
+  `PLAN80.OV2` the runtime library (`Sorcim PASCAL/M Library`, `04/22/80`).
+  It stops with `! Non-existent Proc/Seg called; At PC= D736h SP= CC94h`
+  instead of drawing `PLAN80 Graphic Analysis`.  The overlays are found and
+  read correctly - a probe read all 37,888 bytes of OV1 and 9,728 of OV2 and
+  every byte matched - and removing either gives `File PLAN80.OVx not found`
+  instead, so the loader works.  Fragmentation, the 720K layout, the RAM disk
+  and the `.TRM` terminal files all make no difference, and the program only
+  calls BDOS functions this system implements.  The two files are two years
+  apart, which points at a version mismatch inside the archive; see
+  [compatibility.md](compatibility.md#plan80-and-pascalm).
 
 - **Colossal Cave Adventure** (Mike Goetz's CP/M port of Crowther and Woods)
   takes a 3-digit seed before play; the harness enters `123`.  Its parser only

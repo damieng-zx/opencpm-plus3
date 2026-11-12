@@ -56,6 +56,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 | **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The FID is not loaded, and is not a gap to close: `CLOCK.FID` and `SERIAL.FID` are built for Locomotive's private common-memory ABI (they `CALL` fixed addresses such as `FF04`/`FF05`/`FF08`/`FF09`, which land inside this system's `close_dir_update`) and carry a different header format, so loading them would mean reserving those addresses and reimplementing an undocumented interface. The status line now shows `HH:MM` natively instead (see `docs/API.md`, *Status line*), from the `scb_date`/`scb_minute`/`scb_sec` the ISR maintains. |
 | **ZSID / SID / DDT breakpoints** | `G` with a stop address (and `T`/`U` tracing) stops at a random address inside the program instead of at the breakpoint, and a long ZSID command such as a large `F` fill is cut short the same way. Loading, short dumps and `G0` work. | Not fixable without breaking +3 compatibility; see [Debuggers and RST 7](#debuggers-and-rst-7). Automated as `zsid_break` (known issue). |
 | **Sargon (chess)** | Prints nothing after the command line; the CPU spins polling port `2FFD`. | Copy protection. The program issues raw uPD765 `READ DATA` commands against the boot track (`C=1`, `R=1..N`) and waits for the original disk's sector IDs, which never match, so it never reaches its title screen. Not a BIOS bug: no CP/M file or console call is involved. |
+| **PLAN80 (PASCAL/M)** | `PLAN80` prints `! Non-existent Proc/Seg called; At PC= D736h SP= CC94h` and returns to the prompt; no title screen. | Not a Turbo Pascal program: it is **Sorcim PASCAL/M** P-code. `PLAN80.COM` is the loader, `PLAN80.OV1` the compiled program (`&PLAN80 VERSION 2.4 (C) 1982`) and `PLAN80.OV2` the runtime library (`Sorcim PASCAL/M Library`, dated 04/22/80). The overlays are found and read correctly - a test probe read all 37,888 bytes of OV1 and 9,728 of OV2 and both matched the archive byte for byte, and removing either makes the loader say `File PLAN80.OVx not found` instead. Fragmentation, the 180K/720K layout and floppy vs RAM disk all make no difference, and the only BDOS calls it makes (F1, F2, F11, F15, F16, F20, F22, F26) are all implemented. The Proc/Seg error is the runtime failing to find a segment the program asks for, and the two files are two years apart: most likely a PASCAL/M library/program version mismatch in the archive itself. See [PLAN80 and PASCAL/M](#plan80-and-pascalm). |
 
 Recently fixed: **DRI ED/SET/SETKEYS**.  ED's `E` command corrupted page
 zero because its record-buffer base lives at `FCB+21h` (a 33-byte FCB) and
@@ -126,6 +127,46 @@ dump and `G0`.  Anything that runs for longer than about a frame with
 interrupts on is exposed, including ZSID's own commands: `F100,CFFF,0` was
 cut short with `*E517`, an address inside ZSID.  Warm boot restores our
 vector, so leaving the debugger returns the system to normal.
+
+## PLAN80 and PASCAL/M
+
+PLAN80 (Business Planning Systems, 1982) is compiled with **Sorcim
+PASCAL/M**, not Turbo Pascal.  It is a P-code system: the `.COM` is a
+loader, `PLAN80.OV1` holds the compiled program and `PLAN80.OV2` is the
+runtime library, and segments are loaded from those files on demand.  The
+strings say so plainly:
+
+| File | Size | Contents |
+|---|---|---|
+| `PLAN80.COM` | 12,800 | loader; a SORCIM copyright and `PASCAL/M version NOT compatible with OS.` |
+| `PLAN80.OV1` | 37,888 | `&PLAN80 VERSION 2.4  COPYRIGHT (C) 1982`, plus a segment table naming `ABS, ACOS, AMORT, ASIN, ATAN, AVG, COS, EXP, IRR, LN, LOG, LOOKUP, MAX, MIN, NPV, SIN, SL, SOD, SQRT, SUM, TAN` |
+| `PLAN80.OV2` | 9,728 | `Sorcim PASCAL/M Library`, dated `04/22/80`, holding the error text and the `PRINTERR`/`INITIALISE` entries |
+
+It stops with `! Non-existent Proc/Seg called; At PC= D736h SP= CC94h`,
+which is the runtime's own P-code error.  What ruled our side out:
+
+- **The overlays load.** Removing `PLAN80.OV1` or `PLAN80.OV2` changes the
+  message to `File PLAN80.OVx not found`; with both present the runtime
+  gets far enough to raise its own error.
+- **They load correctly.** A probe that opens an FCB the CCP filled in and
+  reads each file sequentially into the TPA read all 37,888 bytes of OV1
+  and all 9,728 bytes of OV2, byte for byte.  (An earlier check appeared to
+  show one corrupted byte; that was the probe writing its own completion
+  marker into its buffer.)
+- **Not fragmentation**, not the disc layout (the 720K PCW image fails the
+  same way), and not floppy versus RAM disk.
+- **Not a missing BDOS function.** PLAN80 calls only F1, F2, F11, F15, F16,
+  F20, F22 and F26, all of which this BDOS implements.
+- Supplying the `.TRM` terminal files, under their own names or as
+  `TERMINAL.TRM`, changes nothing.
+
+So the segment the program asks for is not in its library.  The two files
+are two years apart (`04/22/80` library, `1982` program), which points at a
+version mismatch inside the archive rather than at this system.  Reaching a
+firm conclusion would mean a PASCAL/M segment dump, which the archive does
+not document; the package is therefore recorded as a known issue rather than
+automated.
+
 
 ## WordStar 3.0 display width
 
@@ -201,7 +242,9 @@ It does not help WordStar, whose 80-column layout is unchanged.
 
 - [x] SuperCalc (original) - works; .CAL save blocked by its media check (automated)
 - [x] Microsoft Multiplan 1.05 - works (automated; 24x80 variant too)
-- [ ] Plan-80
+- [ ] Plan-80 - investigated, see [PLAN80 and PASCAL/M](#plan80-and-pascalm);
+  the PASCAL/M segment loader reports a missing Proc/Seg even though both
+  overlays load byte for byte correctly
 - [ ] MicroStat
 - [ ] Money Maestro
 - [ ] dBASE II 2.4
