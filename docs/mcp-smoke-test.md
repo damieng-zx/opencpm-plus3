@@ -286,6 +286,66 @@ round trip: `PMAUTOAE` must report `Extracting OK` for all ten members,
 `SMOKE OK`.  The check removes what it wrote, because a later `STAT *.TXT`
 counts files.  Without the local copy it is skipped.
 
+### Running them on Locomotive's CP/M Plus
+
+The programs also run on Locomotive's CP/M Plus v1.0, the system a real +3
+boots, which is how to tell what is CP/M 3 behaviour from what is ours.  Boot
+Locomotive's disc and run them from the test disc, which must be in the drive
+you run from: they act on the drive they are started from (`B:` if you
+`B:` first), not on `A:`.  They create, delete, format and rewrite things
+there, so use a scratch copy of the disc.
+
+| Program | On Locomotive's |
+|---|---|
+| `SYSTEST`, `BIOSTEST`, `XTETEST`, `BDOSTEST`, `DISKTEST` | Pass; the checks that are about this system only show `SKIP` |
+| `CHAINTST` | Runs `SCREEN` |
+| `FONTTEST` | Works; `W` does nothing there (no 32 or 64 columns) |
+| `INPTEST` | Reads and prints a line |
+| `REGTEST` | A report: `B` is `-` for every call, because CP/M 3 returns `BA = HL` |
+| `TERMTEST` | Says it cannot run there and stops: it reads this system's character buffer |
+
+Each of the five detects our system once, with `F120` (our private SETDEF
+order byte: 0-3 here, `FFh` on any other CP/M 3), and prints `SKIP` for what
+is ours.  The skips and why:
+
+- **Not CP/M 3 behaviour.**  `F8`/`F7` (IOBYTE) and the page-zero user/drive
+  byte, `F59`, `F107`'s serial number, our private `F120`-`F123`, `CD_INFO`,
+  the SCB being too small for offset 63h, the clock check that reads our SCB
+  from common memory, `KM_KT_GET` as a queue that gives back what
+  `KM_KT_PUT` put in (on Locomotive's the tokens are typed into the console),
+  and the string limits of `KM_SET_EXPAND`.
+- **Locomotive's differs and which is right is not settled.**  `F40` zero
+  fill (records before the target in a fresh block are not zeroed there),
+  `F99` truncation (the file keeps its size), what `F108` returns, the
+  `SECTRN` result with no table, and `FLUSH`'s return code.
+- **Things only we restrict.**  A bank other than 1 in `DD_FORMAT`,
+  `DD_L_READ`/`DD_L_WRITE`; a bad spec in `DD_L_XDPB`/`DD_L_DPB`; an XDPB
+  below `C000h`.  Locomotive accepts bank 0 as a real bank, so the call
+  succeeds and writes: `XTETEST` must not make it there.
+- **Needs a person.**  `KM_SET_KEY` and key repeat need a key pressed or
+  held; `BDOSTEST` asks for a `K` at `F6` `FDh`.
+- **No device.**  `F4`, `F5`, `F112`, and `BIOSTEST`'s `LIST`, `AUXOUT` and
+  `AUXIN` ask the BIOS for status and show `SKIP (device not ready)`: with
+  nothing attached the real calls wait for ever.
+
+Where our OS differs from Locomotive's in ways a program could see:
+
+| | Ours | Locomotive's |
+|---|---|---|
+| TPA bank number in BIOS `XMOVE`/`bank_sel` | 0 | 1 (CP/M 3's) |
+| XDPB flags, freeze (`DD_LOGIN`, `DD_L_XDPB`) | `40h`, `FFh` | `60h` (MFM + multi-track), `00h` |
+| BIOS `DEVTBL` first device | `CON` | `CRT`, then `LPT`, `SIO` |
+| `KM_KT_PUT` | private token queue | types into the console |
+| Console width in the SCB (`conwidth`) | 50 for 51 columns | 49 (it calls it 50 columns) |
+| `F45` error mode | any odd value returns codes | `FFh` returns, `FEh` returns and shows, else stop |
+| Record count in H after a multi-sector `F20`/`F21` | the count | not set on success |
+| Chained command at 0080h (`F47`) | length byte, then text | a NUL-terminated string |
+| `DD_FORMAT`/`DD_L_READ` bank 0 | refused | accepted |
+
+The first two rows are the ones a real program is most likely to meet: a
+program that calls `XMOVE` with bank 1 for the TPA works on Locomotive's and
+not on ours.
+
 ## Setup
 
 Start the emulator and boot the image:

@@ -13,6 +13,10 @@
 ; full.  Functions exercised: F12 (core), F2 (console/screen path), F25
 ; (disk status), F13 (disk reset), F15 OPEN (file path, FCB shadow).
 ;
+; This is a report, not a pass/fail.  CP/M 3 returns its result in both A and
+; B (BA = HL), so on Locomotive's CP/M Plus B shows '-' for every call; only
+; our BDOS keeps it.  Relying on that is not portable to other CP/M 3 systems.
+;
 ; Build: sjasmplus --raw=build/regtest.com src/test/regtest.asm
 
     ORG 0100h
@@ -214,4 +218,6 @@ out_f15: DB "F15: B. D. X. Y.", 0Dh, 0Ah, '$'
 fn_cpm3sys: DB "CPM3    SYS"
 
 msg_done:
-    DB 0Dh, 0Ah, "REGTEST DONE", 0Dh, 0Ah, '$'
+    DB 0Dh, 0Ah, "REGTEST DONE", 0Dh, 0Ah
+    DB "(a report, not a pass/fail: CP/M 3 returns", 0Dh, 0Ah
+    DB "BA = HL, so B changing is normal elsewhere)", 0Dh, 0Ah, '$'

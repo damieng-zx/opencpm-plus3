@@ -20,14 +20,17 @@ start:
     ld c, F_PSTR
     call BDOS
 
-    ; Command for the next command: length byte, "SCREEN" and a NUL.  Real
-    ; CP/M 3 reads the line up to the NUL, not by the length, so without it
-    ; whatever the last command left behind at 0087h is run on the end.
+    ; The command line for the next program at 0080h.  Our CCP reads it as a
+    ; length byte and text (the CP/M 2.2 command tail); Locomotive's reads a
+    ; NUL-terminated string from 0080h itself.  One layout serves both: the
+    ; first byte is a space, which is a blank to skip for the string reader
+    ; and a length of 32 for ours (it parses up to the NUL).
     ld hl, chain_cmd
     ld de, DMA
     ld bc, chain_len
     ldir
 
+    ld e, 0                     ; F47 flag: chain as a typed command would
     ld c, F_CHAIN
     call BDOS                   ; never returns: warm boot + CCP chain
 
@@ -40,5 +43,5 @@ start:
 msg_start:    db "CHAINTEST START", 0Dh, 0Ah, '$'
 msg_returned:  db "CHAINTEST RETURNED", 0Dh, 0Ah, '$'
 
-chain_cmd:  db 6, "SCREEN", 0
+chain_cmd:  db " SCREEN", 0
 chain_len   equ $ - chain_cmd

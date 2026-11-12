@@ -26,6 +26,12 @@
 ; Exits with "TERMTEST..OK" on screen (24x80 flip phase) and leaves 51
 ; columns when a key is pressed.
 ;
+; This is a test of our own screen driver: it reads the screen contents back
+; out of our character buffer in bank 6, which no other CP/M 3 has, and sets
+; modes (32 columns, 24x80) that Locomotive's does not offer.  On any other
+; system it says so and stops; FONTTEST shows the character set there, and
+; tools/screen_bench.py compares drawing speed.
+;
 ; Build: sjasmplus --raw=build/termtest.com src/test/termtest.asm
 
     org 0x0100
@@ -49,6 +55,19 @@ CHK_BASE        equ 0xD000      ; common-memory window the checker is copied to
 
 ; --------------------------------------------------------------------------
 start:
+    ; Is this our CP/M 3?  F120 (the SETDEF order byte) is ours, 0-3; any other
+    ; CP/M 3 answers an unknown function with FFh.
+    ld e, 0
+    ld c, 120
+    call BDOS
+    cp 4
+    jr c, .ours
+    ld de, msg_foreign
+    ld c, F_PRINT
+    call BDOS
+    rst 0
+.ours:
+
     ; Compute the USERF (BIOS function 30) entry from the warm-boot vector.
     ld hl, (0x0001)
     dec hl
@@ -1416,3 +1435,6 @@ s_lines:
     db "20", CR, LF, "21", CR, LF, "22", CR, LF, "23", CR, LF
     db "24", CR, LF, "25", CR, LF, "26", CR, LF, "27", CR, LF
     db "28", CR, LF, "29", CR, LF, "$"
+
+msg_foreign: db 13, 10, 'TERMTEST SKIP: it reads our screen buffer.', 13, 10
+             db 'Use FONTTEST for the character set.', 13, 10, '$'
