@@ -257,7 +257,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   rebuilds the XDPB from the boot sector's 10-byte AMSDOS spec (so 10-sector
   42-track layouts work)
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
-- `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/font64.ch8` (all 256 glyphs) by `tools/mkfont64.py`
+- `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/font64.ch8` (all 256 glyphs) by `tools/mkfont64.py`, which writes each row into both nibbles (`0xA0` -> `0xAA`) so the renderer merges a glyph into either half of a screen byte with one mask and no shift
 - `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O).  The directory/FCB
   helpers (`find_free_block`, `read_dir_entry`, `write_dir_entry`,
   `dir_sector_to_bios`, `search_next_entry`, `match_fcb`, `bf_f15`-`bf_f18`,

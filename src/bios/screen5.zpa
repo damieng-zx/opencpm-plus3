@@ -227,9 +227,9 @@ _render_char_body:
     dec a
     jr z, .shift1
     dec a
-    jp z, .shift2
+    jr z, .shift2
     dec a
-    jp z, .shift3
+    jr z, .shift3
     dec a
     jp z, .shift4
     dec a
@@ -259,11 +259,14 @@ _render_char_body:
     ret
 
 .render64:
-    ; --- 64-col path: 4-pixel pitch, two phases ---
-    ; pixel_x = col * 4, so byte_col = col >> 1 and the phase is col & 1:
-    ; even columns take the glyph's high nibble, odd columns its low nibble.
-    ; A 4-pixel glyph never spills past its byte (16 bits would be needed to
-    ; straddle), so this is the simplest and fastest of the three renderers.
+    ; --- 64-col path: 4-pixel pitch, two glyphs per screen byte ---
+    ; pixel_x = col * 4, so byte_col = col >> 1 and the nibble is col & 1:
+    ; even columns own the high nibble, odd columns the low nibble.  A
+    ; 4-pixel glyph never spills past its byte, so there is nothing to shift:
+    ; the font stores every row in BOTH nibbles (tools/mkfont64.py), and the
+    ; glyph is merged in under a nibble mask,
+    ;     screen ^ ((glyph ^ screen) & mask)  =  screen&~mask | glyph&mask
+    ; which is the same eight instructions for either column.
     ld a, c
     ld e, a                    ; E = column (preserved by _calc_row_addr)
     srl a
@@ -274,38 +277,20 @@ _render_char_body:
     or l
     ld l, a                    ; HL = screen addr for (row, byte_col, scan 0)
     ld a, e
-    and 1
-    jr nz, .r64_hi
-
-    ; phase 0: glyph in the high nibble, keep the odd column's pixels
+    rrca                       ; carry = odd column
+    sbc a, a                   ; FF for odd, 00 for even
+    xor 0xF0                   ; 0F for odd (low nibble), F0 for even
+    ld c, a                    ; C = the nibble this column owns
     ld b, 8
-.r64_lo_scan:
-    ld d, (ix + 0)
+.r64_scan:
+    ld a, (ix + 0)
+    xor (hl)
+    and c
+    xor (hl)                   ; this column's nibble from the glyph, the
+    ld (hl), a                 ; other column's nibble from the screen
     inc ix
-    ld a, (hl)
-    and 0x0F
-    or d
-    ld (hl), a
     inc h
-    djnz .r64_lo_scan
-    ret
-
-.r64_hi:
-    ; phase 1: glyph >> 4 into the low nibble, keep the even column's pixels
-    ld b, 8
-.r64_hi_scan:
-    ld d, (ix + 0)
-    inc ix
-    srl d
-    srl d
-    srl d
-    srl d
-    ld a, (hl)
-    and 0xF0
-    or d
-    ld (hl), a
-    inc h
-    djnz .r64_hi_scan
+    djnz .r64_scan
     ret
 
 ; --- Shift-specialised 51-col bodies ---

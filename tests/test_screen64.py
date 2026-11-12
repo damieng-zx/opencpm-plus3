@@ -36,18 +36,23 @@ class ScreenDriver(unittest.TestCase):
         self.assertIn("ld a, (LF_FLAGS)", body)
         self.assertIn("and 0x10", body)
 
-    def test_renderer_has_two_phases_and_no_spill(self):
+    def test_renderer_masks_one_nibble_and_never_spills(self):
         text = screen_source()
         body = text[text.index(".render64:"):text.index("; --- Shift-specialised")]
-        # byte_col = col >> 1, phase = col & 1
+        # byte_col = col >> 1; the column's parity picks the nibble mask
         self.assertIn("srl a", body)
         self.assertIn("ld b, a", body)
-        self.assertIn("and 1", body)
-        self.assertIn("jr nz, .r64_hi", body)
-        # even column: high nibble; odd column: glyph >> 4 into the low nibble
-        self.assertIn("and 0x0F", body)
-        self.assertIn("and 0xF0", body)
-        self.assertEqual(body.count("srl d"), 4)
+        self.assertIn("rrca", body)               # carry = odd column
+        self.assertIn("xor 0xF0", body)           # F0 even, 0F odd
+        # screen ^ ((glyph ^ screen) & mask): the font already has the glyph in
+        # both nibbles, so there is no shifting and no per-phase loop.
+        merge = body[body.index(".r64_scan:"):]
+        self.assertIn("xor (hl)", merge)
+        self.assertIn("and c", merge)
+        self.assertEqual(merge.count("xor (hl)"), 2)
+        self.assertNotIn("srl", merge)
+        self.assertNotIn("sra", merge)
+        self.assertNotIn("rrca", merge)
         # Never writes a second byte per glyph row.
         self.assertNotIn("inc l", body)
 
@@ -101,11 +106,19 @@ class Font(unittest.TestCase):
         self.assertEqual((ROOT / "src" / "bios" / "font64.bin").read_bytes(),
                          mkfont64.build())
 
-    def test_font_is_4_pixels_wide(self):
+    def test_font_is_4_pixels_wide_in_both_nibbles(self):
+        """The renderer masks one nibble out of each row, so both halves of
+        every byte must hold the same 4 pixels."""
         data = (ROOT / "src" / "bios" / "font64.bin").read_bytes()
         self.assertEqual(len(data), 256 * 8)
+        bad = [i for i, value in enumerate(data) if value >> 4 != value & 0x0F]
+        self.assertEqual(bad, [], "glyph rows whose nibbles differ")
+
+    def test_source_is_4_pixels_wide(self):
+        data = (ROOT / "src" / "bios" / "font64.ch8").read_bytes()
+        self.assertEqual(len(data), 256 * 8)
         bad = [i for i, value in enumerate(data) if value & 0x0F]
-        self.assertEqual(bad, [], "glyph rows with pixels below bit 4")
+        self.assertEqual(bad, [], "source rows with pixels below bit 4")
 
     def test_the_whole_character_set_is_drawn(self):
         """Control-code glyphs, box drawing, accents and symbols, not just

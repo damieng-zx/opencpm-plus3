@@ -2670,7 +2670,7 @@ class Smoke:
         ccp = (ROOT / "src" / "bios" / "font64.bin").read_bytes()
         rows = self.screen()
         row = next(i for i, line in enumerate(rows) if line.startswith("A>"))
-        expect = bytes((ccp[ord("A") * 8 + r] & 0xF0) | (ccp[ord(">") * 8 + r] >> 4)
+        expect = bytes((ccp[ord("A") * 8 + r] & 0xF0) | (ccp[ord(">") * 8 + r] & 0x0F)
                        for r in range(8))
         base = 0x4000 + (row >> 3) * 0x800 + (row & 7) * 0x20
         got = bytes(self.memory(5, base + r * 0x100, 1)[0] for r in range(8))

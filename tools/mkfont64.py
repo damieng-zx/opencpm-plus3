@@ -13,9 +13,10 @@ byte per scan line, eight scan lines per glyph, pixels in bits 7..4, with a
 code points as the 51-column set: ASCII, the 0x80-0x9F box-drawing codes and
 the accented letters and symbols above them.
 
-The build only validates the source and copies it, so font64.bin is the .ch8
-byte for byte; keeping the step means the source of truth is the .ch8 and
-`--check` catches a stale binary.
+font64.bin is not the .ch8 byte for byte: each row is written into both
+nibbles (0xA0 -> 0xAA), so the renderer can drop a glyph into either half of
+a screen byte with one mask and no shift.  The .ch8 stays the source of truth
+and `--check` catches a stale binary.
 
 Usage:
     python3 tools/mkfont64.py            # write src/bios/font64.bin
@@ -47,7 +48,7 @@ def build() -> bytes:
             raise SystemExit(
                 f"{SOURCE}: glyph {index // ROWS:#04x} row {index % ROWS} "
                 "has pixels below bit 4")
-    return bytes(src)
+    return bytes(value | value >> 4 for value in src)
 
 
 def sheet(data: bytes) -> None:
@@ -87,7 +88,8 @@ def main(argv: list[str]) -> int:
         return 0
 
     args.out.write_bytes(data)
-    print(f"{args.out}: {len(data)} bytes (256 glyphs from {SOURCE.name})")
+    print(f"{args.out}: {len(data)} bytes (256 glyphs from {SOURCE.name}, "
+          "each row in both nibbles)")
     return 0
 
 
