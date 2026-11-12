@@ -95,6 +95,113 @@ class DirOptions(unittest.TestCase):
         text = source("src/tools/dir.asm")
         self.assertIn("opts_seen", text)
 
+    def test_size_mode_prints_the_summary_even_with_no_matches(self):
+        """A drive with nothing matching still reports its space usage.
+
+        The listing formats print "No File" and nothing else, which is right
+        for a listing.  With [SIZE] the user asked for the space report, so
+        an empty selection must still reach print_group and its totals.
+        """
+        text = source("src/tools/dir.asm")
+        drive = text[text.index("process_drive:"):text.index("; process_user")]
+        # The empty-selection summary is emitted once per drive...
+        self.assertIn("ld a, (o_size)", drive)
+        self.assertIn("ld a, (grp_done)", drive)
+        self.assertIn("jp print_group", drive)
+        # ...so an empty per-user area must NOT print one of its own, or
+        # USER=ALL would emit a block for each of the 16 user areas.
+        user = text[text.index("process_user:"):
+                    text.index("; scan_dir - every directory entry")]
+        self.assertNotIn("jp print_group\n.have", user)
+        self.assertEqual(user.count("jp print_group"), 1,
+                         "process_user should reach print_group only when "
+                         "there are files")
+
+    def test_the_empty_summary_names_a_selected_user(self):
+        """The report is attributed to a user area the selection covers."""
+        text = source("src/tools/dir.asm")
+        drive = text[text.index("process_drive:"):text.index("; process_user")]
+        self.assertIn("user_mask", drive)
+        self.assertIn("call test_bit", drive)
+        self.assertIn("ld (nfiles), hl", drive)
+
+    def test_one_summary_per_drive_with_user_all(self):
+        """USER=ALL must not print a summary block per empty user area.
+
+        There are 16 user areas.  Emitting the report from process_user
+        would give 16 blocks of zeroes for an empty drive; the drive loop
+        guards on grp_done so only the first is printed.
+        """
+        text = source("src/tools/dir.asm")
+        drive = text[text.index("process_drive:"):text.index("; process_user")]
+        # The guard must be consulted before printing.
+        guard = drive.index("ld a, (grp_done)")
+        print_at = drive.index("jp print_group")
+        self.assertLess(guard, print_at)
+        self.assertIn("ret nz", drive[guard:print_at])
+        # And print_group records that it ran.
+        group = text[text.index("print_group:"):text.index("; print_heading")]
+        self.assertIn("ld (grp_done), a", group)
+        # Reset per drive so drive B: can report too.
+        self.assertIn("ld (grp_done), a", drive)
+
+    def test_no_file_is_not_printed_over_a_size_summary(self):
+        """One report, not two: the summary already said there were none."""
+        text = source("src/tools/dir.asm")
+        self.assertIn("grp_done", text)
+        start = text[text.index("call run_groups"):text.index("; restore")]
+        # A summary having been printed suppresses the "No File" line.
+        self.assertIn("ld a, (grp_done)", start)
+        self.assertIn("jr nz, .done", start)
+        self.assertLess(start.index("grp_done"), start.index("msg_no_file"))
+        # ...and it is cleared per drive so it cannot leak between them.
+        drive = text[text.index("process_drive:"):text.index("; process_user")]
+        self.assertIn("ld (grp_done), a", drive)
+
+    def test_summary_columns_line_up(self):
+        """Both '=' signs in the two summary lines share a column.
+
+        The value fields are five wide, so the labels before them have to
+        be padded to the same length on each line.
+        """
+        text = source("src/tools/dir.asm")
+
+        def literal(name):
+            start = text.index(name)
+            line = text[start:text.index("\n", start)]
+            return line[line.index('"') + 1:line.index('$')]
+
+        first_label = literal("msg_tot1:")      # "Total Bytes = "
+        records_label = literal("msg_tot2:")    # "K  Total Records   = "
+        files_label = literal("msg_tot3:")      # "Files Found = "
+        blocks_label = literal("msg_tot4:")     # "   Total 1K Blocks = "
+
+        # Line 1: label + 5-column value + K + 2 + label, then a 5-wide value.
+        line1_eq1 = first_label.index("=")
+        line2_eq1 = files_label.index("=")
+        self.assertEqual(line1_eq1, line2_eq1,
+                         f"{first_label!r} vs {files_label!r}")
+
+        # Render both lines exactly as print_totals does and compare the
+        # column of each '='.  msg_tot2 starts with the "K" of the value
+        # that precedes it, so it must not be counted twice.
+        rendered1 = (first_label + f"{182:5d}" + records_label + f"{1131:5d}")
+        rendered2 = (files_label + f"{33:5d}" + blocks_label + f"{161:5d}")
+
+        self.assertEqual(rendered1.index("="), rendered2.index("="),
+                         f"{rendered1!r} vs {rendered2!r}")
+        self.assertEqual(rendered1.index("=", 20),
+                         rendered2.index("=", 20),
+                         f"{rendered1!r} vs {rendered2!r}")
+        # Pin the actual columns so a change has to be deliberate.
+        self.assertEqual(rendered1.index("="), 12)
+        self.assertEqual(rendered1.index("=", 20), 38)
+
+        # No padding is left between a label and its '='.
+        for label in (first_label, files_label, blocks_label):
+            self.assertTrue(label.endswith(" = "), repr(label))
+        self.assertTrue(records_label.endswith(" = "), repr(records_label))
+
 
 class Erase(unittest.TestCase):
     def test_confirm_is_the_only_option_and_c_abbreviates_it(self):

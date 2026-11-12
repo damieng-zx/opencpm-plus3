@@ -105,6 +105,12 @@ start:
     ld a, h
     or l
     jr nz, .done
+    ; With [SIZE] print_group has already emitted the summary for a user area
+    ; with no matches, so "No File" on top of it is just noise.  The full
+    ; format still needs it: there the empty group prints nothing at all.
+    ld a, (grp_done)
+    or a
+    jr nz, .done
     ld de, msg_no_file
     call pstr
 .done:
@@ -871,6 +877,8 @@ process_drive:
     call BDOS
     inc a
     ret z                      ; the drive cannot be selected
+    xor a
+    ld (grp_done), a           ; a new drive starts with no summary printed
     ld c, F_GETDPB
     call BDOS
     ld a, h
@@ -922,7 +930,34 @@ process_drive:
     ld (grp_user), a
     cp 16
     jr c, .user
+
+    ; [SIZE] with nothing found still owes the reader a space report.  Doing
+    ; it here rather than in process_user keeps it to one summary per drive:
+    ; with USER=ALL an empty user area would otherwise print a block each.
+    ld a, (o_size)
+    or a
+    ret z
+    ld a, (grp_done)
+    or a
+    ret nz
+    ; Report against the first user area the selection covers.
+    xor a
+    ld (grp_user), a
+.find_user:
+    ld hl, (user_mask)
+    ld a, (grp_user)
+    call test_bit
+    jr c, .empty_totals
+    ld a, (grp_user)
+    inc a
+    ld (grp_user), a
+    cp 16
+    jr c, .find_user
     ret
+.empty_totals:
+    ld hl, 0
+    ld (nfiles), hl
+    jp print_group
 
 ; process_user - sort and print the files of one user area on this drive
 ;   In:       grp_drive, grp_user, the file table
@@ -1551,6 +1586,8 @@ print_group:
     xor a
     ld (line_cnt), a
     ld (cell_col), a
+    ld a, 1
+    ld (grp_done), a
 
     ld de, msg_dirfor
     call pstr
@@ -2093,6 +2130,7 @@ nrec:           dw 0                ; records in the file table
 nfiles:         dw 0                ; this user area's files
 cur_user_byte:  db 0
 found_total:    dw 0
+grp_done:       db 0                ; 1 = print_group emitted a summary
 cur_recs:       dw 0
 cur_blocks:     dw 0
 sort_i:         dw 0
@@ -2124,9 +2162,9 @@ msg_dirfor:     db "Directory For Drive $"
 msg_user2:      db ":  User $"
 msg_heading:    db "Name         Bytes    Recs  Attributes", 0x0D, 0x0A
                 db "------------ ------ ------  ------------", 0x0D, 0x0A, '$'
-msg_tot1:       db "Total Bytes     = $"
-msg_tot2:       db "K  Total Records = $"
-msg_tot3:       db "Files Found     = $"
+msg_tot1:       db "Total Bytes = $"
+msg_tot2:       db "K  Total Records   = $"
+msg_tot3:       db "Files Found = $"
 msg_tot4:       db "   Total 1K Blocks = $"
 msg_tot5:       db "Used/Max Dir Entries For Drive $"
 str_dir:        db "Dir $"

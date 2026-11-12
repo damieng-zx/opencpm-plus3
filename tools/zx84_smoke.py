@@ -1366,6 +1366,9 @@ class Smoke:
             self.command("SUBMIT NODISP.SUB", 1200)
             if "DIR A:NOSUCH" not in self.text():
                 raise SmokeError("[DISPLAY] did not echo the submit line")
+            if self.text().count("DIR A:NOSUCH") != 1:
+                raise SmokeError("[DISPLAY] echoed the submit line twice: "
+                                 + repr(self.text()))
 
             # --- TEMPORARY drive is stored in the SCB and read back ---
             self.command("SETDEF [TEMPORARY=C:]", 600)
@@ -2260,9 +2263,12 @@ class Smoke:
         # DIRSYS with an option list is DIR [SYS,...] through DIR.COM.
         self.command("DIRSYS SYS1.TXT [FULL]", 800)
         self.expect("DIRSYS [FULL]", "Name         Bytes    Recs  Attributes",
-                    "SYS1     TXT", "Sys RW", "Files Found     =     1")
+                    "SYS1     TXT", "Sys RW", "Files Found =     1")
         self.command("DIRS [SIZE,RO]", 800)
-        self.expect("DIRS [SIZE,RO] filters", "No File")
+        # Nothing is read-only, so SIZE mode prints its summary with a count
+        # of zero rather than the bare "No File" the listing formats use.
+        self.expect("DIRS [SIZE,RO] filters", "Files Found =     0",
+                    "Total Bytes =     0K")
         self.command("DIRS CPM3.SYS [FULL]", 800)
         self.expect("DIRS [FULL] other kind", "No File")
         self.command("ERASE SYS1.TXT", 500)
@@ -2431,7 +2437,7 @@ class Smoke:
         self.expect("DIR [FULL]", "Directory For Drive A:  User  0",
                     "Name         Bytes    Recs  Attributes",
                     "SMOKE    TXT", "1  Dir RW",
-                    "Total Bytes", "Files Found     =     1",
+                    "Total Bytes", "Files Found =     1",
                     "Used/Max Dir Entries For Drive A:")
         self.command("DIR SMOKE.TXT [SIZE]", 800)
         self.expect("DIR [SIZE]", "A: SMOKE    TXT", "Total 1K Blocks =     1")
@@ -2485,7 +2491,7 @@ class Smoke:
                     "Searching drive A: user 2", "SMOKE    TXT")
         self.command("DIR SMOKE.TXT [USER=ALL,DRIVE=ALL,SIZE]", 1500)
         self.expect("DIR [USER=ALL,DRIVE=ALL]", "A: SMOKE    TXT",
-                    "Files Found     =     1")
+                    "Files Found =     1")
         self.command("DIR [USER=16]", 500)
         self.expect("DIR user out of range", "Invalid option")
         self.command("DIR [DRIVE=(A,B]", 500)
@@ -2519,7 +2525,7 @@ class Smoke:
         if "AT2      TXT" in self.since("DIR AT*.* [DIR]"):
             raise SmokeError("DIR [DIR] listed a SYS file: " + self.text())
         self.command("DIR AT*.* [RW,SYS]", 800)
-        self.expect("DIR [RW,SYS] combines", "AT2      TXT", "Files Found     =     1")
+        self.expect("DIR [RW,SYS] combines", "AT2      TXT", "Files Found =     1")
         self.command("DIR AT*.* [RO,SYS]", 600)
         self.expect("DIR [RO,SYS] combines", "No File")
         self.command("DIR AT*.* [NOPAGE,SIZE]", 800)
