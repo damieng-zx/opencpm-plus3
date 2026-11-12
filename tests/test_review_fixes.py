@@ -444,7 +444,10 @@ class VerificationStackTestMath(unittest.TestCase):
     def test_move_selects_tpa_banks_with_xmove(self):
         text = source("src/test/systest.asm")
         self.assertIn("ld a, 29", text)
-        self.assertIn("B = dest bank 0 (TPA), C = src bank 0", text)
+        # Our BIOS numbers the TPA 0; CP/M 3 (Locomotive's) makes it bank 1, and
+        # the test picks per system.
+        self.assertIn("ld bc, 0x0101                 ; B = dest bank 1 (TPA)", text)
+        self.assertIn("ld bc, 0x0000                 ; ours: bank 0 is the TPA", text)
 
 
 class VerificationF46FreeSpace(unittest.TestCase):

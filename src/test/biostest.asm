@@ -9,6 +9,11 @@
 ; The disc checks read the boot-track record, write it back unchanged and
 ; read it into a second buffer, so the running system disc is not altered.
 ;
+; Runs on this system and on Locomotive's CP/M Plus.  Here the printer and the
+; serial port are null devices that are always ready; elsewhere there may be
+; nothing attached and the call would wait for ever, so those tests ask the
+; device's status first and show SKIP if it is not ready.
+;
 ; Build: sjasmplus --raw=build/biostest.com src/test/biostest.asm
 
     ORG 0100h
@@ -46,6 +51,23 @@ B_SETBNK    equ 28
 B_XMOVE     equ 29
 
 start:
+    ; Is this our CP/M 3?  F120 (the SETDEF order byte) is ours, 0-3; any other
+    ; CP/M 3 answers an unknown function with FFh.
+    ld e, 0
+    ld c, 120
+    call BDOS
+    cp 4
+    ld a, 0
+    jr nc, .foreign
+    inc a
+.foreign:
+    ld (ours), a
+
+    ; The disc checks work on the drive this was run from, not always A:.
+    ld c, 25                    ; F25: current disc
+    call BDOS
+    ld (drive), a
+
     ld de, msg_header
     call print
 
@@ -113,6 +135,9 @@ t_b04:
 t_b05:
     ld de, lbl_05
     call print
+    ld a, B_LISTST
+    call device_ready
+    jp z, bskip
     ld a, B_LIST
     call compute_bios_entry
     ld c, 'X'
@@ -122,6 +147,9 @@ t_b05:
 t_b06:
     ld de, lbl_06
     call print
+    ld a, B_AUXOST
+    call device_ready
+    jp z, bskip
     ld a, B_AUXOUT
     call compute_bios_entry
     ld c, 'X'
@@ -134,6 +162,14 @@ t_b06:
 t_b07:
     ld de, lbl_07
     call print
+    ld a, (ours)
+    or a
+    jr nz, .here
+    ; Elsewhere AUXIN waits for a character, and what an idle port returns is
+    ; up to the hardware; it is ours that reports end-of-file.
+    ld de, msg_skip
+    jp bskip_msg
+.here:
     ld a, B_AUXIN
     call compute_bios_entry
     call call_bios_ent
@@ -147,6 +183,9 @@ t_b07:
 t_b08:
     ld de, lbl_08
     call print
+    ; HOME acts on the selected drive, and CP/M 3 wants a SELDSK first: the
+    ; drive the CCP last selected may not be the one under test.
+    call select_drive
     ld a, B_HOME
     call compute_bios_entry
     call call_bios_ent
@@ -155,11 +194,7 @@ t_b08:
 t_b09:
     ld de, lbl_09
     call print
-    ld a, B_SELDSK
-    call compute_bios_entry
-    ld c, 0                    ; A:
-    ld e, 0                    ; first select: probe the format
-    call call_bios_ent
+    call select_drive
     ld a, h
     or l
     jp z, bfail
@@ -260,6 +295,9 @@ t_b15:
 t_b16:
     ld de, lbl_16
     call print
+    ld a, (ours)               ; with no translation table the answer is up to the
+    or a                       ; BIOS: ours hands the sector back unchanged,
+    jp z, bskip_ours           ; Locomotive's does not
     ld a, B_SECTRN
     call compute_bios_entry
     ld bc, 5                   ; sector
@@ -322,6 +360,7 @@ t_b21:
     call print
     ld a, B_DEVINIT
     call compute_bios_entry
+    ld c, 0                    ; device 0, the first in the table (the console)
     call call_bios_ent
     jp bpass
 
@@ -351,6 +390,9 @@ t_b23:
 t_b24:
     ld de, lbl_24
     call print
+    ld a, (ours)               ; the return code for "nothing to flush" is the
+    or a                       ; BIOS's own
+    jp z, bskip_ours
     ld a, B_FLUSH
     call compute_bios_entry
     call call_bios_ent
@@ -364,10 +406,14 @@ t_b24:
 t_b29:
     ld de, lbl_29
     call print
+    ld bc, 0x0101              ; the TPA is bank 1 in CP/M 3 ...
+    ld a, (ours)
+    or a
+    jr z, .tpa
+    ld bc, 0                   ; ... and 0 in our BIOS (its bank_sel numbering)
+.tpa:
     ld a, B_XMOVE
     call compute_bios_entry
-    ld b, 0                    ; destination bank: TPA
-    ld c, 0                    ; source bank: TPA
     call call_bios_ent
     jp bpass
 
@@ -470,6 +516,47 @@ bfail:
     call BDOS
     jp print_crlf
 
+; select_drive - BIOS SELDSK for the drive under test.  Out: HL = its DPH
+;   Ours: E = 0, the first select, which probes the format (as it always did).
+;   Elsewhere the drive is the one the CCP is running from and is already
+;   logged in; a BDOS selects such a drive with E = 1, and forcing a second
+;   login under a live BDOS can hang Locomotive's BIOS.
+select_drive:
+    ld a, B_SELDSK
+    call compute_bios_entry
+    ld a, (drive)
+    ld c, a
+    ld e, 0
+    ld a, (ours)
+    or a
+    jr nz, .go
+    ld e, 1
+.go:
+    jp call_bios_ent
+
+bskip_ours:
+    ld de, msg_skip_ours
+    jr bskip_msg
+bskip:
+    ld de, msg_skip
+bskip_msg:
+    ld c, F_PSTR
+    call BDOS
+    jp print_crlf
+
+; device_ready - is the BIOS status call A ready?  Ours always are (null
+; devices).  Out: NZ = ready.  Clobbers AF, BC, DE, HL, IY
+device_ready:
+    ld b, a
+    ld a, (ours)
+    or a
+    ret nz                     ; NZ: ready (ours)
+    ld a, b
+    call compute_bios_entry
+    call call_bios_ent         ; A = 0 not ready, FFh ready
+    or a
+    ret
+
 ; --------------------------------------------------------------------------
 ; Data
 ; --------------------------------------------------------------------------
@@ -477,6 +564,10 @@ msg_header: db 0Dh, 0Ah, "BIOS jump table", 0Dh, 0Ah, '$'
 msg_done:   db 0Dh, 0Ah, "BIOS DONE", 0Dh, 0Ah, '$'
 msg_pass:   db "PASS$"
 msg_fail:   db "FAIL$"
+msg_skip:   db "SKIP (device not ready)$"
+msg_skip_ours: db "SKIP (result is this system's own)$"
+ours:       db 0                ; 1 = this is our CP/M 3
+drive:      db 0                ; the drive the disc checks use
 crlf:       db 0Dh, 0Ah, '$'
 
 lbl_02:  db "B02 CONST   : $"

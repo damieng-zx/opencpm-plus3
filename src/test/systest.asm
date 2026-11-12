@@ -1,11 +1,14 @@
 ; ==========================================================================
 ; SYSTEST.COM — combined system/console regression checks
 ; ==========================================================================
+; Runs on this system and on Locomotive's CP/M Plus.  Run it from the disc
+; it is on; it changes nothing on disc.
+;
 ; Runs:
 ;   1. TPA stack top / bios_visible path / deep stack
 ;   2. BIOS MOVE direction (XMOVE TPA->TPA)
 ;   3. Clock ticking in TPA mode without BDOS calls
-;   4. Page-zero IOBYTE (0003h) and user/drive (0004h)
+;   4. Page-zero IOBYTE (0003h) and user/drive (0004h) -- this system only
 ;   5. Console TAB expansion (visual: "A       B")
 ;   6. F110 output delimiter / F9 termination
 ;
@@ -17,18 +20,27 @@
     org 0x0100
 
 BDOS        equ 0x0005
-TPA_TOP     equ 0xF600
 BIOS_CONOUT equ 4
+F_ORDER     equ 120           ; our private SETDEF order byte: 0-3 here, 0xFF on
+                              ; any other CP/M 3 (Locomotive's answers it as an
+                              ; unknown function)
 
 start:
     ; lint-exempt: stack  ; the deep-stack test deliberately changes SP
     ld (entry_sp), sp
 
     ; --- 1. Initial SP: the CCP enters a transient with 0000h (warm boot)
-    ;        pushed on the stack, i.e. SP = TPA_TOP - 2, exactly like the
-    ;        CP/M 3 CCP does so a program can exit with RET. --------------
+    ;        pushed on the stack, so a program can exit with RET.  The stack
+    ;        starts just under the BDOS: the TPA top is the high byte of the
+    ;        BDOS entry at 0006h (F600h here, F400h on Locomotive's CP/M
+    ;        Plus), and SP = top - 2. -------------------------------------
+    ld hl, (0x0006)
+    ld l, 0
+    ld (tpa_top), hl
+    dec hl
+    dec hl
+    ex de, hl                     ; DE = TPA top - 2
     ld hl, (entry_sp)
-    ld de, TPA_TOP - 2
     or a
     sbc hl, de
     jr nz, .sp_bad
@@ -42,6 +54,18 @@ start:
     jp fail
 
 .sp_ok:
+    ; Is this our CP/M 3?  (See F_ORDER above.)  Three things below are about
+    ; this system only, or differ between the two.
+    ld e, 0
+    ld c, F_ORDER
+    call BDOS
+    cp 4
+    ld a, 0
+    jr nc, .foreign
+    inc a
+.foreign:
+    ld (ours), a
+
     ; --- 2. BDOS calls first (this is what used to corrupt bv_shim) ------
     ld e, 'A'
     ld c, 2
@@ -62,7 +86,7 @@ start:
     or c
     jr nz, .deep
 
-    ld sp, TPA_TOP                ; discard the deep stack
+    ld sp, (tpa_top)              ; discard the deep stack
     call bios_conout_y
 
     ld de, msg_stack_ok
@@ -72,9 +96,16 @@ start:
     ; MOVE works in the bank selected by XMOVE (fn 29).  Select TPA->TPA
     ; so the source and destination addresses below COMMON_BASE resolve
     ; to our own memory rather than the system bank.
+    ; Our BIOS numbers the TPA 0 and the system bank 1 (its bank_sel); CP/M 3
+    ; makes bank 1 the TPA, which is what Locomotive's BIOS expects.
     ld a, 29
     call compute_bios_entry
-    ld bc, 0                      ; B = dest bank 0 (TPA), C = src bank 0
+    ld bc, 0x0101                 ; B = dest bank 1 (TPA), C = src bank 1
+    ld a, (ours)
+    or a
+    jr z, .xm_bank
+    ld bc, 0x0000                 ; ours: bank 0 is the TPA
+.xm_bank:
     call call_bios_ent
 
     ld hl, src_txt
@@ -107,6 +138,15 @@ start:
     call print
 
     ; --- 5. Clock ticks in TPA mode without any BDOS calls ---------------
+    ; This guards our banked ISR, and it reads our SCB straight out of common
+    ; memory, so it only means something on this system.
+    ld a, (ours)
+    or a
+    jr nz, .clock_here
+    ld de, msg_clock_skip
+    call print
+    jp p0_test
+.clock_here:
     ld hl, (0xF63A)               ; SCB base (patched by cold_boot)
     ld de, 0x5C
     add hl, de                    ; HL = &scb_sec
@@ -142,6 +182,16 @@ fail:
 ; P0: page-zero IOBYTE / user-drive bytes
 ; ==========================================================================
 p0_test:
+    ; F8 (set IOBYTE) and the user/drive byte at 0004h are CP/M 2.2 behaviour
+    ; that this system keeps; CP/M 3 does not support F7/F8 and its BDOS
+    ; leaves 0004h to the CCP, so Locomotive's fails both.
+    ld a, (ours)
+    or a
+    jr nz, .p0_here
+    ld de, msg_p0_skip
+    call print
+    jp tab_test
+.p0_here:
     ld e, 0x5A
     ld c, 8
     call BDOS                     ; F8: IOBYTE = 0x5A
@@ -295,6 +345,8 @@ bios_conout:
 ; Data
 ; ==========================================================================
 entry_sp:      dw 0
+tpa_top:       dw 0
+ours:          db 0           ; 1 = this is our CP/M 3
 bios_ent:      dw 0
 src_txt:       db 'MOVE1234'
 src_buf:       ds 8
@@ -306,8 +358,10 @@ msg_move_ok:   db 13, 10, 'MOVE OK', 13, 10, '$'
 msg_move_bad:  db 13, 10, 'MOVE BAD', 13, 10, '$'
 msg_clock_ok:  db 13, 10, 'CLOCK OK', 13, 10, '$'
 msg_clock_bad: db 13, 10, 'CLOCK BAD', 13, 10, '$'
+msg_clock_skip: db 13, 10, 'CLOCK SKIP (not this system)', 13, 10, '$'
 msg_p0_ok:     db 13, 10, 'P0 PASS', 13, 10, '$'
 msg_p0_bad:    db 13, 10, 'P0 BAD', 13, 10, '$'
+msg_p0_skip:   db 13, 10, 'P0 SKIP (not this system)', 13, 10, '$'
 msg_tab:       db 13, 10, 'TAB:', 13, 10, '$'
 msg_delim_pass: db 13, 10, 'DELIM PASS', 13, 10, '#'
 msg_delim_bad: db 13, 10, 'DELIM BAD', 13, 10, '$'

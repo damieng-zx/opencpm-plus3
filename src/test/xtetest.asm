@@ -2,11 +2,28 @@
 ;
 ; Tests XBIOS TE functions via USERF (BIOS function 30).
 ;
+; Runs on this system and on Locomotive's CP/M Plus.  The tests act on the
+; drive it is run from (A: or B:), so use a scratch disc: they format, write
+; and rewrite tracks.  Checks of our own limits and extensions (a bank other
+; than 1, bad-spec rejection, the key-token queue as a retrievable queue, the
+; expansion-string limit, CD_INFO, our device names) run only here and show
+; SKIP elsewhere, and the two that need a held or injected key SKIP too.
+;
 ; Build: sjasmplus --raw=build/xtetest.com src/test/xtetest.asm
 
     ORG 0100h
 
 BDOS        EQU 0005h
+
+; The drive under test is the one the program was run from, never a fixed
+; unit 0: the disc calls below format and rewrite tracks, and with the system
+; disc in A: and this disc in B: a hard-coded 0 would hit the system disc.
+; LD_BC_UNIT loads B with `hi` and C with that drive's unit (0 = A:, 1 = B:).
+    MACRO LD_BC_UNIT hi
+    ld a, (unit)
+    ld c, a
+    ld b, hi
+    ENDM
 
 ; XBIOS extended jumpblock entries (bank 0, per the +3 CP/M Plus manual).
 ; USERF takes the entry address inline; our dispatcher uses its low byte.
@@ -50,6 +67,32 @@ DD_DRIVE_STATUS EQU 0x0098
 ; Entry
 ; ============================================================
 start:
+    ; The drive under test: the current drive, which must be A: or B: (the
+    ; only units the XBIOS disc calls address).
+    ld c, 25                    ; F25: return the current disc
+    call BDOS
+    cp 2
+    jr c, .unit_ok
+    ld de, msg_unit
+    ld c, 9
+    call BDOS
+    rst 0
+.unit_ok:
+    ld (unit), a
+    call patch_pb_units
+
+    ; Is this our CP/M 3?  F120 (the SETDEF order byte) is ours, 0-3; any other
+    ; CP/M 3 answers an unknown function with FFh.
+    ld e, 0
+    ld c, 120
+    call BDOS
+    cp 4
+    ld a, 0
+    jr nc, .foreign
+    inc a
+.foreign:
+    ld (ours), a
+
     ; Compute USERF address from page zero
     ld hl, (0x0001)
     dec hl
@@ -418,7 +461,7 @@ start:
     ; DD_L_SEEK: unit 0, head 0, track 0
     ld hl, DD_L_SEEK
     ld (userf_dw), hl
-    ld bc, 0
+    LD_BC_UNIT 0
     ld d, 0
     ld ix, 0xD200
     call userf_trampoline
@@ -427,7 +470,7 @@ start:
     ; DD_READ_ID: unit 0, logical track 0
     ld hl, DD_READ_ID
     ld (userf_dw), hl
-    ld bc, 0
+    LD_BC_UNIT 0
     ld d, 0
     ld ix, 0xD200
     call userf_trampoline
@@ -501,7 +544,7 @@ start:
     ; DD_LOGIN: unit 0, XDPB at D200h
     ld hl, DD_LOGIN
     ld (userf_dw), hl
-    ld bc, 0
+    LD_BC_UNIT 0
     ld ix, 0xD200
     call userf_trampoline
     jp nc, .t9_fail_restore
@@ -574,7 +617,7 @@ start:
     ; DD_READ_SECTOR: logical track 0, sector 0 into D300h
     ld hl, DD_READ_SECTOR
     ld (userf_dw), hl
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0
     ld hl, 0xD300
     ld ix, 0xD200
@@ -588,7 +631,7 @@ start:
     ; DD_WRITE: write the same sector back unchanged
     ld hl, DD_WRITE
     ld (userf_dw), hl
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0
     ld hl, 0xD300
     ld ix, 0xD200
@@ -598,7 +641,7 @@ start:
     ; DD_CHECK_SECTOR: equal buffer
     ld hl, DD_CHECK_SECTOR
     ld (userf_dw), hl
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0
     ld hl, 0xD300
     ld ix, 0xD200
@@ -611,7 +654,7 @@ start:
     ld (0xD300), a
     ld hl, DD_CHECK_SECTOR
     ld (userf_dw), hl
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0
     ld hl, 0xD300
     ld ix, 0xD200
@@ -621,10 +664,15 @@ start:
     xor a
     ld (0xD300), a
 
-    ; DD_FORMAT: an unsupported bank must fail without formatting
+    ; DD_FORMAT: an unsupported bank must fail without formatting.  Only our
+    ; XBIOS refuses bank 0; Locomotive's accepts it and would format track 0
+    ; from the junk at D400h, so this must not run there.
+    ld a, (ours)
+    or a
+    jr z, .t9_bank_ok
     ld hl, DD_FORMAT
     ld (userf_dw), hl
-    ld bc, 0
+    LD_BC_UNIT 0
     ld de, 0
     ld hl, 0xD400
     ld ix, 0xD200
@@ -632,6 +680,7 @@ start:
     jr c, .t9_fail_restore
     cp 9
     jp nz, .t9_fail_restore
+.t9_bank_ok:
 
     ld a, 1
     ld (t9_ok), a
@@ -694,7 +743,7 @@ start:
     ; DD_FORMAT: B=1, C=0, D=39, E=0xE5, HL=D500h, IX=D200h
     ld hl, DD_FORMAT
     ld (userf_dw), hl
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0x27E5
     ld hl, 0xD500
     ld ix, 0xD200
@@ -704,7 +753,7 @@ start:
     ; Read track 39 sector 0 back into D300h.
     ld hl, DD_READ_SECTOR
     ld (userf_dw), hl
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0x2700
     ld hl, 0xD300
     ld ix, 0xD200
@@ -724,7 +773,7 @@ start:
     ; READ ID on the freshly formatted 9-sector track.
     ld hl, DD_READ_ID
     ld (userf_dw), hl
-    ld bc, 0
+    LD_BC_UNIT 0
     ld d, 39
     ld ix, 0xD200
     call userf_trampoline
@@ -781,7 +830,7 @@ start:
     ; DD_FORMAT track 38 with the 8-sector XDPB.
     ld hl, DD_FORMAT
     ld (userf_dw), hl
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0x26E5
     ld hl, 0xD520
     ld ix, 0xD220
@@ -791,7 +840,7 @@ start:
     ; READ ID must report one of the eight sectors, never 9.
     ld hl, DD_READ_ID
     ld (userf_dw), hl
-    ld bc, 0
+    LD_BC_UNIT 0
     ld d, 38
     ld ix, 0xD220
     call userf_trampoline
@@ -807,7 +856,7 @@ start:
     ; head movement or read beyond the disc geometry is involved.
     ld hl, DD_READ_SECTOR
     ld (userf_dw), hl
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0x2620               ; track 38, record 32 = physical sector 9
     ld hl, 0xD300
     ld ix, 0xD220
@@ -817,7 +866,7 @@ start:
     ; Logical sector 7 (the eighth physical sector) is present and filled.
     ld hl, DD_READ_SECTOR
     ld (userf_dw), hl
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0x2607
     ld hl, 0xD300
     ld ix, 0xD220
@@ -1092,12 +1141,17 @@ start:
     ld a, (0xD838)
     cp 0x52
     jp nz, .t13_fail
-    ld a, (0xD839)
+    ld a, (0xD839)              ; flags: MFM (40h) everywhere; ours is exactly
+    and 0x40                    ; 40h and Locomotive's 60h (multi-track too)
     cp 0x40
     jp nz, .t13_fail
+    ld a, (ours)                ; freeze: ours keeps a detected format (FFh),
+    or a                        ; Locomotive's leaves it to auto-detect (00h)
+    jr z, .t13_done
     ld a, (0xD83A)
     cp 0xFF
     jp nz, .t13_fail
+.t13_done:
     ld de, msg_ok
     jr .t13_print
 .t13_fail:
@@ -1120,7 +1174,7 @@ start:
     call userf_trampoline
     ld hl, DD_L_SEEK
     ld (userf_dw), hl
-    ld bc, 0
+    LD_BC_UNIT 0
     ld d, 0
     ld ix, 0xD200
     call userf_trampoline
@@ -1211,7 +1265,7 @@ start:
     call userf_trampoline
     ld hl, DD_L_SEEK
     ld (userf_dw), hl
-    ld bc, 0
+    LD_BC_UNIT 0
     ld d, 0
     ld ix, 0xD200
     call userf_trampoline
@@ -1329,6 +1383,12 @@ start:
     ld de, msg_t18
     ld c, 9
     call BDOS
+    ld a, (ours)
+    or a
+    jp nz, .t18_go
+    ld de, msg_skip
+    jp .t18_print
+.t18_go:
 
     ld hl, KM_KT_GET
     ld (userf_dw), hl
@@ -1389,6 +1449,12 @@ start:
     ld de, msg_t19
     ld c, 9
     call BDOS
+    ld a, (ours)
+    or a
+    jp nz, .t19_go
+    ld de, msg_skip
+    jp .t19c_print
+.t19_go:
 
     ld hl, KM_SET_KEY
     ld (userf_dw), hl
@@ -1493,6 +1559,12 @@ start:
     call userf_trampoline
     jp nc, .t20_fail
 
+    ; What counts as a bad token or a too-long string is ours: Locomotive's
+    ; accepts both.
+    ld a, (ours)
+    or a
+    jr z, .t20_done
+
     ; Token 7Fh is not an expansion token.
     ld hl, 0xDD00
     ld bc, 0x7F05
@@ -1504,6 +1576,7 @@ start:
     ld bc, 0x8520
     call userf_trampoline
     jp c, .t20_fail
+.t20_done:
 
     ld de, msg_ok
     jr .t20_print
@@ -1542,6 +1615,12 @@ start:
     ld de, msg_t22
     ld c, 9
     call BDOS
+    ld a, (ours)
+    or a
+    jp nz, .t22_go
+    ld de, msg_skip
+    jp .t22_print
+.t22_go:
 
     ld hl, CD_INFO
     ld (userf_dw), hl
@@ -1586,11 +1665,14 @@ start:
     ; unit/head bits echo the request, and B/DE must survive.
     ld hl, DD_DRIVE_STATUS
     ld (userf_dw), hl
-    ld bc, 0x1200               ; B = 12h, C = unit 0 head 0
+    LD_BC_UNIT 0x12  ; B = 12h, C = unit 0 head 0
     ld de, 0x3456
     call userf_trampoline
     and 0x27                    ; Ready + head + unit
-    cp 0x20                     ; ready, head 0, unit 0
+    ld c, a
+    ld a, (unit)
+    or 0x20                     ; ready, head 0, the unit under test
+    cp c
     jp nz, .t23_fail
     ld a, b
     cp 0x12
@@ -1602,22 +1684,37 @@ start:
     cp 0x56
     jp nz, .t23_fail
 
-    ; Drive A, head 1: ST3 bit 2 mirrors the requested head.
-    ld bc, 0x1204
+    ; The drive under test, head 1: ST3 bit 2 mirrors the requested head.
+    ld a, (unit)
+    or 4
+    ld c, a
+    ld b, 0x12
     ld de, 0x3456
     call userf_trampoline
     and 0x27
-    cp 0x24
+    ld c, a
+    ld a, (unit)
+    or 0x24
+    cp c
     jp nz, .t23_fail
 
-    ; Unit 1: no disc in B: here, so Ready stays clear and the unit bits
-    ; report unit 1 (the rest depends on the drive's track/protection state).
+    ; The other drive: with our own disc in A: there is none in B:, so Ready
+    ; stays clear and the unit bits report unit 1 (the rest depends on the
+    ; drive's track/protection state).  Whether the other drive holds a disc
+    ; is down to how this is run, so only on our own setup.
+    ld a, (ours)
+    or a
+    jr z, .t23_end
+    ld a, (unit)
+    or a
+    jr nz, .t23_end
     ld bc, 0x1201
     ld de, 0x3456
     call userf_trampoline
     and 0x23                    ; Ready + unit
     cp 0x01                     ; unit 1, not ready
     jp nz, .t23_fail
+.t23_end:
 
     ld de, msg_ok
     jr .t23_print
@@ -1631,6 +1728,12 @@ start:
     ld de, msg_t24
     ld c, 9
     call BDOS
+    ld a, (ours)
+    or a
+    jp nz, .t24_go
+    ld de, msg_skip
+    jp .t24_print
+.t24_go:
 
     ; Put 17 tokens: the queue is 16 deep, so the last one is dropped.
     ld hl, KM_KT_PUT
@@ -1769,11 +1872,15 @@ start:
     call userf_trampoline
     jp nc, .t26_fail
 
-    ; Token 80h, length 32: too long, slot must stay empty.
+    ; Token 80h, length 32: too long, slot must stay empty (our limit).
+    ld a, (ours)
+    or a
+    jr z, .t26_big
     ld hl, 0xDD20
     ld bc, 0x8020
     call userf_trampoline
     jp c, .t26_fail
+.t26_big:
 
     ; Token 9Eh, length 31 (maximum).
     ld hl, 0xDD20
@@ -1781,11 +1888,15 @@ start:
     call userf_trampoline
     jp nc, .t26_fail
 
-    ; Token 9Fh is not an expansion token.
+    ; Token 9Fh is not an expansion token (ours; Locomotive's takes it).
+    ld a, (ours)
+    or a
+    jr z, .t26_end
     ld hl, 0xDD20
     ld bc, 0x9F01
     call userf_trampoline
     jp c, .t26_fail
+.t26_end:
 
     ld de, msg_ok
     jr .t26_print
@@ -1824,7 +1935,7 @@ start:
     call userf_trampoline
     ld hl, DD_L_SEEK
     ld (userf_dw), hl
-    ld bc, 0
+    LD_BC_UNIT 0
     ld d, 0
     ld ix, 0xD200
     call userf_trampoline
@@ -1881,7 +1992,12 @@ start:
     or c
     jr nz, .t28_cmp
 
-    ; Bank != 1 is rejected without transferring data.
+    ; Bank != 1 is rejected without transferring data.  That is ours: on
+    ; Locomotive's CP/M Plus bank 0 is a real bank, so the read goes ahead and
+    ; the write below would overwrite this disc's boot sector.
+    ld a, (ours)
+    or a
+    jr z, .t28_missing
     ld hl, lread_bank0_pb
     ld de, 0xD900
     ld bc, 15
@@ -1907,6 +2023,7 @@ start:
     or a
     jp nz, .t28_off
 
+.t28_missing:
     ; Missing sector: the result phase must still come back (ND/MA set).
     ld hl, lread_bad_pb
     ld de, 0xD900
@@ -1949,6 +2066,12 @@ start:
     ld de, msg_t29
     ld c, 9
     call BDOS
+    ld a, (ours)
+    or a
+    jp nz, .t29_go
+    ld de, msg_skip
+    jp .t29_print
+.t29_go:
 
     ld ix, bad_specs
     ld b, 8
@@ -2032,6 +2155,12 @@ start:
     ld de, msg_t31
     ld c, 9
     call BDOS
+    ld a, (ours)
+    or a
+    jp nz, .t31_go
+    ld de, msg_skip
+    jp .t31_print
+.t31_go:
 
     ld hl, KM_SET_SPEED
     ld (userf_dw), hl
@@ -2141,12 +2270,18 @@ start:
     ld de, msg_t32
     ld c, 9
     call BDOS
+    ld a, (ours)
+    or a
+    jp nz, .t32_go
+    ld de, msg_skip
+    jp .t32_print
+.t32_go:
 
     ld hl, DD_FORMAT
     ld (userf_dw), hl
 
     ; Bank 1 but the XDPB is below C000h -> A = 9 (test 9 covers bank 0).
-    ld bc, 0x0100
+    LD_BC_UNIT 1
     ld de, 0x26E5
     ld hl, 0xD520
     ld ix, 0xB000
@@ -2285,28 +2420,22 @@ t34_call:
     jr z, t34_fail             ; null table
 
     ; HL now points at the table in common memory.  Check it is real data
-    ; and not a bank-4 address we cannot see.  Common memory is F600-FFFF,
-    ; so reject anything below F600 (a 16-bit compare, not just the high
-    ; byte: the table at FFD3 has high byte FF).
+    ; and not a bank-4 address we cannot see (a 16-bit compare, not just the
+    ; high byte: the table at FFD3 has high byte FF).
+    ; The common area starts at the TPA top, the high byte of the BDOS entry
+    ; at 0006h (F600h here, F400h on Locomotive's CP/M Plus).
     push hl
-    ld de, 0xF600
+    ld de, (0x0006)
+    ld e, 0
     or a
     sbc hl, de
     pop hl
-    jr c, t34_fail              ; below F600: not common memory
-    ld a, (hl)
-    cp 'C'                      ; first entry name starts "CON"
-    jr nz, t34_fail
-    inc hl
-    ld a, (hl)
-    cp 'O'
-    jr nz, t34_fail
-    inc hl
-    ld a, (hl)
-    cp 'N'
-    jr nz, t34_fail
-    dec hl
-    dec hl                      ; back to the entry start for the walk
+    jr c, t34_fail              ; below common memory
+    ld a, (hl)                  ; every entry opens with a printable name
+    cp 'A'                      ; ("CON" here, "CRT" on Locomotive's)
+    jr c, t34_fail
+    cp 'Z' + 1
+    jr nc, t34_fail
 
     ; Walk to the terminator to prove the table parses: 6 name + 1 mode +
     ; 1 baud = 8 bytes per entry.
@@ -2334,6 +2463,15 @@ t34_print:
     ld de, msg_done
     ld c, 9
     call BDOS
+
+    ; Locomotive's KM_KT_PUT (test 17) types the tokens into the console, so
+    ; read them back out before the CCP prompt would show them.
+.drain_keys:
+    ld c, 6                     ; direct console input
+    ld e, 0xFF
+    call BDOS
+    or a
+    jr nz, .drain_keys
 
     rst 0
 
@@ -2393,6 +2531,9 @@ patch_pb:
     rlca
     rlca
     and 0x04                    ; HD in bit 2
+    ld b, a
+    ld a, (unit)
+    or b                        ; US0/US1 = the drive under test
     ld (hl), a
     inc hl
     ld a, (t10_cyl)
@@ -2402,6 +2543,35 @@ patch_pb:
     ld (hl), a                  ; H
     ret
 
+
+; ============================================================
+; patch_pb_units — put the drive under test into every raw command block
+;   The blocks that patch_pb handles get it there too; the rest are only
+;   patched here.  Clobbers: AF, B, DE, HL
+; ============================================================
+patch_pb_units:
+    ld hl, pb_list
+    ld b, pb_count
+.next:
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    inc hl
+    push hl
+    ex de, hl
+    ld de, 7                    ; count, buffer, length, cmdlen, opcode
+    add hl, de                  ; -> unit/head byte
+    ld a, (unit)
+    or (hl)
+    ld (hl), a
+    pop hl
+    djnz .next
+    ret
+
+pb_list:
+    dw lread_id_pb, lread_data_pb, lread_multi_pb, lread_one_pb
+    dw lread_bank0_pb, lread_bad_pb, lwrite_bank0_pb, lwrite_data_pb
+pb_count    equ 8
 
 ; ============================================================
 ; check_boot_spec — verify the AMSDOS disc spec in the D300h boot
@@ -2586,6 +2756,8 @@ res_w: db 0
 res_h: db 0
 res_r: db 0
 res_c: db 0
+unit:  db 0
+ours:  db 0                     ; 1 = this is our CP/M 3
 t8_ok: db 0
 t9_ok: db 0
 t14_ok: db 0
@@ -2678,6 +2850,8 @@ lwrite_data_pb:
 ; Messages
 ; ============================================================
 msg_header: db "XTE-TEST", 0x0D, 0x0A, '$'
+msg_unit:   db "Run XTETEST from A: or B:", 0x0D, 0x0A, '$'
+msg_skip:   db "SKIP", 0x0D, 0x0A, '$'
 msg_t1:     db "1.BORDER red..", '$'
 msg_t2:     db "2.TE_ASK:", '$'
 msg_t3:     db "3.INK..", '$'
