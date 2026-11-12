@@ -1714,8 +1714,9 @@ profile_cmd:
 
 
 ; ==========================================================================
-; try_sub — If A:$$$.SUB is active, load the next line into cmd_buf and echo
-;   it; otherwise leave cmd_buf untouched.
+; try_sub — If A:$$$.SUB is active, load the next line into cmd_buf;
+;   otherwise leave cmd_buf untouched.  The caller echoes the line (after the
+;   prompt, when DISPLAY is on).
 ;
 ;   $$$.SUB record layout (128 bytes):
 ;     byte 0  : length L, or 0xFF if the record has been consumed
@@ -1852,14 +1853,7 @@ try_sub:
     ld c, 16                   ; F16: Close File
     call BDOS
     call restore_dma
-
-    ld de, 0xFFFF
-    ld c, F_CONMODE
-    call BDOS                  ; HL = con_mode
-    ld a, l
-    and CON_MODE_DISPLAY
-    call nz, echo_sub_line     ; DISPLAY on → echo the SUB line
-    xor a                      ; CF=0 → cmd_buf is loaded
+    xor a                      ; CF=0 → cmd_buf is loaded (.prompt echoes it)
     ret
 
 .all_done:

@@ -258,9 +258,16 @@ class Issue12TpaClock(unittest.TestCase):
 class Issue13SubEcho(unittest.TestCase):
     def test_echo_uses_display_bit(self):
         text = source("src/ccp/miniccp.zpa")
-        body = text[text.index("try_sub:"):text.index("echo_sub_line:")]
+        body = text[text.index(".no_pending:"):text.index(".read_console:")]
         self.assertIn("and CON_MODE_DISPLAY", body)
         self.assertNotIn("xor a\n    call nz, echo_sub_line", body)
+
+    def test_a_submit_line_is_echoed_once_after_the_prompt(self):
+        """try_sub only loads the line; echoing it there too printed it twice."""
+        text = source("src/ccp/miniccp.zpa")
+        body = text[text.index("try_sub:\n"):text.index("; echo_sub_line")]
+        self.assertNotIn("echo_sub_line", body)
+        self.assertNotIn("CON_MODE_DISPLAY", body)
 
 
 class Issue14ComFcb(unittest.TestCase):
