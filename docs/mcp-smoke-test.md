@@ -23,7 +23,8 @@ byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), fills the remaining
 free bank-6 gaps with a sentinel and verifies they survive the app runs,
 then runs
 `SYSTEST`, `XTETEST`, `TERMTEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
-`F59` overlay load and an `F111` print-block check), `BIOSTEST`, `CHAINTEST`,
+`F59` overlay load and an `F111` print-block check), `BIOSTEST`, `CHAINTEST`, `FONTTEST` (every printable code at 32, 51 and 64 columns,
+including the 64-column frame pixels),
 and the main CCP flows, and asserts the 51x24 character buffer plus an empty
 FDC retry log:
 
@@ -269,6 +270,7 @@ distribution image deliberately leaves them out.
 | `REGTEST` | BDOS register preservation: B/D (the high bytes of BC/DE), IX and IY across F12, F2, F25, F13 and F15 |
 | `XTETEST` | The XBIOS terminal, disc and keyboard calls through `USERF`, including ink/border/speed, `SCR_RUN_ROUTINE`, `DD_*` and `KM_*` |
 | `TERMTEST` | All screen modes and terminal escapes: cursor/erase/edit sequences, 32/51-column glyph rendering, status line and the 24x80 page flip (self-checked; the bitmaps are checked by the runner) |
+| `FONTTEST` | Interactive character-set proof sheet: ASCII, line drawing (full-screen frame, single/double junction tables, T pieces, stubs), accented words, symbols, maths and control codes; `N`/`P`/`1`-`6`/`W`/`R`/`Q`, and the same pages at 32, 51 and 64 columns (every printable code 20-FF at each width) |
 | `INPTEST` | Reads a line with F10 and prints it back (proves a submit file can drive a program); `INPTEST EDIT` checks backspace, buffer-full truncation and Ctrl-C |
 
 The smoke runner exercises all of these except `REGTEST`: `REGTEST`

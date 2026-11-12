@@ -2707,6 +2707,182 @@ class Smoke:
             raise SmokeError("SCREEN 51 did not restore 51 columns")
         self.expect("SCREEN 51 prompt", "A>")
 
+    def run_fonttest(self) -> None:
+        """FONTTEST: the character-set proof sheet in all three widths."""
+        self.log("FONTTEST character set pages")
+        if self.memory(4, self.scr_cols, 1)[0] != 51:
+            raise SmokeError("expected 51 columns before FONTTEST")
+
+        def raw() -> bytes:
+            cols = self.memory(4, self.scr_cols, 1)[0]
+            return self.memory(6, self.cb, cols * ROWS)
+
+        self.command("FONTTEST", 1200)
+        self.expect("FONTTEST page 0", "FONTTEST 0/6  51 COL",
+                    "CP/M Plus character set test", "Pages:")
+
+        self.key("1", 400)
+        self.expect("FONTTEST page 1", "FONTTEST 1/6  51 COL",
+                    "ASCII 0x20-0x7F (96 codes)", "2A *", "7E ~")
+
+        self.key("2", 400)
+        self.expect("FONTTEST page 2", "FONTTEST 2/6  51 COL",
+                    "Single-line box junctions:", "Double-line box junctions:",
+                    "T pieces:", "All 32 codes 80-9F are here")
+        buf = raw()
+        boxes = ((4, 2, 0x96), (4, 25, 0x9E), (5, 2, 0x95), (8, 2, 0x93),
+                 (10, 2, 0x86), (12, 25, 0x8F), (14, 48, 0x89))
+        for row, col, want in boxes:
+            got = buf[row * 51 + col]
+            if got != want:
+                raise SmokeError(
+                    f"FONTTEST box cell ({row},{col}) is {got:02X}, "
+                    f"expected {want:02X}")
+
+        self.key("3", 400)
+        self.expect("FONTTEST page 3", "FONTTEST 3/6  51 COL",
+                    "Accented letters C0-FF", "FR: ")
+        buf = raw()
+        word = next((buf[i:i + 20] for i in range(len(buf) - 20)
+                     if buf[i:i + 4] == b"FR: "), b"")
+        if len(word) < 6 or word[4] != 0xE6 or 0xF9 not in buf:
+            raise SmokeError(f"FONTTEST accent bytes wrong: {word!r}")
+
+        self.key("4", 400)
+        self.expect("FONTTEST page 4", "FONTTEST 4/6  51 COL",
+                    "Symbols in use", "Every symbol in context",
+                    "Money:", "Legal:")
+        buf = raw()
+        for byte in (0xA3, 0xB1, 0xA8, 0xBC):
+            if byte not in buf:
+                raise SmokeError(f"FONTTEST symbols: {byte:02X} missing")
+        # The point of the page is context, not a code-point table.
+        if b"\xa312.99" not in buf or b"20\xa2C" not in buf:
+            raise SmokeError("FONTTEST symbols are not shown in context")
+
+        self.key("5", 400)
+        self.expect("FONTTEST page 5", "FONTTEST 5/6  51 COL",
+                    "Maths in use", "Maths in equations",
+                    "Times, div, pm at 05 06 0D")
+        buf = raw()
+        for byte in (0xDC, 0xDF, 0xFC, 0xFF):
+            if byte not in buf:
+                raise SmokeError(f"FONTTEST maths: {byte:02X} missing")
+        if b"3x \xdc" not in buf or b"\xde 5" not in buf:
+            raise SmokeError("FONTTEST maths are not shown in equations")
+
+        self.key("6", 400)
+        self.expect("FONTTEST page 6", "FONTTEST 6/6  51 COL",
+                    "Control codes 00-1F", "00 NUL", "1F US",
+                    "0x7F is the second zero")
+        self.key("p", 400)
+        self.expect("FONTTEST prev wraps", "FONTTEST 5/6")
+        self.key("n", 400)
+        self.expect("FONTTEST next wraps", "FONTTEST 6/6")
+
+        # Every printable code is drawn at 51 columns...
+        self.fonttest_full_set(51, raw)
+
+        # ...and W cycles 51 -> 64 -> 32 -> 51 without losing the current
+        # page, with the same complete set (and no 64-column special case)
+        # at each width.
+        self.key("6", 400)
+        self.key("w", 800)
+        self.expect("FONTTEST 64", "FONTTEST 6/6  64 COL")
+        if "ASCII ONLY" in self.text() or "fallback" in self.text():
+            raise SmokeError("FONTTEST still treats 64 columns as ASCII-only")
+        self.fonttest_full_set(64, raw)
+        self.key("2", 400)
+        self.expect("FONTTEST 64 boxes", "FONTTEST 2/6  64 COL",
+                    "T pieces:", "All 32 codes 80-9F are here")
+        self.key("w", 800)
+        self.expect("FONTTEST 32", "FONTTEST 2/6  32 COL",
+                    "T pieces:", "All 32 codes 80-9F are here")
+        self.fonttest_full_set(32, raw)
+        self.key("1", 400)
+        self.expect("FONTTEST 32 ascii", "FONTTEST 1/6  32 COL",
+                    "Hex code and glyph per cell.")
+        self.key("w", 800)
+        self.expect("FONTTEST back to 51", "FONTTEST 1/6  51 COL")
+
+        self.key("q", 800)
+        self.expect("FONTTEST quit", "A>")
+        if self.memory(4, self.scr_wrap, 1)[0] != 1:
+            raise SmokeError("FONTTEST did not restore autowrap")
+        if self.memory(4, self.scr_cols, 1)[0] != 51:
+            raise SmokeError("FONTTEST did not leave 51 columns")
+
+    def fonttest_full_set(self, width: int, raw) -> None:
+        """Every printable code 20-FF is in the text buffer at this width.
+
+        Pages 1 and 3 print "XX g" for each code, so each pair is looked for
+        by value; pages 2 and 4 are checked as the union of the codes they
+        draw (80-9F and A0-BF), plus the frame's corners and sides, which
+        come from the box-drawing set at every width, 64 included.
+        """
+        label = f"FONTTEST {width} full set"
+        if self.memory(4, self.scr_cols, 1)[0] != width:
+            raise SmokeError(f"{label}: screen is not {width} columns")
+
+        def pairs(page: str, codes: range) -> None:
+            self.key(page, 400)
+            self.expect(f"{label} page {page}", f"FONTTEST {page}/6  {width} COL")
+            buf = raw()
+            missing = [c for c in codes
+                       if f"{c:02X} ".encode() + bytes([c]) not in buf]
+            if missing:
+                raise SmokeError(
+                    f"{label} page {page}: no 'XX glyph' cell for "
+                    + " ".join(f"{c:02X}" for c in missing))
+
+        def union(page: str, codes: range) -> bytes:
+            self.key(page, 400)
+            self.expect(f"{label} page {page}", f"FONTTEST {page}/6  {width} COL")
+            buf = raw()
+            missing = [c for c in codes if c not in buf]
+            if missing:
+                raise SmokeError(
+                    f"{label} page {page}: codes not drawn: "
+                    + " ".join(f"{c:02X}" for c in missing))
+            return buf
+
+        pairs("1", range(0x20, 0x80))
+        pairs("3", range(0xC0, 0x100))
+        buf = union("2", range(0x80, 0xA0))
+        corners = ((0, 0, 0x96), (0, width - 1, 0x9C),
+                   (23, 0, 0x93), (23, width - 1, 0x99),
+                   (1, 0, 0x95), (12, width - 1, 0x95))
+        for row, col, want in corners:
+            got = buf[row * width + col]
+            if got != want:
+                raise SmokeError(
+                    f"{label}: frame cell ({row},{col}) is {got:02X}, "
+                    f"expected {want:02X}")
+        union("4", range(0xA0, 0xC0))
+
+        if width == 64:
+            # Pixels, not just characters: the frame's top and bottom rows
+            # start in an even column (high nibble) and end in an odd one
+            # (low nibble), each beside a box-drawing glyph, so both halves
+            # of the mask merge are exercised with codes above ASCII.
+            self.key("2", 400)
+            font = (ROOT / "src" / "bios" / "font64.bin").read_bytes()
+
+            def glyph(code: int, r: int) -> int:
+                return font[code * 8 + r]
+
+            for row, left, right in ((0, 0x96, 0x9C), (23, 0x93, 0x99)):
+                base = 0x4000 + (row >> 3) * 0x800 + (row & 7) * 0x20
+                for r in range(8):
+                    first = (glyph(left, r) & 0xF0) | (glyph(0x9A, r) & 0x0F)
+                    last = (glyph(0x9A, r) & 0xF0) | (glyph(right, r) & 0x0F)
+                    got = (self.memory(5, base + r * 0x100, 1)[0],
+                           self.memory(5, base + r * 0x100 + 31, 1)[0])
+                    if got != (first, last):
+                        raise SmokeError(
+                            f"{label}: frame row {row} scan {r}: "
+                            f"{got[0]:02X} {got[1]:02X} != {first:02X} {last:02X}")
+
     def run_pagination(self) -> None:
         """PAGE console mode: stop at the page height and resume on RETURN."""
         if self.memory(4, self.scr_cols, 1)[0] != 51:
@@ -2910,6 +3086,7 @@ class Smoke:
         self.run_device()
         self.run_user()
         self.run_screen64()
+        self.run_fonttest()
         self.run_terminal_escapes()
         self.run_pagination()
         self.run_block16()
