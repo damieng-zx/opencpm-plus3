@@ -123,3 +123,28 @@ Add a `begin_N` / `end_N` marker pair (and the phase body) to
 matching entry to `PHASES` and `PHASE_OPS` in `tools/screen_bench.py`.  The
 harness reads the marker values, not addresses, so no listing maintenance is
 needed beyond keeping the numbers in step.
+
+## FONTTEST page draws
+
+`tools/fonttest_bench.py` times how long `FONTTEST.COM` takes to draw each of
+its seven pages at 32, 51 and 64 columns.  The program writes 1 to `0x3F00`
+as a draw starts and 2 when it ends, and the tool reads the emulator's
+T-state counter at each write, the same way `screen_bench.py` does.
+
+Drawing a page was taking most of a second at 51 columns.  A page is about a
+thousand characters, and the console costs around 4,000 T-states for each
+rendered glyph, so the program's own overhead is the smaller part:
+
+| | 32 col | 51 col | 64 col |
+|---|---:|---:|---:|
+| One BDOS function 2 call per byte | 17.1M | 23.5M | 20.9M |
+| One BDOS function 111 call per page | 15.4M | 21.7M | 19.0M |
+
+(T-states for all seven pages.)  Buffering the output and sending it with
+function 111 saves about 8%: it removes a BDOS call per byte, and four per
+cursor move, but not the time the BIOS spends rendering.  Replacing each space
+with a cursor-forward escape was tried and made no difference, since blanks are
+already cheap in the BIOS.  An instruction trace of a page draw puts about 56%
+of the executed instructions in the bank-5 glyph renderer, with the attribute
+stamp and the page-in/page-out port writes next, so further gains are in the
+console path, where they would speed up every program.

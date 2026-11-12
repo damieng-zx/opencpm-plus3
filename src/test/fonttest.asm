@@ -29,12 +29,23 @@
     org 0x0100
 
 BDOS        equ 0x0005
-F_CONOUT    equ 2
 F_CONIO     equ 6
 F_SCB       equ 49
 F_BIOS      equ 50
+F_WRITEBLK  equ 111           ; C_WRITEBLK: send a block of text to the console
 
 ESC         equ 0x1B
+
+; tools/fonttest_bench.py times each page draw by watching this byte: 1 is
+; written as a draw starts and 2 when it has finished.
+MARKER      equ 0x3F00
+
+; All console output is collected in OBUF and sent with one BDOS call per
+; page.  A BDOS call costs about 1,000 T-states before it prints anything, and
+; a page is hundreds of characters plus four calls for every cursor move, so
+; one call per byte (BDOS function 2) made a page take most of a second.
+OBUF        equ 0x2000
+OBUF_END    equ 0x2800
 
 ; --------------------------------------------------------------------------
 ; start - set up the screen state, then enter the page loop
@@ -109,6 +120,7 @@ start:
 quit:
     call clear_screen
     call wrap_on
+    call flush
     rst 0
 
 ; --------------------------------------------------------------------------
@@ -117,11 +129,13 @@ quit:
 ;   Clobbers: AF, BC, DE, HL
 ; --------------------------------------------------------------------------
 wait_key:
+    call flush
+.poll:
     ld c, F_CONIO
     ld e, 0xFF
     call BDOS
     or a
-    jr z, wait_key
+    jr z, .poll
     ret
 
 ; --------------------------------------------------------------------------
@@ -227,13 +241,19 @@ cycle_width:
 ; draw_page - clear, frame, header, current page, help line
 ; --------------------------------------------------------------------------
 draw_page:
+    ld a, 1
+    ld (MARKER), a
     call clear_screen
     ld a, 3
     ld (line_row), a
     call draw_frame
     call print_header
     call dispatch_page
-    jp print_help
+    call print_help
+    call flush
+    ld a, 2
+    ld (MARKER), a
+    ret
 
 dispatch_page:
     ; lint-exempt: stack  ; indirect jump through the page table
@@ -867,16 +887,48 @@ page_controls:
 ; ==========================================================================
 
 ; --------------------------------------------------------------------------
-; putc - output A through BDOS function 2, preserving all registers
+; putc - queue A for the console, preserving all registers
+;   The byte is appended to OBUF; flush sends it.  A full buffer is flushed
+;   first, so the output order is unchanged.
 ; --------------------------------------------------------------------------
 putc:
+    push hl
+    push af
+.again:
+    ld hl, (optr)
+    ld a, h
+    cp OBUF_END >> 8
+    jr c, .room
+    call flush
+    jr .again
+.room:
+    pop af
+    ld (hl), a
+    inc hl
+    ld (optr), hl
+    pop hl
+    ret
+
+; --------------------------------------------------------------------------
+; flush - send the queued text to the console (BDOS function 111)
+;   Preserves all registers.
+; --------------------------------------------------------------------------
+flush:
     push af
     push bc
     push de
     push hl
-    ld e, a
-    ld c, F_CONOUT
+    ld hl, (optr)
+    ld de, OBUF
+    or a
+    sbc hl, de                  ; HL = bytes queued
+    jr z, .done
+    ld (cb_len), hl
+    ld (optr), de               ; the buffer is empty again
+    ld de, cb
+    ld c, F_WRITEBLK
     call BDOS
+.done:
     pop hl
     pop de
     pop bc
@@ -1268,6 +1320,10 @@ grid_inrow:  db 0
 grid_x:      db 0
 grid_mode:   db 0
 grid_byte:   db 0
+
+optr:        dw OBUF          ; next free byte in the output buffer
+cb:          dw OBUF          ; F111 control block: text address ...
+cb_len:      dw 0             ; ... and length
 
 scb_pb:      db 0x1A, 0, 0, 0
 bios_pb:     db 32, 0, 0, 0, 0, 0, 0, 0

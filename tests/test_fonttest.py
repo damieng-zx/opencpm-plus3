@@ -58,5 +58,46 @@ class SixtyFourColumns(unittest.TestCase):
         self.assertIn("th_symbols", text)                  # A0-BF in context
 
 
+class Output(unittest.TestCase):
+    """A page is sent with one BDOS call, not one per byte."""
+
+    def text(self) -> str:
+        return source("src/test/fonttest.asm")
+
+    def test_putc_queues_instead_of_calling_the_bdos(self):
+        text = self.text()
+        body = text[text.index("\nputc:"):text.index("; flush - send")]
+        self.assertIn("ld (optr), hl", body)
+        self.assertNotIn("call BDOS", body)
+        self.assertNotIn("F_CONOUT", text)
+
+    def test_flush_sends_the_buffer_with_function_111(self):
+        text = self.text()
+        self.assertIn("F_WRITEBLK  equ 111", text)
+        body = text[text.index("\nflush:"):text.index("; puts - output")]
+        self.assertIn("ld c, F_WRITEBLK", body)
+        self.assertIn("call BDOS", body)
+
+    def test_the_buffer_is_flushed_before_waiting_and_quitting(self):
+        text = self.text()
+        wait = text[text.index("wait_key:"):text.index("; read_width")]
+        self.assertLess(wait.index("call flush"), wait.index("F_CONIO"))
+        quit_ = text[text.index("quit:"):text.index("; wait_key")]
+        self.assertLess(quit_.index("call flush"), quit_.index("rst 0"))
+
+    def test_the_buffer_flushes_itself_when_full(self):
+        text = self.text()
+        body = text[text.index("\nputc:"):text.index("; flush - send")]
+        self.assertIn("cp OBUF_END >> 8", body)
+        self.assertIn("call flush", body)
+
+    def test_draw_page_is_bracketed_by_the_bench_markers(self):
+        text = self.text()
+        body = text[text.index("draw_page:"):text.index("dispatch_page:")]
+        self.assertIn("MARKER      equ 0x3F00", text)
+        self.assertLess(body.index("ld a, 1"), body.index("call clear_screen"))
+        self.assertLess(body.index("call flush"), body.index("ld a, 2"))
+
+
 if __name__ == "__main__":
     unittest.main()
