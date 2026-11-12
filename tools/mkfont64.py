@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build src/bios/font64.bin from the Compression .ch8 source.
+"""Build src/bios/font64.bin from its .ch8 source, src/bios/font64.ch8.
 
 64 columns x 4 pixels = 256, exactly the Spectrum line width, so 64x24 is the
 widest mode that still fits a legible 4-pixel pitch (the +3's 51-column mode
@@ -7,14 +7,15 @@ uses 5 pixels; 80 columns would need 3).
 
 The typeface is "Compression" from the ZX Origins collection by Damien Guard
 (https://damieng.com/typography/zx-origins/compression/), drawn for exactly
-this: 4-pixel cells rendered half-width.  The .ch8 is 96 glyphs covering
-0x20-0x7F, one byte per scan line, pixels in bits 7..4, with a 1-pixel left
-bearing so consecutive glyphs keep a gap.
+this: 4-pixel cells rendered half-width.  The .ch8 holds all 256 glyphs, one
+byte per scan line, eight scan lines per glyph, pixels in bits 7..4, with a
+1-pixel left bearing so consecutive glyphs keep a gap.  It covers the same
+code points as the 51-column set: ASCII, the 0x80-0x9F box-drawing codes and
+the accented letters and symbols above them.
 
-Everything outside ASCII is left blank.  The typeface has no 3-pixel
-line-drawing or accented set, and cropping the 5-pixel CPC glyphs down to
-four columns turns boxes and shades into noise; 51-column mode keeps the
-full set.  Blank is at least honest.
+The build only validates the source and copies it, so font64.bin is the .ch8
+byte for byte; keeping the step means the source of truth is the .ch8 and
+`--check` catches a stale binary.
 
 Usage:
     python3 tools/mkfont64.py            # write src/bios/font64.bin
@@ -29,30 +30,24 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "src" / "bios" / "compression.ch8"
+SOURCE = ROOT / "src" / "bios" / "font64.ch8"
 OUTPUT = ROOT / "src" / "bios" / "font64.bin"
 
 GLYPHS = 256
 ROWS = 8
-FIRST = 0x20          # the .ch8 covers 0x20-0x7F
-COUNT = 96
 
 
 def build() -> bytes:
     src = SOURCE.read_bytes()
-    if len(src) != COUNT * ROWS:
-        raise SystemExit(f"{SOURCE}: expected {COUNT * ROWS} bytes, got {len(src)}")
+    if len(src) != GLYPHS * ROWS:
+        raise SystemExit(f"{SOURCE}: expected {GLYPHS * ROWS} bytes, got {len(src)}")
 
-    out = bytearray(GLYPHS * ROWS)
-    for i in range(COUNT):
-        code = FIRST + i
-        for row in range(ROWS):
-            value = src[i * ROWS + row]
-            if value & 0x0F:
-                raise SystemExit(
-                    f"{SOURCE}: glyph {code:#04x} row {row} has pixels below bit 4")
-            out[(code * ROWS) + row] = value
-    return bytes(out)
+    for index, value in enumerate(src):
+        if value & 0x0F:
+            raise SystemExit(
+                f"{SOURCE}: glyph {index // ROWS:#04x} row {index % ROWS} "
+                "has pixels below bit 4")
+    return bytes(src)
 
 
 def sheet(data: bytes) -> None:
@@ -61,7 +56,7 @@ def sheet(data: bytes) -> None:
         return ["".join("#" if row & (0x80 >> x) else "." for x in range(4))
                 for row in rows]
 
-    for start in range(32, 128, 16):
+    for start in range(0, GLYPHS, 16):
         codes = list(range(start, start + 16))
         for row in range(ROWS):
             print("  ".join(glyph(c)[row] for c in codes))
@@ -92,8 +87,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     args.out.write_bytes(data)
-    print(f"{args.out}: {len(data)} bytes "
-          f"(ASCII 0x20-0x7f from Compression, rest blank)")
+    print(f"{args.out}: {len(data)} bytes (256 glyphs from {SOURCE.name})")
     return 0
 
 

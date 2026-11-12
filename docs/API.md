@@ -638,8 +638,9 @@ Default: 51 columns.
 pixels).  Its font is the "Compression" ZX Origins typeface; because a
 4-pixel glyph fits in one nibble, each 8-pixel attribute cell holds
 exactly two characters, so colour and inverse-video boundaries align
-with the text.  Characters outside ASCII are blank in this mode; 51 and
-32 columns keep the full Amstrad graphics set.
+with the text.  The font covers the full 256-code character set, so
+box drawing, accents and symbols display in this mode as in 51 and 32
+columns.
 
 The current column count minus 1 is stored in the SCB at offset 0x1A
 (`conwidth`, read with BDOS F49).  In 24×80 mode it is 79 whatever the

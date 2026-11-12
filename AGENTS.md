@@ -257,7 +257,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   rebuilds the XDPB from the boot sector's 10-byte AMSDOS spec (so 10-sector
   42-track layouts work)
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
-- `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/compression.ch8` by `tools/mkfont64.py`
+- `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/font64.ch8` (all 256 glyphs) by `tools/mkfont64.py`
 - `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O).  The directory/FCB
   helpers (`find_free_block`, `read_dir_entry`, `write_dir_entry`,
   `dir_sector_to_bios`, `search_next_entry`, `match_fcb`, `bf_f15`-`bf_f18`,
@@ -315,7 +315,7 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   bank-5 label without `call _page_in` first in the same routine (`; paged`
   marks an exception), or if bank-5 code calls anything that reaches
   `write_1ffd`
-- `tools/mkfont64.py` — Builds `font64.bin` from the Compression `.ch8` (`--check` verifies the committed binary)
+- `tools/mkfont64.py` — Builds `font64.bin` from `font64.ch8` (`--check` verifies the committed binary)
 - `tools/z80lint.py` — Parser-based Z80 linter (see **Linting**)
 - `tools/jp2jr.py` — Lists every `jp` in `CPM3.SYS`/`CPM3C.SYS` whose target
   is within `jr` range (from `build/bios.lst`); `--fix` rewrites them in the

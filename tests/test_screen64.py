@@ -2,8 +2,8 @@
 
 64 x 4 = 256 pixels, the Spectrum's full line width, so this is the widest
 mode that can use a full 4-pixel pitch.  The typeface is "Compression" from
-the ZX Origins collection; `tools/mkfont64.py` turns the .ch8 source into the
-2048-byte font the loader expects.
+the ZX Origins collection; `tools/mkfont64.py` validates the 256-glyph .ch8
+source (`src/bios/font64.ch8`) and writes the 2048-byte font the loader expects.
 """
 
 from __future__ import annotations
@@ -107,11 +107,13 @@ class Font(unittest.TestCase):
         bad = [i for i, value in enumerate(data) if value & 0x0F]
         self.assertEqual(bad, [], "glyph rows with pixels below bit 4")
 
-    def test_high_ascii_is_blank(self):
+    def test_the_whole_character_set_is_drawn(self):
+        """Control-code glyphs, box drawing, accents and symbols, not just
+        ASCII: space is the only blank glyph."""
         data = (ROOT / "src" / "bios" / "font64.bin").read_bytes()
-        for code in range(0x80, 0x100):
-            self.assertEqual(data[code * 8:(code + 1) * 8], bytes(8),
-                             f"0x{code:02x} should be blank")
+        blank = [code for code in range(256)
+                 if data[code * 8:(code + 1) * 8] == bytes(8)]
+        self.assertEqual(blank, [0x20])
 
     def test_ascii_is_present(self):
         data = (ROOT / "src" / "bios" / "font64.bin").read_bytes()
