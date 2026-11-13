@@ -113,6 +113,13 @@ ccp_start:
     jp .got_line
 
 .no_chain:
+    ; A transient may leave the DMA pointer somewhere else.  DIR, TYPE
+    ; and the command search all deliver through the DMA, so restore the
+    ; default 0080h buffer before every command.
+    ld de, DMA
+    ld c, 26                   ; F26: Set DMA
+    call BDOS
+
     ; A new command from the console: clear the program return code.
     xor a
     ld (CCP_RC_ADDR), a

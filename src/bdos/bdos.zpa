@@ -984,6 +984,11 @@ bf_f13:
     ld hl, 0x0080
     ld (bdos_dma), hl
     ld (scb_dma), hl
+    ; F44's multi-sector count is per-program state; a program that leaves
+    ; it above 1 would make the next F_READ/F_WRITE transfer several
+    ; records into a one-record buffer.  Reset it with the disk system.
+    ld a, 1
+    ld (scb_multi), a
     ; Invalidate the drive cache so the select_drive below actually does
     ; the sel_disk + DPB refetch + ALV rebuild (disc may have changed).
     ld a, 0xFF

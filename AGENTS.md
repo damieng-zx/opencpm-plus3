@@ -276,6 +276,15 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/tools/device.asm` — `DEVICE.COM`: reads the BIOS character device table
   (BIOS fn 20 through F50) and assigns logical devices by writing the SCB
   redirection vectors (F49); the BIOS honours `LSTVEC`/`AUXOVEC` only
+- `src/tools/edit.asm` — `EDIT.COM`, the full-screen text editor.  23 text
+  rows plus an inverted status row, width-aware for 32/51/64/80 columns.
+  EXTEND (Caps+Symbol) chords: O open, S save, N new, Q quit, F find,
+  R replace, V whitespace, W word wrap, I insert/overwrite, Z undo,
+  D delete, L redraw, H help; holding EXTEND alone for ~1 s opens the
+  framed help panel.  Raw key tokens come from XBIOS `KM_KT_GET`
+  (0x00DA), so EXTEND+letter and the physical cursor keys
+  (Caps+5/6/7/8) stay distinct.  Text lives in a gap buffer at
+  `3000-F000`; a final `^Z` is preserved on save.
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
 - `src/tools/set24x80.asm` — `SET24X80.COM`, enter/leave the virtual 80x24 screen
 - `src/tools/setkeys.asm` — `SETKEYS.COM`, apply a +3 key-definition file

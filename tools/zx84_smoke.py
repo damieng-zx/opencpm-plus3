@@ -1215,6 +1215,95 @@ class Smoke:
             except OSError:
                 pass
 
+    def run_editor(self) -> None:
+        """EDIT.COM: normal save and failed-save safety.
+
+        The editor writes a temporary file and renames it over the target
+        only after every record is written.  A normal save must show the new
+        content, and a save that runs out of space must leave the original
+        file intact and must not leave a phantom or temporary entry.
+        """
+        tools = str(ROOT / "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import mkdsk  # noqa: E402
+
+        def make_image(path: Path, filler: bool) -> None:
+            shutil.copyfile(ROOT / "build" / "cpm3.dsk", path)
+            img = mkdsk.DSKImage().load(path)
+            img.delete_cpm_file("EDTEST.TXT")
+            img.add_cpm_file(
+                "EDTEST.TXT", b"editor test\r\nsecond line\r\n\x1a")
+            img.delete_cpm_file("FILLER.TXT")
+            if filler:
+                used = set()
+                for i in range(img.dir_entries):
+                    entry = img._read_dir_entry(i)
+                    if entry[0] != 0xE5:
+                        used.update(img._entry_blocks(entry))
+                free_blocks = (img.dsm + 1) - len(used) - img.dir_blocks
+                img.add_cpm_file(
+                    "FILLER.TXT", b"F" * (free_blocks * img.block_size))
+            img.save(path)
+
+        scratch = ROOT / "build" / "editor-test.dsk"
+        full = ROOT / "build" / "editor-full-test.dsk"
+        make_image(scratch, False)
+        make_image(full, True)
+
+        old_dsk = self.dsk
+        try:
+            self.log("EDIT.COM normal save")
+            self.dsk = scratch
+            self.boot()
+            self.command("dir", 1200)
+            self.expect("EDIT.COM present", "EDIT     COM", "EDTEST   TXT")
+
+            self.command("edit edtest.txt", 1500)
+            self.expect("EDIT.COM opened the file",
+                        "editor test", "A:EDTEST.TXT")
+            self.mcp.call("type", {"text": "X"})
+            self.mcp.call("run", {"frames": 300})
+            self.key("shift+sym+s", 1200)
+            self.expect("EDIT.COM saved", "Saved.")
+            self.key("shift+sym+q", 800)
+            self.wait_for(["A>"], frames=500)
+            self.command("type edtest.txt", 1200)
+            self.expect("EDIT.COM saved content",
+                        "Xeditor test", "second line")
+            self.command("dir", 1200)
+            self.expect("EDIT.COM directory intact after save",
+                        "EDIT     COM", "EDTEST   TXT")
+
+            self.log("EDIT.COM failed save on a full disk")
+            self.dsk = full
+            self.boot()
+            self.command("edit edtest.txt", 1500)
+            self.expect("EDIT.COM opened the full-disk file", "editor test")
+            self.mcp.call("type", {"text": "Y"})
+            self.mcp.call("run", {"frames": 300})
+            self.key("shift+sym+s", 1200)
+            self.expect("EDIT.COM full-disk save fails", "Write error")
+            self.key("x", 400)
+            self.key("shift+sym+q", 800)
+            self.key("n", 800)
+            self.wait_for(["A>"], frames=500)
+            self.command("type edtest.txt", 1200)
+            self.expect("EDIT.COM original preserved", "editor test")
+            self.command("dir", 1200)
+            self.expect("EDIT.COM directory intact after failed save",
+                        "EDIT     COM", "EDTEST   TXT")
+            if "$$$$$$$" in self.text():
+                raise SmokeError(
+                    "EDIT.COM left a temporary file after a failed save")
+        finally:
+            self.dsk = old_dsk
+            for path in (scratch, full):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+
     def run_dump(self) -> None:
         """DUMP.COM: usage, missing file and width-aware hex output.
 
@@ -2244,6 +2333,36 @@ class Smoke:
         else:
             self.log("PIP.COM not on the disk; skipping the C: copy check")
 
+    def run_ccp_dma(self) -> None:
+        """The CCP must restore the default DMA before each command.
+
+        A transient can leave the BDOS DMA pointer elsewhere.  DIR and the
+        command search deliver through it, so a stale pointer makes the next
+        DIR print "No file".  Corrupt the SCB DMA and warm boot: the CCP must
+        put 0080h back and keep DIR/DUMP working.
+        """
+        self.log("CCP restores the default DMA")
+        self.mcp.call("write_memory",
+                      {"address": "F63C", "hex_bytes": "0030"})
+        self.mcp.call("set_register", {"register": "PC", "value": "0000"})
+        self.mcp.call("run", {"frames": 800})
+        self.wait_for(["A>"], frames=500)
+        self.command("dir", 1200)
+        self.expect("CCP DIR after stale DMA", "EDIT     COM", "RPED     SUB")
+        self.command("dump rped.sub", 1200)
+        self.expect("CCP command tail after stale DMA", "basic rped")
+
+        # F44's multi-sector count is also per-program state.  Leave it at 8
+        # and warm boot; the CCP must put it back to 1 or DUMP's 128-byte
+        # record buffer overflows.
+        self.mcp.call("write_memory",
+                      {"address": "F64A", "hex_bytes": "08"})
+        self.mcp.call("set_register", {"register": "PC", "value": "0000"})
+        self.mcp.call("run", {"frames": 800})
+        self.wait_for(["A>"], frames=500)
+        self.command("dump rped.sub", 1200)
+        self.expect("CCP reset multi-sector count", "basic rped")
+
     def run_ccp_names(self) -> None:
         """Short command names, DIR/DIRSYS and the unknown-command echo."""
         self.command("DIRSYS", 500)
@@ -3093,6 +3212,7 @@ class Smoke:
         self.run_biostest()
         self.run_chaintest()
         self.run_ccp()
+        self.run_ccp_dma()
         self.run_dump()
         self.run_inptest_edit()
         self.run_ccp_names()
@@ -3115,6 +3235,7 @@ class Smoke:
         self.check_bank5_code("after the app tests")
         self.run_profile()
         self.run_submit_input()
+        self.run_editor()
         self.run_setdef()
         if quick:
             self.log("quick mode: skipping the destructive format test")
