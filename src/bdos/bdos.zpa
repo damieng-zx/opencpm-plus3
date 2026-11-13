@@ -939,20 +939,20 @@ bf_f12:
 
 ; logout_floppies — forget the detected format of the selected drives
 ;   In:       DE = drive vector (bit 0 = A:, bit 1 = B:)
-;   Out:      the matching XDPB freeze bytes cleared
+;   Out:      the matching drives' fdc_detected flags cleared
 ;   Clobbers: AF
 logout_floppies:
     ld a, e
     and 1
     jr z, .no_a
     xor a
-    ld (xdpb_a + XDPB_FREEZE), a
+    ld (fdc_detected), a
 .no_a:
     ld a, e
     and 2
     ret z
     xor a
-    ld (xdpb_b + XDPB_FREEZE), a
+    ld (fdc_detected + 1), a
     ret
 
 ; F13: Reset disk system

@@ -1036,8 +1036,8 @@ xdpb_a:
     dw 512                     ; 21-22 Physical sector size
     db 42                      ; 23   Gap 3 R/W
     db 82                      ; 24   Gap 3 format
-    db 0x40                    ; 25   Flags: MFM
-    db 0                       ; 26   Freeze: 0 = auto-detect on login
+    db 0x60                    ; 25   Flags: MFM + skip deleted data
+    db 0                       ; 26   Freeze: 0 (detection state is fdc_detected)
 xdpb_b:
     dw 36
     db 3
@@ -1058,7 +1058,7 @@ xdpb_b:
     dw 512
     db 42
     db 82
-    db 0x40
+    db 0x60
     db 0
 
 ; XDPB for C: — load_fid copies the FID's XDPB template here.  Stays

@@ -54,8 +54,8 @@ on A: is formatted from a scratch copy of the test image with the target
 hot-swapped in at the "put the disc in" prompt, which exercises both
 disc-change prompts; `FORMAT`, `FORMAT A: /X` (a junk switch must not start
 a format), `FORMAT C:` and ESC-cancel are checked first.
-The disc swap reboots the machine, because the FDC login freezes a drive's
-XDPB after the first detect and the 720K system disc must not keep the
+The disc swap reboots the machine, because the FDC login remembers a drive's
+format after the first detect and the 720K system disc must not keep the
 formatted disc's geometry.  The rest run on B: with a scratch copy of
 `build/cpm3_720.dsk` mounted there: 720K DS/80, CPC System, CPC Data, HiForm
 203 (42 tracks, 10 sectors), SuperMat 192 and CPC IBM, and finally a
@@ -331,7 +331,6 @@ Where our OS differs from Locomotive's in ways a program could see:
 
 | | Ours | Locomotive's |
 |---|---|---|
-| XDPB flags, freeze (`DD_LOGIN`, `DD_L_XDPB`) | `40h`, `FFh` | `60h` (MFM + multi-track), `00h` |
 | `KM_KT_PUT` | private token queue | types into the console |
 | Console width in the SCB (`conwidth`) | 50 for 51 columns | 49 (it calls it 50 columns) |
 | Chained command at 0080h (`F47`) | length byte, then text | a NUL-terminated string |
@@ -527,7 +526,7 @@ EXM=0, DSM=174, DRM=63, AL0=C0h, AL1=00h, CKS=16, OFF=1, PSH=2, PHM=3.
 
 Test 13 runs `DD_L_XDPB` with the same spec and checks the 27-byte XDPB at
 `D820h`, including the extension: sides=0, tracks=40, sectors=9, first
-sector=1, sector size=512, gap1=42, gap2=82, flags=40h, freeze=FFh.
+sector=1, sector size=512, gap1=42, gap2=82, flags=60h, freeze=00h.
 
 Test 14 drives `DD_L_READ` directly: a READ ID command returns seven
 result bytes with a valid R, and a READ DATA command reads the boot sector

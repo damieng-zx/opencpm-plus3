@@ -1005,3 +1005,55 @@ class TesterConstants(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class XdpbExposedFields(unittest.TestCase):
+    """A program reads Flags (60h: MFM + skip deleted) and Freeze (0) as
+    Locomotive's BIOS reports them; whether a drive's format has been
+    detected is the BIOS's own state (fdc_detected), not the XDPB's."""
+
+    def fdc(self) -> str:
+        return source("src/bios/fdc765.zpa")
+
+    def test_templates_carry_flags_60_and_freeze_0(self):
+        text = self.fdc()
+        table = text[text.index("xdpb_std_table:"):text.index("; fdc_init")]
+        tails = re.findall(r"db 42, 82, (0x[0-9A-Fa-f]+), (0x[0-9A-Fa-f]+|0)\b", table)
+        self.assertEqual(len(tails), 4)
+        for flags, freeze in tails:
+            self.assertEqual(int(flags, 16) & 0x60, 0x60)   # MFM + skip deleted
+            self.assertEqual(int(freeze, 16), 0)
+        self.assertNotIn("0xFF  ; Gap1", table)
+
+    def test_dd_l_xdpb_builds_flags_60_freeze_0(self):
+        text = source("src/bios/bios.zpa")
+        body = text[text.index("ld (dd_xdpb_buf + 24), a"):
+                    text.index(".ddb_bad:")]
+        self.assertIn("ld a, 0x60", body)
+        self.assertRegex(body, r"xor a\s+; Freeze 0[^\n]*\n\s+ld \(dd_xdpb_buf \+ 26\), a")
+
+    def test_static_xdpbs_start_with_flags_60(self):
+        text = source("src/bios/common.zpa")
+        a = text[text.index("xdpb_a:"):text.index("xdpb_c:")]
+        self.assertEqual(a.count("db 0x60"), 2)          # A: and B:
+        self.assertNotIn("db 0x40", a)
+
+    def test_detection_state_is_not_in_the_xdpb(self):
+        text = self.fdc()
+        body = text[text.index("fdc_login_body:"):text.index(".start_probe:")]
+        self.assertIn("call fdc_detected_ptr", body)
+        self.assertNotIn("XDPB_FREEZE", body)
+        self.assertEqual(text.count("jp fdc_mark_detected") +
+                         text.count("jr fdc_mark_detected"), 2)
+        bdos = source("src/bdos/bdos.zpa")
+        logout = bdos[bdos.index("logout_floppies:"):bdos.index("; F13: Reset disk")]
+        self.assertIn("ld (fdc_detected), a", logout)
+        self.assertIn("ld (fdc_detected + 1), a", logout)
+        self.assertNotIn("XDPB_FREEZE", logout)
+
+    def test_xtetest_expects_the_same_values_everywhere(self):
+        text = source("src/test/xtetest.asm")
+        body = text[text.index("; flags: MFM + skip deleted data (60h)"):
+                    text.index(".t13_done:")]
+        self.assertIn("cp 0x60", body)
+        self.assertNotIn("(ours)", body)

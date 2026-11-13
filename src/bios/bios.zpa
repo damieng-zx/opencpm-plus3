@@ -589,7 +589,7 @@ set_dma:
 ; for the drive since cold boot, warm reset, or BDOS fn 37 (reset disk);
 ; bit 0 = 1 means it's already been logged in this session. We probe the
 ; disc geometry only on the first-select case so normal file I/O never
-; re-reads the boot sector. fdc_login self-gates via the XDPB Freeze byte
+; re-reads the boot sector. fdc_login self-gates via fdc_detected
 ; as a second safety net — a redundant call is one byte-compare + ret z.
 ;
 ; The BDOS (select_drive) also calls fdc_login explicitly on its own
@@ -1494,9 +1494,9 @@ xbios_handler:
     ld (dd_xdpb_buf + 23), a
     ld a, (dd_spec + 9)            ; gap 2
     ld (dd_xdpb_buf + 24), a
-    ld a, 0x40                     ; MFM
+    ld a, 0x60                     ; MFM + skip deleted data, as Locomotive's BIOS reports
     ld (dd_xdpb_buf + 25), a
-    ld a, 0xFF                     ; fixed/detected
+    xor a                          ; Freeze 0, likewise
     ld (dd_xdpb_buf + 26), a
 
     ld a, (dd_type)

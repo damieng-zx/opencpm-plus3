@@ -1141,15 +1141,11 @@ start:
     ld a, (0xD838)
     cp 0x52
     jp nz, .t13_fail
-    ld a, (0xD839)              ; flags: MFM (40h) everywhere; ours is exactly
-    and 0x40                    ; 40h and Locomotive's 60h (multi-track too)
-    cp 0x40
+    ld a, (0xD839)              ; flags: MFM + skip deleted data (60h)
+    cp 0x60
     jp nz, .t13_fail
-    ld a, (ours)                ; freeze: ours keeps a detected format (FFh),
-    or a                        ; Locomotive's leaves it to auto-detect (00h)
-    jr z, .t13_done
-    ld a, (0xD83A)
-    cp 0xFF
+    ld a, (0xD83A)              ; freeze: 0
+    or a
     jp nz, .t13_fail
 .t13_done:
     ld de, msg_ok

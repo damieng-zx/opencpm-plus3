@@ -457,7 +457,7 @@ wrote in `start_tpa`.
 | Boots but garbage after first BDOS call        | Common stub didn't land at F600 (PHASE wrong / size mismatch)              | `bios.zpa`, `common_end` assert |
 | RAMDISK.FID disk I/O reads garbage             | `copy_record_*_tpa` moved off pinned addrs                                 | asserts at `common.zpa` |
 | TPA program crashes randomly                   | Writable var placed before `bdos_stub` in common; TPA stack overran it     | assert at `common.zpa`, `saved_sp > bdos_stub` |
-| Hang on first SELDSK                           | XDPB Freeze byte stuck nonzero with stale geometry                         | `xdpb_a` byte 26, `fdc_login` |
+| Hang on first SELDSK                           | `fdc_detected` stuck set with stale geometry                               | `fdc_detected`, `fdc_login` |
 | ISR fires but motor never spins down           | `fdc_busy` left non-zero by a driver path                                  | `isr_handler` motor-off block, `common.zpa` |
 | Inter-bank `MOVE` returns wrong data           | xmove banks set with `xmove_active=0`, or copying with stale `_ibm_*_bank` | `bios_xmove`, `interbank_move` |
 | Mallard BASIC hangs probing XBIOS              | Unknown XBIOS ID returns 0xFF; TE IDs are handled                           | `xbios_handler` in `bios.zpa` |

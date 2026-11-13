@@ -103,7 +103,7 @@ is CPC Data.  For the 1-9 group the probe then rebuilds the XDPB from the
 10-byte AMSDOS spec block at the start of the boot sector, so 10-sector
 and 42-track layouts (HiForm, SuperMat, ...) log in as themselves instead
 of falling back to the 9-sector template.  A disc reset (BDOS fn 13 or 37)
-clears the XDPB freeze byte so the next login probes the media again.
+clears the BIOS's "format detected" flag (`fdc_detected`; the XDPB's own Freeze byte a program sees stays 0) so the next login probes the media again.
 `DD_FORMAT` uses the XDPB's physical sector count, `PSH` size code and
 format gap, and is destructive by definition.  The login probe's spec
 build rejects a spec that does not produce a usable disk (bad type,

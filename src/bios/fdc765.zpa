@@ -78,7 +78,9 @@ XDPB_SECTS  equ 19             ; Physical sectors per track
 XDPB_FIRST  equ 20             ; First sector ID on disc
 XDPB_GAP1   equ 23             ; Gap3 for read/write
 XDPB_GAP2   equ 24             ; Gap3 for format
-XDPB_FREEZE equ 26             ; 0 = auto-detect on login, 0xFF = keep current
+XDPB_FLAGS  equ 25             ; 0x60 = MFM + skip deleted data (as Locomotive's BIOS reports)
+XDPB_FREEZE equ 26             ; Freeze: programs see 0.  Whether a drive's format
+                               ; has been detected is the BIOS's own state, fdc_detected
 
 ; --- Retry count ---
 MAX_RETRIES equ 10
@@ -139,7 +141,8 @@ fdc_cmd:           db 0        ; opcode of the transfer in progress
 fdc_sec:           db 0        ; sector ID of the transfer in progress
 fdc_tries:         db 0        ; retries left for it
 fdc_seek_timeout:  dw 0        ; seek/recalibrate poll timeout
-fdc_login_force:   db 0        ; 1 = DD_LOGIN: re-detect despite Freeze
+fdc_login_force:   db 0        ; 1 = DD_LOGIN: re-detect despite having detected the format
+fdc_detected:      db 0, 0     ; per drive (A:, B:): 0xFF once its format has been detected
 fdc_login_type:    db 0        ; Disc type found by the last login probe
 
 ; DD_SETUP parameter block (defaults from the +3 manual)
@@ -160,8 +163,10 @@ fmt_left: db 0
 ; ==========================================================================
 ; Standard XDPB table — 4 entries × 27 bytes, indexed by disc type (0-3).
 ; fdc_login copies the matching entry into the drive's xdpb_a / xdpb_b
-; after detecting the format from the boot sector.  Freeze=FF on every
-; entry so a re-login keeps the detected format until a disk change.
+; after detecting the format from the boot sector.  The XDPB a program sees
+; carries Flags=60h (MFM + skip deleted) and Freeze=0, as Locomotive's BIOS
+; reports them; fdc_detected remembers that the format was found, so a
+; re-login keeps it until DD_LOGIN asks again.
 ; ==========================================================================
 xdpb_std_table:
 ; Type 0: +3/PCW SS — 40T × 9 × 512, 1K blocks, 1 reserved track, IDs 1-9
@@ -173,7 +178,7 @@ xdpb_std_table:
     db 2, 3        ; PSH, PHM
     db 0, 40, 9, 1 ; Sidedness, Tracks, Sectors, FirstSectorID
     dw 512         ; Sector size
-    db 42, 82, 0x40, 0xFF  ; Gap1, Gap2, Flags, Freeze
+    db 42, 82, 0x60, 0  ; Gap1, Gap2, Flags, Freeze
 ; Type 1: CPC System — 40T × 9 × 512, 1K blocks, 2 reserved tracks, IDs 0x41-0x49
     dw 36
     db 3, 7, 0
@@ -183,7 +188,7 @@ xdpb_std_table:
     db 2, 3
     db 0, 40, 9, 0x41
     dw 512
-    db 42, 82, 0x40, 0xFF
+    db 42, 82, 0x60, 0
 ; Type 2: CPC Data — 40T × 9 × 512, 1K blocks, 0 reserved tracks, IDs 0xC1-0xC9
     dw 36
     db 3, 7, 0
@@ -193,7 +198,7 @@ xdpb_std_table:
     db 2, 3
     db 0, 40, 9, 0xC1
     dw 512
-    db 42, 82, 0x40, 0xFF
+    db 42, 82, 0x60, 0
 ; Type 3: PCW DS/DD 720K — 80T × 2 sides × 9 × 512, 2K blocks, alternating DS,
 ; 1 reserved track, sector IDs 1-9. Canonical AMSDOS CF2DD defaults
 ; (DirBlocks=2, DRM=127, AL0=C0h, CKS=32). fdc_login overlays
@@ -209,7 +214,7 @@ xdpb_std_table:
     db 2, 3
     db 1, 80, 9, 1
     dw 512
-    db 42, 82, 0x42, 0xFF
+    db 42, 82, 0x62, 0
 
 
 ; ==========================================================================
@@ -360,13 +365,16 @@ fdc_login_body:
     ld a, (fdc_login_force)
     or a
     jr nz, .force_login
-    ld a, (ix + XDPB_FREEZE)
-    cp 0xFF
-    ret z                           ; Already detected — motor wasn't touched.
+    call fdc_detected_ptr
+    ld a, (hl)
+    or a
+    ret nz                          ; Already detected — motor wasn't touched.
     jr .start_probe
 .force_login:
     xor a
-    ld (fdc_login_force), a         ; DD_LOGIN ignores the Freeze flag once
+    ld (fdc_login_force), a         ; DD_LOGIN re-detects once
+    call fdc_detected_ptr
+    ld (hl), 0                      ; forget the old detection
 
 .start_probe:
     call motor_on
@@ -445,7 +453,7 @@ fdc_login_body:
     pop de
     ld bc, 27
     ldir
-    ret
+    jr fdc_mark_detected
 .spec_fallback:
     jr .apply_and_patch
 .type0_fallback:
@@ -517,7 +525,7 @@ fdc_login_body:
     pop de                          ; DE = destination (drive's XDPB)
     ld bc, 27
     ldir
-    ret
+    jr fdc_mark_detected
 
 
 ; ==========================================================================
@@ -539,6 +547,29 @@ xdpb_table_offset:
 .loop:
     add hl, de
     djnz .loop
+    ret
+
+
+; fdc_detected_ptr — HL = the selected drive's byte in fdc_detected
+; @proc fdc_detected_ptr
+; @out   hl
+; @clobbers af
+; @end
+fdc_detected_ptr:
+    ld hl, fdc_detected
+    ld a, (disk_drive)
+    or a
+    ret z
+    inc hl
+    ret
+
+; fdc_mark_detected — the selected drive's format has been detected
+; @proc fdc_mark_detected
+; @clobbers af,hl
+; @end
+fdc_mark_detected:
+    call fdc_detected_ptr
+    ld (hl), 0xFF
     ret
 
 
