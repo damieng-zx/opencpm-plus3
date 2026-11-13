@@ -382,7 +382,9 @@ BDOS function 124 (private, used by the CCP only):
   and gets its whole source block in one read.
 
 #### F45 — Set BDOS Error Mode
-- **In**: E=mode
+- **In**: E=mode: 0FFh returns the error code to the program without a
+  message, 0FEh returns it and also displays the message, anything else is
+  the default (display the message and warm boot)
 - **Note**: Stored in the SCB (`scb_errmode`, offset 0x4B) as well.
 
 #### F46 — Get Free Disk Space

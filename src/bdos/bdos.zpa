@@ -1655,18 +1655,29 @@ is_fcb_readonly:
 ; @out   a
 ; @clobbers af,bc,de,hl,ix
 ; @end
-; ro_error — Handle a read-only write.
-;   error_mode bit 0 = 1: return A=2 to the caller.
-;   error_mode bit 0 = 0: print the classic message and warm boot.
+; ro_error — Handle a read-only write, by F45's error mode.
+;   In:  A = the (non-zero) code to return in the modes that return
+;   Out: A = that code, and NZ: callers go on to test the flag
+;   error_mode FFh: return silently.
+;   error_mode FEh: print the message, then return.
+;   any other:      print the message and warm boot (the CP/M 3 default).
 ro_error:
     ld c, a
     ld a, (error_mode)
-    and 1
-    ld a, c
-    ret nz
+    inc a
+    jr z, .ro_ret              ; FFh: return the code, say nothing
     ld hl, msg_ro
+    push bc
     call print_str
+    pop bc
+    ld a, (error_mode)
+    cp 0xFE
+    jr z, .ro_ret              ; FEh: shown, then returned
     jp warm_boot
+.ro_ret:
+    ld a, c
+    or a
+    ret
 
 msg_ro:
     db 0x0D, 0x0A, "Bdos Err: R/O", 0x0D, 0x0A, 0
@@ -2080,9 +2091,9 @@ bf_f19:
     ld h, 0
     jp bdos_ret
 .del_ro_err:
-    ; File R/O: with error_mode bit 0 set ro_error returns A=0xFF
-    ; (nothing deleted); otherwise it prints the classic message and warm
-    ; boots, exactly like the other read-only paths.
+    ; File R/O: with error mode FFh (or FEh, which also prints) ro_error
+    ; returns A=0xFF (nothing deleted); otherwise it prints the classic
+    ; message and warm boots, exactly like the other read-only paths.
     ld a, 0xFF
     call ro_error
     ld l, a

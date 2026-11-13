@@ -11,6 +11,32 @@ def body(text: str, start: str, end: str) -> str:
     return text[text.index(start):text.index(end)]
 
 
+class ErrorMode(unittest.TestCase):
+    """F45: FFh returns the code, FEh returns and displays, else abort."""
+
+    def test_ro_error_distinguishes_ffh_and_feh(self):
+        text = source("src/bdos/bdos.zpa")
+        ro = body(text, "ro_error:", "msg_ro:")
+        self.assertIn("inc a", ro)            # error_mode == FFh
+        self.assertIn("cp 0xFE", ro)          # error_mode == FEh
+        self.assertIn("call print_str", ro)
+        self.assertIn("jp warm_boot", ro)
+        # The old rule treated any odd value as "return".
+        self.assertNotIn("and 1", ro)
+
+    def test_ffh_returns_before_the_message(self):
+        ro = body(source("src/bdos/bdos.zpa"), "ro_error:", "msg_ro:")
+        self.assertLess(ro.index("jr z, .ro_ret"), ro.index("call print_str"))
+        # Callers test the zero flag after the call: it must come back NZ.
+        self.assertRegex(ro, r"\.ro_ret:\s+ld a, c\s+or a\s+ret")
+
+    def test_disktest_runs_both_return_modes(self):
+        t15 = body(source("src/test/disktest.asm"), "test15:", "test16:")
+        self.assertIn("ld e, 0xFE", t15)
+        self.assertIn("ld e, 0xFF", t15)
+        self.assertIn("t15_fe", t15)
+
+
 class ReadOnlyDelete(unittest.TestCase):
     def test_f19_checks_the_filetype_attribute_bit(self):
         f19 = body(source("src/bdos/bdos.zpa"), "bf_f19:", "bf_f20:")

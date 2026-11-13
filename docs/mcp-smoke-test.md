@@ -336,7 +336,6 @@ Where our OS differs from Locomotive's in ways a program could see:
 | BIOS `DEVTBL` first device | `CON` | `CRT`, then `LPT`, `SIO` |
 | `KM_KT_PUT` | private token queue | types into the console |
 | Console width in the SCB (`conwidth`) | 50 for 51 columns | 49 (it calls it 50 columns) |
-| `F45` error mode | any odd value returns codes | `FFh` returns, `FEh` returns and shows, else stop |
 | Record count in H after a multi-sector `F20`/`F21` | the count | not set on success |
 | Chained command at 0080h (`F47`) | length byte, then text | a NUL-terminated string |
 | `DD_FORMAT`/`DD_L_READ` bank 0 | refused | accepted |

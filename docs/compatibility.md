@@ -71,7 +71,7 @@ the CP/M 3 COM header move (`comsize` at 0101h) before jumping to 0100h.
 Attached RSX modules are not installed.  `SET` options need the brackets:
 `SET FILE [RO]`.  The R/O attribute is now enforced: F19 (delete) and F23
 (rename) refuse a directory entry whose filetype byte has bit 7 set,
-returning 0xFF in error mode or printing `Bdos Err: R/O` and warm booting,
+returning 0xFF in F45's return modes (FFh silent, FEh with the message) or printing `Bdos Err: R/O` and warm booting,
 and the F21/F34/F40 write core refuses to write through an FCB opened from
 such an entry.  `DISKTEST` T13 checks delete and rename, then clears the
 attribute and deletes.

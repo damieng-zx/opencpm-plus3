@@ -1380,12 +1380,35 @@ test14:
     ret
 
 test15:
+    ; F45 = FEh first: the error is returned and also displayed, so the
+    ; system's message lands before T15's own line.
+    ld e, 0xFE
+    ld c, 45
+    call BDOS
+    ld c, 28
+    call BDOS                  ; F28: write-protect the current drive
+    call clear_fcb
+    ld hl, fn_ro
+    ld de, FCB1 + 1
+    ld bc, 11
+    ldir
+    ld de, FCB1
+    ld c, 22
+    call BDOS                  ; F22 Make must fail with 0xFF
+    ld (t15_fe), a
+    ld c, 13
+    call BDOS                  ; reset: the drive is writable again
+    call reselect_home
+    ld e, 0
+    ld c, 45
+    call BDOS
+
     ; === T15: F28 write-protect is enforced; F45 return mode ===
     ld de, msg_t15
     ld c, 9
     call BDOS
 
-    ; F45 = 1: return errors instead of aborting
+    ; F45 = FFh: return errors instead of aborting
     ld e, 0xFF
     ld c, 45
     call BDOS
@@ -1403,6 +1426,10 @@ test15:
     ld de, FCB1
     ld c, 22
     call BDOS
+    cp 0xFF
+    jr nz, .t15_fail
+
+    ld a, (t15_fe)             ; the FEh half, run before the label
     cp 0xFF
     jr nz, .t15_fail
 
@@ -3712,6 +3739,7 @@ msg_rec:  db " rec=$"
 msg_t13:  db "T13 Cleanup$"
 msg_t14:  db "T14 F31 tracks drive$"
 msg_t15:  db "T15 R/O protect+F45$"
+t15_fe:   db 0
 msg_t16:  db "T16 SCB write isolation$"
 msg_t17:  db "T17 F30 user area$"
 msg_t18:  db "T18 Extended BDOS$"
