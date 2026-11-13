@@ -336,7 +336,6 @@ Where our OS differs from Locomotive's in ways a program could see:
 | BIOS `DEVTBL` first device | `CON` | `CRT`, then `LPT`, `SIO` |
 | `KM_KT_PUT` | private token queue | types into the console |
 | Console width in the SCB (`conwidth`) | 50 for 51 columns | 49 (it calls it 50 columns) |
-| Record count in H after a multi-sector `F20`/`F21` | the count | not set on success |
 | Chained command at 0080h (`F47`) | length byte, then text | a NUL-terminated string |
 | `DD_FORMAT`/`DD_L_READ` bank 0 | refused | accepted |
 
@@ -692,7 +691,7 @@ after writing one 1K block, and returns to its original value once the
 file is deleted.
 
 T23/T27/T28 cover the F44 multi-sector path: T23 reads four records of
-`CPM3.SYS` in one `F20` (EOT-style count 4, H=4) and compares them with four
+`CPM3.SYS` in one `F20` (count 4, H=0) and compares them with four
 single-record reads; T27/T28 write four records in one `F21` to A: and C:
 and read each marker back.
 

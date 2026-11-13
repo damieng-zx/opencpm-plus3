@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 
 from .layout import labels, source
@@ -82,8 +83,11 @@ class MultiSectorCount(unittest.TestCase):
         self.assertIn("call multi_init", read)
         self.assertIn("call multi_record_done", read)
         self.assertIn("jr c,", read)
-        self.assertIn("ld h, a", read)          # H = ms_done
+        self.assertIn("ld h, a", read)          # H = ms_done (on a stop)
         self.assertIn("ld l, 0", read)
+        # CP/M 3: H is the error field, 0 when the call succeeded.
+        self.assertRegex(read, re.compile(
+            r"\.mr_ret:.*?jr nz, \.mr_has_count\s+ld h, a", re.S))
         done = text[text.index("multi_record_done:"):
                     text.index("; Paging support")]
         self.assertIn("ld (bdos_dma), hl", done)
@@ -117,6 +121,8 @@ class MultiSectorCount(unittest.TestCase):
         self.assertIn("call multi_record_done", write)
         self.assertIn("jr c, .mw_loop", write)
         self.assertIn("ld h, a", write)
+        self.assertRegex(write, re.compile(            # H = 0 on success
+            r"jr nz, \.mw_failed\s+ld h, a", re.S))
         # The range is 1..128 (128 is PIP's full 16K buffer); only 0 and
         # 129+ are rejected, and then the count falls back to one record.
         f44 = text[text.index("bf_f44:"):text.index("; F45: Set BDOS Error Mode")]
@@ -125,8 +131,7 @@ class MultiSectorCount(unittest.TestCase):
         self.assertIn("ld (scb_multi), a", bad)
         # The on-disk tests expect four records in one call each way.
         tester = source("src/test/disktest.asm")
-        self.assertIn("the whole F44 count was transferred", tester)
-        self.assertIn("all four records moved in one call", tester)
+        self.assertEqual(tester.count("H is the error field: zero on success"), 3)
         self.assertIn(".t23_cmp", tester)
 
     def test_f44_validates_and_stores(self):

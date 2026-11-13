@@ -2454,15 +2454,12 @@ test23:
     call BDOS
     or a
     jp nz, .t23_fail
-    ; H = the number of records moved is how our BDOS answers; CP/M 3 only
-    ; promises it on an error, and Locomotive's leaves H alone on success.
-    ld a, (ours)
-    or a
-    jr z, 1F
+    ; H is the error field: zero on success (CP/M 3 gives the number of
+    ; records moved only when the call fails).  The data compared below
+    ; shows that all four moved.
     ld a, h
-    cp 4                       ; the whole F44 count was transferred
+    or a
     jp nz, .t23_fail
-1:
 
     ; Back to one record; reopen and read the same four records separately.
     ld e, 1
@@ -2801,15 +2798,12 @@ test27:
     call BDOS
     or a
     jp nz, .t27_fail
-    ; H = the number of records moved is how our BDOS answers; CP/M 3 only
-    ; promises it on an error, and Locomotive's leaves H alone on success.
-    ld a, (ours)
-    or a
-    jr z, 1F
+    ; H is the error field: zero on success (CP/M 3 gives the number of
+    ; records moved only when the call fails).  The data compared below
+    ; shows that all four moved.
     ld a, h
-    cp 4                       ; all four records moved in one call
+    or a
     jp nz, .t27_fail
-1:
 
     ld e, 1
     ld c, 44
@@ -2927,15 +2921,12 @@ test28:
     call BDOS
     or a
     jp nz, .t28_fail
-    ; H = the number of records moved is how our BDOS answers; CP/M 3 only
-    ; promises it on an error, and Locomotive's leaves H alone on success.
-    ld a, (ours)
-    or a
-    jr z, 1F
+    ; H is the error field: zero on success (CP/M 3 gives the number of
+    ; records moved only when the call fails).  The data compared below
+    ; shows that all four moved.
     ld a, h
-    cp 4                       ; all four records moved in one call
+    or a
     jp nz, .t28_fail
-1:
 
     ld e, 1
     ld c, 44

@@ -308,16 +308,16 @@ BDOS function 124 (private, used by the CCP only):
 - **Out**: A=0 (OK), 1 (EOF), 0xFF (error)
 - **Note**: Reads up to F44's count records (default 1) to consecutive
   128-byte DMA buffers. Advances CR and the DMA address, and auto-extends to
-  the next extent. `H` reports the records actually read; at EOF the return
-  is 1 with a possibly short count (see F44).
+  the next extent. `H` is 0 when the call succeeds; on EOF (A=1) it is the
+  number of records read (see F44).
 
 #### F21 — Write Sequential
 - **In**: DE=FCB address
 - **Out**: A=0 (OK), 1 (directory full), 2 (disk full or write-protected), 0xFF (write error)
 - **Note**: Writes up to F44's count records (default 1) from consecutive
   128-byte DMA buffers. Advances CR and the DMA address, and allocates
-  blocks as needed. `H` reports the records actually written; a disk-full or
-  directory-full error can leave a short count.
+  blocks as needed. `H` is 0 when the call succeeds; after a disk-full or
+  directory-full error it is the number of records written.
 
 #### F22 — Make File
 - **In**: DE=FCB address
@@ -371,10 +371,11 @@ BDOS function 124 (private, used by the CCP only):
 - **Out**: A=0 (accepted) or 0xFF (invalid)
 - **Note**: The count is stored in the SCB (`scb_multi`, offset 0x4A) and
   is reset to 1 by warm boot.  The next F20/F21 transfers up to that many
-  128-byte records, advancing the DMA by 128 per record, and sets `H` to the
-  number actually moved; a count of 1 keeps the CP/M 2.2 fixed-buffer
-  behaviour.  A read stops early at EOF with A=1, `H` = the records moved
-  and `L` = 1, since callers such as PIP read `L` as the status (`dcnt`) and
+  128-byte records, advancing the DMA by 128 per record.  `H` is the error
+  field, so it is 0 on success; only when the call stops early does it hold
+  the number of records moved (as in CP/M 3).  A count of 1 keeps the CP/M
+  2.2 fixed-buffer behaviour.  A read stops early at EOF with A=1, `H` =
+  the records moved and `L` = 1, since callers such as PIP read `L` as the status (`dcnt`) and
   treat 1 as end of file.  The count applies only to sequential I/O; the
   random functions always move one record.  The valid range is 1..128, 128
   being a full 16K buffer and the count PIP asks for.  An invalid count

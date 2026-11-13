@@ -394,7 +394,7 @@ multi_read:
     xor a
     jr .mr_ret
 .mr_stop:
-    ; A = 1 (EOF) or 0xFF (error); H still reports the records moved.
+    ; A = 1 (EOF) or 0xFF (error); H then reports the records moved.
 .mr_ret:
     ld b, a
     xor a
@@ -402,6 +402,11 @@ multi_read:
     ld a, (ms_done)
     ld h, a
     ld l, 0
+    ld a, b
+    or a
+    jr nz, .mr_has_count
+    ld h, a                    ; success: H is the error field, so zero
+.mr_has_count:
     ld a, b
     cp 1
     jr nz, .mr_chk_err
@@ -453,8 +458,11 @@ multi_write:
     ld l, 0
     ld a, b
     or a
-    jr z, .mw_status
-    ld l, b
+    jr nz, .mw_failed
+    ld h, a                    ; success: H is the error field, so zero
+    jr .mw_status
+.mw_failed:
+    ld l, b                    ; H = the records moved before the error
 .mw_status:
     ld a, b
     jp bdos_ret
