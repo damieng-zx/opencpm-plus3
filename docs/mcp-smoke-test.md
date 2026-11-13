@@ -297,7 +297,8 @@ there, so use a scratch copy of the disc.
 
 | Program | On Locomotive's |
 |---|---|
-| `SYSTEST`, `BIOSTEST`, `XTETEST`, `BDOSTEST`, `DISKTEST` | Pass; the checks that are about this system only show `SKIP` |
+| `SYSTEST`, `XTETEST`, `BDOSTEST`, `DISKTEST` | Pass; the checks that are about this system only show `SKIP` |
+| `BIOSTEST` | Does not run there yet: it calls every BIOS function through the jump table, which CP/M 3 supports only for console and list calls (the rest must go through `F50`) |
 | `CHAINTST` | Runs `SCREEN` |
 | `FONTTEST` | Works; `W` does nothing there (no 32 or 64 columns) |
 | `INPTEST` | Reads and prints a line |
@@ -308,15 +309,16 @@ Each of the five detects our system once, with `F120` (our private SETDEF
 order byte: 0-3 here, `FFh` on any other CP/M 3), and prints `SKIP` for what
 is ours.  The skips and why:
 
-- **Not CP/M 3 behaviour.**  `F59`, `F107`'s serial number, our private `F120`-`F123`, `CD_INFO`,
-  the clock check that reads our SCB
+- **Not CP/M 3 behaviour.**  `F59`, `F107`'s serial number, our private
+  `F120`-`F123`, the clock check that reads our SCB
   from common memory, `KM_KT_GET` as a queue that gives back what
   `KM_KT_PUT` put in (on Locomotive's the tokens are typed into the console),
   and the string limits of `KM_SET_EXPAND`.
-- **Locomotive's differs and which is right is not settled.**  `F40` zero
-  fill (records before the target in a fresh block are not zeroed there),
-  what `F108` returns, the
-  `SECTRN` result with no table, and `FLUSH`'s return code.
+- **Locomotive's differs and ours is kept.**  `F40` zero fill (records
+  before the target in a fresh block are not zeroed there), what `F108`
+  returns after a set (a CP/M 3 free choice), `F50` function 27 (the
+  manual says A = 0; Locomotive's returns 1Bh) and the `SECTRN` result with
+  no table (CP/M 3 allows the logical sector).
 - **Things only we restrict.**  A bank other than 1 in `DD_FORMAT`,
   `DD_L_READ`/`DD_L_WRITE`; a bad spec in `DD_L_XDPB`/`DD_L_DPB`; an XDPB
   below `C000h`.  Locomotive accepts bank 0 as a real bank, so the call
@@ -333,12 +335,15 @@ Where our OS differs from Locomotive's in ways a program could see:
 |---|---|---|
 | `KM_KT_PUT` | private token queue | types into the console |
 | Console width in the SCB (`conwidth`) | 50 for 51 columns | 49 (it calls it 50 columns) |
-| Chained command at 0080h (`F47`) | length byte, then text | a NUL-terminated string |
 | `DD_FORMAT`/`DD_L_READ` bank 0 | refused | accepted |
 
-The first two rows are the ones a real program is most likely to meet: a
-program that calls `XMOVE` with bank 1 for the TPA works on Locomotive's and
-not on ours.
+The other differences found by running these on Locomotive's have been
+fixed in ours: `F47`'s NUL-terminated line, `F7`/`F8` as AUX status, page-zero
+`0004h` kept by the CCP, `F45`'s `FFh`/`FEh` modes, `F99`'s last-record
+argument, `H` = 0 after a successful multi-sector call, the `CRT`/`LPT`/`SIO`
+device names, `F49` offset 99, `F50` function 27, the bank numbers (0 =
+system, 1 = TPA) in `SELMEM`/`SETBNK`/`XMOVE`, the XDPB's Flags `60h` and
+Freeze 0, and `CD_INFO`'s second-drive flag.
 
 ## Setup
 
