@@ -854,16 +854,28 @@ xbios_handler:
 
 .cd_info:
     ; CD_INFO (0x00E6): hardware configuration.
-    ;   A = 0x00 (one drive)
+    ;   A = 0xFF when a second drive is fitted, else 0x00.  The drive tells
+    ;       us itself: SENSE DRIVE STATUS for unit 1 reports the two-sided
+    ;       line (ST3 bit 3) for a 3" drive whether or not it holds a disc.
     ;   B = 8    (128K in 16K pages)
     ;   C = 0x00 (no serial)
-    ;   D = 0x00 (drive B absent)
-    ;   E = 0x15 (drive A: SS, 40-track, 3-inch)
+    ;   D, E     corrupt on the +3 per the manual; kept at 0 / 0x15
     ;   HL = address of an empty buffer table in common memory (0xFF)
+    ld a, (disk_drive)             ; the status call selects the unit: put it back
+    push af
+    ld c, 1                        ; unit 1, head 0
+    call .dd_drive_status          ; A = ST3
+    ld b, a
+    pop af
+    ld (disk_drive), a
+    xor a
+    bit 3, b
+    jr z, .ci_one_drive
+    dec a                          ; 0xFF: drive B is there
+.ci_one_drive:
     ld bc, 0x0800
     ld de, 0x0015
     ld hl, cd_buf_tab              ; empty table in common memory
-    xor a
     ret
 
 .te_stl_ask:

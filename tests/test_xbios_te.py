@@ -912,6 +912,21 @@ class CdInfo(unittest.TestCase):
         text = source("src/bios/bios.zpa")
         self.assertEqual(xbios_dispatch()[0xE6], ".cd_info")
 
+    def test_a_follows_the_second_drive(self):
+        """A = 0FFh when SENSE DRIVE STATUS shows a drive B, else 0."""
+        body = handler_body(".cd_info:", ".te_stl_ask:")
+        self.assertIn("ld c, 1", body)
+        self.assertIn("call .dd_drive_status", body)
+        self.assertIn("bit 3, b", body)             # the two-sided line
+        self.assertIn("dec a", body)                # 0 -> 0FFh
+        # The status call selects the unit: the BDOS's drive is put back.
+        self.assertIn("ld a, (disk_drive)", body)
+        self.assertIn("ld (disk_drive), a", body)
+        tester = source("src/test/xtetest.asm")
+        t22 = tester[tester.index("=== Test 22"):tester.index("=== Test 23")]
+        self.assertNotIn("(ours)", t22)
+        self.assertIn("DD_DRIVE_STATUS", t22)
+
     def test_handler_reports_machine_and_common_buffer_table(self):
         body = handler_body(".cd_info:", ".te_stl_ask:")
         self.assertIn("ld bc, 0x0800", body)

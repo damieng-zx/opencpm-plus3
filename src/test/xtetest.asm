@@ -1611,38 +1611,34 @@ start:
     ld de, msg_t22
     ld c, 9
     call BDOS
-    ld a, (ours)
-    or a
-    jp nz, .t22_go
-    ld de, msg_skip
-    jp .t22_print
-.t22_go:
 
+    ; A = 0FFh when a second drive is fitted, else 0: it must agree with what
+    ; the drive itself says (ST3's two-sided line for unit 1).  C (serial) and
+    ; D/E (corrupt on the +3) are not checked.
+    ld hl, DD_DRIVE_STATUS
+    ld (userf_dw), hl
+    ld c, 1                     ; unit 1, head 0
+    call userf_trampoline
+    and 0x08
+    ld (t22_fitted), a          ; 8 if drive B is there
     ld hl, CD_INFO
     ld (userf_dw), hl
     call userf_trampoline
-    or a                        ; A = 0 (one drive)
-    jp nz, .t22_fail
+    ld c, a                     ; C = the A that CD_INFO returned
     ld a, b
     cp 8                        ; 128K = 8 x 16K banks
     jp nz, .t22_fail
+    ld a, (t22_fitted)
+    or a
     ld a, c
-    or a                        ; no serial
+    jr z, .t22_one
+    cp 0xFF                     ; fitted: A must be FFh
     jp nz, .t22_fail
-    ld a, d
-    or a                        ; no B: drive
+    jr .t22_a_ok
+.t22_one:
+    or a                        ; not fitted: A must be 0
     jp nz, .t22_fail
-    ld a, e
-    cp 0x15                     ; SS 40-track 3-inch
-    jp nz, .t22_fail
-
-    ; HL must point into common memory and hold the 0xFF terminator.
-    ld a, h
-    cp 0xC0
-    jp c, .t22_fail
-    ld a, (hl)
-    inc a                       ; 0xFF + 1 = 0
-    jp nz, .t22_fail
+.t22_a_ok:
 
     ld de, msg_ok
     jr .t22_print
@@ -2998,6 +2994,7 @@ msg_t31ok:  db "31.KREPEAT..OK", 0x0D, 0x0A, '$'
 msg_t32:    db 0x0D, 0x0A, "32.FMTBAD..", '$'
 msg_t33:    db 0x0D, 0x0A, "33.VIEWPORT..", '$'
 msg_t34:    db 0x0D, 0x0A, "34.DEVTBL..", '$'
+t22_fitted: db 0
 t34_names:  db "CRT   LPT   SIO   "
 t34_start:  dw 0
 exp_string: db "HELLO"
