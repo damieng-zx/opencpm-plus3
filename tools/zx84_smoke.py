@@ -2228,6 +2228,13 @@ class Smoke:
         if any("CHAINTEST RETURNED" in l for l in self.history):
             raise SmokeError("F47 returned instead of chaining")
 
+        # The chained line is a NUL-terminated string, so a command with an
+        # argument must reach the CCP whole.
+        self.command("CHAINTST ARG", 1200)
+        self.expect("CHAINTST ARG", "CHAINTEST START", "SMOKE    TXT")
+        if any("CHAINTEST RETURNED" in l for l in self.history[-6:]):
+            raise SmokeError("F47 with an argument returned instead of chaining")
+
     def run_ccp(self) -> None:
         self.command("DIR", 500)
         listing = self.text()
@@ -2344,7 +2351,11 @@ class Smoke:
         self.log("CCP restores the default DMA")
         self.mcp.call("write_memory",
                       {"address": "F63C", "hex_bytes": "0030"})
-        self.mcp.call("set_register", {"register": "PC", "value": "0000"})
+        # Enter the warm boot stub in common memory.  Setting PC to 0000h only
+        # means "warm boot" if the CPU happens to be in TPA mode, where 0000h is
+        # page zero; mid-BDOS it is the start of bank 4 and cold boots instead.
+        self.mcp.call("set_register", {"register": "PC",
+                                       "value": f"{label_address('warm_boot_stub'):04X}"})
         self.mcp.call("run", {"frames": 800})
         self.wait_for(["A>"], frames=500)
         self.command("dir", 1200)
@@ -2357,7 +2368,8 @@ class Smoke:
         # record buffer overflows.
         self.mcp.call("write_memory",
                       {"address": "F64A", "hex_bytes": "08"})
-        self.mcp.call("set_register", {"register": "PC", "value": "0000"})
+        self.mcp.call("set_register", {"register": "PC",
+                                       "value": f"{label_address('warm_boot_stub'):04X}"})
         self.mcp.call("run", {"frames": 800})
         self.wait_for(["A>"], frames=500)
         self.command("dump rped.sub", 1200)

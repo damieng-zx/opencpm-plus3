@@ -84,32 +84,36 @@ ccp_start:
     jp c, .got_line
 .no_profile:
 
-    ; BDOS F47 (chain to program) leaves a flag and the command tail at
-    ; 0080h, then warm boots.  Consume it here instead of prompting.
+    ; BDOS F47 (chain to program) leaves a flag and the command line at
+    ; 0080h, then warm boots.  Consume it here instead of prompting.  As in
+    ; CP/M 3 the line is a null-terminated string in the default DMA buffer,
+    ; with no length byte in front of it.
     ld a, (CCP_CHAIN_ADDR)
     or a
     jr z, .no_chain
     xor a
     ld (CCP_CHAIN_ADDR), a
-    ld a, (DMA)                ; tail length
+    ld hl, DMA
+    ld de, cmd_buf + 2
+    ld b, 0                    ; B = characters copied
+.chain_copy:
+    ld a, (hl)
+    or a
+    jr z, .chain_end           ; the NUL ends the line
+    ld (de), a
+    inc hl
+    inc de
+    inc b
+    ld a, b
     cp 126
-    jr c, .chain_len_ok
-    ld a, 126
-.chain_len_ok:
+    jr c, .chain_copy          ; the longest line cmd_buf takes
+.chain_end:
+    xor a
+    ld (de), a                 ; keep cmd_buf NUL-terminated
+    ld a, b
     ld (cmd_buf + 1), a
     or a
-    jr z, .no_chain            ; empty tail: nothing to chain to
-    ld c, a
-    ld b, 0
-    ld hl, DMA + 1
-    ld de, cmd_buf + 2
-    ldir
-    ld hl, cmd_buf + 2
-    ld a, (cmd_buf + 1)
-    ld e, a
-    ld d, 0
-    add hl, de
-    ld (hl), 0
+    jr z, .no_chain            ; empty line: nothing to chain to
     jp .got_line
 
 .no_chain:

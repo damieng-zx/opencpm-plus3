@@ -167,6 +167,21 @@ class ChainAndReturnCode(unittest.TestCase):
         self.assertIn("ld (scb_chain), a", body)
         self.assertIn("jp fn_wboot", body)
 
+    def test_ccp_reads_a_null_terminated_line_not_a_length_byte(self):
+        """CP/M 3: the chained line is a string in the DMA buffer, no length byte."""
+        text = source("src/ccp/miniccp.zpa")
+        body = text[text.index("ld (CCP_CHAIN_ADDR), a"):text.index(".no_chain:")]
+        self.assertRegex(body, r"ld hl, DMA\s")             # from 0080h itself
+        self.assertNotIn("DMA + 1", body)                   # not past a length byte
+        self.assertNotIn("ld a, (DMA)", body)               # and no length byte read
+        self.assertIn("jr z, .chain_end", body)             # the NUL ends the line
+        self.assertIn("cp 126", body)                       # cmd_buf's limit
+
+    def test_chaintst_sends_a_plain_string(self):
+        text = source("src/test/chaintest.asm")
+        self.assertIn('chain_cmd:  db "SCREEN", 0', text)
+        self.assertIn('chain_arg:  db "DIR SMOKE.TXT", 0', text)
+
     def test_ccp_consumes_chain_flag(self):
         text = source("src/ccp/miniccp.zpa")
         self.assertIn("CCP_CHAIN_ADDR equ 0xF607", text)

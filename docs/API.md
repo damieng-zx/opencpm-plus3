@@ -393,9 +393,11 @@ BDOS function 124 (private, used by the CCP only):
 #### F47 — Chain to Program
 - **In**: E=0xFF to adopt the current drive/user as the CCP's
 - **Note**: Sets a chain flag in the SCB (`scb_chain`, offset 0x07) and
-  warm boots. The CCP sees the flag and executes the command tail
+  warm boots. The CCP sees the flag and executes the command line
   already at [0080h] instead of prompting, without clearing the program
-  return code (F108). Does not return on success.
+  return code (F108). The line is a null-terminated string in the default
+  DMA buffer, as in CP/M 3, with no length byte in front of it, and at most
+  126 characters. Does not return on success.
 
 #### F49 — Get/Set System Control Block
 - **In**: DE=PB (parameter block address)

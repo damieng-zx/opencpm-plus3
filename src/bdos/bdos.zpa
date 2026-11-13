@@ -3776,9 +3776,10 @@ bf_f46:
 
 ; F47: Chain to Program
 ;   In:  E = 0xFF to adopt the current drive/user as the CCP's
-;   The command line is already in the TPA at 0080h.  Mark a chain as
-;   pending in the SCB and warm boot; the CCP sees the flag, consumes the
-;   tail and does not clear the program return code.
+;   The command line is already in the TPA at 0080h: a null-terminated
+;   string, with no length byte.  Mark a chain as pending in the SCB and
+;   warm boot; the CCP sees the flag, runs the line and does not clear the
+;   program return code.
 ;   Does not return on success.
 ; @proc bf_f47
 ; @param %param:u16 de
