@@ -2715,15 +2715,15 @@ class Smoke:
     def run_device(self) -> None:
         """DEVICE.COM: show and assign the logical devices, console size."""
         self.command("DEVICE NAMES", 600)
-        self.expect("DEVICE NAMES", "CON", "CONO", "LST", "AUX", "NONE IO")
+        self.expect("DEVICE NAMES", "CRT", "LPT", "SIO", "NONE IO")
         self.command("DEVICE VALUES", 600)
-        self.expect("DEVICE VALUES", "CONIN:   = CON", "CONOUT:  = CON",
-                    "AUXIN:   = AUX", "AUXOUT:  = AUX", "LST:     = LST")
+        self.expect("DEVICE VALUES", "CONIN:   = CRT", "CONOUT:  = CRT",
+                    "AUXIN:   = SIO", "AUXOUT:  = SIO", "LST:     = LPT")
 
-        # LST: -> CON sends printer output to the screen, NULL drops it.
-        self.command("DEVICE LST:=CON", 500)
+        # LST: -> CRT sends printer output to the screen, NULL drops it.
+        self.command("DEVICE LST:=CRT", 500)
         self.command("DEVICE LST", 500)
-        self.expect("DEVICE LST: = CON", "LST:     = CON")
+        self.expect("DEVICE LST: = CRT", "LST:     = CRT")
         self.command("DIR PIP.COM", 500)
         have_pip = "PIP      COM" in self.text()
         if have_pip:
@@ -2737,20 +2737,22 @@ class Smoke:
             self.command("PIP LST:=SMOKE.TXT", 800)
             if "SMOKE OK" in self.since("PIP LST:=SMOKE.TXT"):
                 raise SmokeError("LST: still printed after NULL: " + self.text())
-        self.command("DEVICE LST:=LST", 500)
+        self.command("DEVICE LST:=LPT", 500)
         self.command("DEVICE LST", 500)
-        self.expect("DEVICE LST:=LST restores", "LST:     = LST")
+        self.expect("DEVICE LST:=LPT restores", "LST:     = LPT")
 
         # A device must suit the direction, and the console is fixed.
-        self.command("DEVICE AUXIN:=CONO", 500)
-        self.expect("DEVICE AUXIN:=CONO", "CONO cannot be used")
-        self.command("DEVICE CONOUT:=LST", 500)
-        self.expect("DEVICE CONOUT:=LST", "can only be assigned to CON")
-        self.command("DEVICE LPT", 500)
+        self.command("DEVICE AUXIN:=LPT", 500)
+        self.expect("DEVICE AUXIN:=LPT", "LPT cannot be used")
+        self.command("DEVICE CONOUT:=LPT", 500)
+        self.expect("DEVICE CONOUT:=LPT", "can only be assigned to CRT")
+        self.command("DEVICE CONO", 500)
         self.expect("DEVICE unknown name", "Invalid device name")
-        self.command("DEVICE LST [9600]", 500)
+        self.command("DEVICE LPT", 500)
+        self.expect("DEVICE LPT", "LPT", "NONE O")
+        self.command("DEVICE LPT [9600]", 500)
         self.expect("DEVICE speed on a parallel device", "Not a serial device")
-        self.command("DEVICE LST:=LPT", 500)
+        self.command("DEVICE LST:=LST", 500)
         self.expect("DEVICE assign to unknown", "Invalid device name")
 
         # The console size.
@@ -2772,12 +2774,12 @@ class Smoke:
             self.key("enter", 300)
         self.expect("DEVICE prompt", "Physical Devices:", "Current Assignments:",
                     "Enter new assignment or hit RETURN:")
-        self.mcp.call("type", {"text": "LST:=CON"})
+        self.mcp.call("type", {"text": "LST:=CRT"})
         self.mcp.call("key", {"name": "enter"})
         self.mcp.call("run", {"frames": 600})
         self.command("DEVICE LST", 500)
-        self.expect("DEVICE prompt assignment", "LST:     = CON")
-        self.command("DEVICE LST:=LST", 500)
+        self.expect("DEVICE prompt assignment", "LST:     = CRT")
+        self.command("DEVICE LST:=LPT", 500)
 
     def run_user(self) -> None:
         """USER: prompt, switch user areas, reject out-of-range values."""

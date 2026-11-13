@@ -171,12 +171,12 @@ for the API references.
   `A:NAME.TYP (Y/N)?` for each matching file, Y erases it.  It also works run
   directly.
 - `DEVICE.COM` — shows and assigns the character devices (`DEVICE`,
-  `DEVICE NAMES`, `DEVICE VALUES`, `DEVICE LST`, `DEVICE LST:=CON`,
+  `DEVICE NAMES`, `DEVICE VALUES`, `DEVICE LST`, `DEVICE LST:=CRT`,
   `DEVICE LST:=NULL`, `DEVICE CONSOLE [PAGE | LINES=n | COLUMNS=n]`).  The
-  physical devices are the BIOS table (`CON`, `CONO`, `LST`, `AUX`); an
+  physical devices are the BIOS table (`CRT`, `LPT`, `SIO`, as on Locomotive's CP/M Plus); an
   assignment writes the SCB redirection vector, which the BIOS applies to
   `LST:` and `AUX:` (an unassigned device is a sink).  `CONIN:` and `CONOUT:`
-  take only `CON`; none of the devices is a serial port, so `[XON, 9600]`
+  take only `CRT`; none of the devices is a serial port, so `[XON, 9600]`
   style options are refused.  `LINES` sets the page length the pause uses
   (4-24); `COLUMNS` is 32, 51 or 64 (`SET24X80` gives 80).
 - `SCREEN.COM` — show or set the screen width (32, 51 or 64 columns).

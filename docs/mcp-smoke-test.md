@@ -172,7 +172,7 @@ repeating the heading, `[NOPAGE]` leaving no pause behind for the next command,
 `[DRIVE=]`/`[USER=]` lists with `[MESSAGE]`, and - with PIP on the disk - the
 `[RO]`/`[RW]`/`[SYS]`/`[DIR]` filters and their combinations (a scratch file
 made R/O then SYS with `STAT`) and `[EXCLUDE]`.  `DEVICE` is checked for the
-`NAMES`/`VALUES` displays, `LST:=CON` (a `PIP LST:=SMOKE.TXT` must then reach
+`NAMES`/`VALUES` displays, `LST:=CRT` (a `PIP LST:=SMOKE.TXT` must then reach
 the screen), `LST:=NULL` (it must not), the direction and console refusals, the
 serial-option refusal, `CONSOLE [LINES=n]`/`[PAGE]` and its range errors, and
 the bare command's prompt.
@@ -333,7 +333,6 @@ Where our OS differs from Locomotive's in ways a program could see:
 |---|---|---|
 | TPA bank number in BIOS `XMOVE`/`bank_sel` | 0 | 1 (CP/M 3's) |
 | XDPB flags, freeze (`DD_LOGIN`, `DD_L_XDPB`) | `40h`, `FFh` | `60h` (MFM + multi-track), `00h` |
-| BIOS `DEVTBL` first device | `CON` | `CRT`, then `LPT`, `SIO` |
 | `KM_KT_PUT` | private token queue | types into the console |
 | Console width in the SCB (`conwidth`) | 50 for 51 columns | 49 (it calls it 50 columns) |
 | Chained command at 0080h (`F47`) | length byte, then text | a NUL-terminated string |

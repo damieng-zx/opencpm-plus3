@@ -16,7 +16,7 @@
 ;
 ; This BIOS acts on the LST and AUX vectors only (an unassigned device is a
 ; sink).  Console input and output always use the keyboard and screen, so
-; CONIN: and CONOUT: accept only CON.  None of the physical devices is a
+; CONIN: and CONOUT: accept only CRT.  None of the physical devices is a
 ; serial port, so XON/NOXON and baud options are refused.
 ;
 ; Build: sjasmplus --raw=build/device.com src/tools/device.asm
@@ -140,8 +140,8 @@ process_line:
     jp z, console
 
     ; A logical device (CON, LST, ...) shows its assignment; a physical one
-    ; shows its attributes or takes new ones.  CON, LST and AUX name both, so
-    ; an option list ("DEVICE LST [XON]") means the physical device.
+    ; (CRT, LPT, SIO) shows its attributes or takes new ones.  A name followed
+    ; by an option list ("DEVICE LPT [XON]") is always a physical device.
     ld hl, (line_ptr)
     call skip_spaces
     ld a, (hl)
@@ -274,7 +274,7 @@ check_vector:
     ld a, c
     cp 2
     jr nc, .devices
-    ld hl, (new_vec)           ; CONIN / CONOUT: only CON (entry 0)
+    ld hl, (new_vec)           ; CONIN / CONOUT: only CRT (entry 0)
     ld de, 0x8000
     xor a
     sbc hl, de
@@ -555,7 +555,7 @@ print_values:
     jr c, .loop
     jp crlf
 
-; print_value_line - "CONIN:  = CON"
+; print_value_line - "CONIN:  = CRT"
 ;   In:       A = logical index 0-4
 ;   Clobbers: AF, BC, DE, HL
 print_value_line:
@@ -1148,7 +1148,7 @@ msg_syntax:     db "Syntax: DEVICE {NAMES | VALUES | name}", 0x0D, 0x0A
                 db "        DEVICE CONSOLE [PAGE | COLUMNS=n | LINES=n]"
                 db 0x0D, 0x0A, '$'
 msg_device:     db "Invalid device name", 0x0D, 0x0A, '$'
-msg_console:    db "CONIN: and CONOUT: can only be assigned to CON"
+msg_console:    db "CONIN: and CONOUT: can only be assigned to CRT"
                 db 0x0D, 0x0A, '$'
 msg_serial:     db "Not a serial device: no protocol or speed to set"
                 db 0x0D, 0x0A, '$'

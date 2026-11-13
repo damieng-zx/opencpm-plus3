@@ -313,15 +313,27 @@ class Device(unittest.TestCase):
         self.assertIn("0x08 serial", modes)
         self.assertIn("0x10 XON/XOFF", modes)
 
+    def test_the_device_table_uses_the_cpm_plus_names(self):
+        """DEVTBL names the +3's devices as Locomotive's CP/M Plus does."""
+        bios = source("src/bios/common.zpa")
+        table = bios[bios.index("char_dev_table:"):
+                     bios.index("; Character device redirection dispatch")]
+        names = re.findall(r"db '([A-Z]+) *'", table)
+        self.assertEqual(names, ["CRT", "LPT", "SIO"])
+        # The SCB defaults select entry 0 (CRT), 1 (LPT) and 2 (SIO).
+        self.assertRegex(bios, r"scb_civec:\s+dw 0x8000")
+        self.assertRegex(bios, r"scb_aovec:\s+dw 0x2000")
+        self.assertRegex(bios, r"scb_lovec:\s+dw 0x4000")
+
     def test_vector_bit_15_is_entry_zero(self):
         text = source("src/tools/device.asm")
         self.assertIn("ld hl, 0x8000", text)
 
     def test_the_console_is_not_redirectable(self):
-        """Only CON may feed CONIN:/CONOUT: because the BIOS ignores those."""
+        """Only CRT may feed CONIN:/CONOUT: because the BIOS ignores those."""
         text = source("src/tools/device.asm")
         self.assertIn("jp nz, err_console", text)
-        self.assertIn("CONIN: and CONOUT: can only be assigned to CON", text)
+        self.assertIn("CONIN: and CONOUT: can only be assigned to CRT", text)
 
     def test_baud_codes_are_the_manual_rates(self):
         text = source("src/tools/device.asm")

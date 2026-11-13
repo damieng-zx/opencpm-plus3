@@ -2438,11 +2438,34 @@ t34_call:
     sbc hl, de
     pop hl
     jr c, t34_fail              ; below common memory
-    ld a, (hl)                  ; every entry opens with a printable name
-    cp 'A'                      ; ("CON" here, "CRT" on Locomotive's)
-    jr c, t34_fail
-    cp 'Z' + 1
-    jr nc, t34_fail
+    ; The +3's three devices, in Locomotive's order and names: CRT, LPT, SIO,
+    ; each a 6-byte space-padded name + mode + baud code, then the terminator.
+    ld (t34_start), hl
+    ld de, t34_names
+    ld b, 3
+t34_ent:
+    push bc
+    ld b, 6
+t34_cmp:
+    ld a, (de)
+    cp (hl)
+    jr nz, t34_name_bad
+    inc de
+    inc hl
+    djnz t34_cmp
+    inc hl
+    inc hl                      ; skip the mode and baud bytes
+    pop bc
+    djnz t34_ent
+    ld a, (hl)
+    or a
+    jr nz, t34_fail             ; a fourth device
+    ld hl, (t34_start)
+    jr t34_names_ok
+t34_name_bad:
+    pop bc
+    jr t34_fail
+t34_names_ok:
 
     ; Walk to the terminator to prove the table parses: 6 name + 1 mode +
     ; 1 baud = 8 bytes per entry.
@@ -2979,6 +3002,8 @@ msg_t31ok:  db "31.KREPEAT..OK", 0x0D, 0x0A, '$'
 msg_t32:    db 0x0D, 0x0A, "32.FMTBAD..", '$'
 msg_t33:    db 0x0D, 0x0A, "33.VIEWPORT..", '$'
 msg_t34:    db 0x0D, 0x0A, "34.DEVTBL..", '$'
+t34_names:  db "CRT   LPT   SIO   "
+t34_start:  dw 0
 exp_string: db "HELLO"
 exp31:      db "0123456789ABCDEFGHIJKLMNOPQRSTU"
 msg_fail:   db "FAIL", 0x0D, 0x0A, '$'

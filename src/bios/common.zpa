@@ -67,21 +67,22 @@ scb_conpage:
 ; table: bit 15 = device 0, bit 14 = device 1, ... bits 0-3 reserved.
 ; A logical device with no bit set goes nowhere.
 ;
-; We only have four devices and no second peripheral, so every logical
-; device points at a single physical entry:
-;   CONIN/CONOUT -> CON  (table entry 0, mask 0x8000)
-;   AUXIN/AUXOUT -> AUX  (table entry 3, mask 0x1000)
-;   LIST         -> LST  (table entry 2, mask 0x2000)
+; We only have three devices (the +3's, named as Locomotive's CP/M Plus names
+; them) and no second peripheral, so every logical device points at a single
+; physical entry:
+;   CONIN/CONOUT -> CRT  (table entry 0, mask 0x8000)
+;   LIST         -> LPT  (table entry 1, mask 0x4000)
+;   AUXIN/AUXOUT -> SIO  (table entry 2, mask 0x2000)
 scb_civec:
-    dw 0x8000                      ; 0x22: console input  -> CON
+    dw 0x8000                      ; 0x22: console input  -> CRT
 scb_covec:
-    dw 0x8000                      ; 0x24: console output -> CON
+    dw 0x8000                      ; 0x24: console output -> CRT
 scb_aivec:
-    dw 0x1000                      ; 0x26: aux input      -> AUX
+    dw 0x2000                      ; 0x26: aux input      -> SIO
 scb_aovec:
-    dw 0x1000                      ; 0x28: aux output     -> AUX
+    dw 0x2000                      ; 0x28: aux output     -> SIO
 scb_lovec:
-    dw 0x2000                      ; 0x2A: list output    -> LST
+    dw 0x4000                      ; 0x2A: list output    -> LPT
     ds 8                           ; 0x2C-0x33: reserved
 scb_tempdrv:
     db 0                           ; 0x34: SETDEF TEMPORARY drive (0=current, 1..16=A..P)
@@ -2043,21 +2044,18 @@ _cancel_paging:
 ; Mode bits: 0x01 input, 0x02 output, 0x04 software baud, 0x08 serial,
 ; 0x10 XON/XOFF.
 char_dev_table:
-    db 'CON   '                    ; console: keyboard in, screen out
+    db 'CRT   '                    ; console: keyboard in, screen out
     db 0x03                        ; input + output
     db 0                           ; baud$none (not a serial port)
-    db 'CONO  '                    ; console output only (PIP CONO:=FILE)
+    db 'LPT   '                    ; printer: declared, no hardware fitted
     db 0x02                        ; output
     db 0                           ; baud$none
-    db 'LST   '                    ; printer: declared, no hardware fitted
-    db 0x02                        ; output
-    db 0                           ; baud$none
-    db 'AUX   '                    ; serial: declared, no hardware fitted
-    db 0x03                        ; input + output
+    db 'SIO   '                    ; serial: declared, no hardware fitted
+    db 0x03                        ; input + output (no baud or XON to set)
     db 0                           ; baud$none
     db 0                           ; table terminator
 
-    assert char_dev_table + 33 <= 0x10000, "Device table must fit in common memory"
+    assert char_dev_table + 25 <= 0x10000, "Device table must fit in common memory"
 
 
 ; ==========================================================================
@@ -2067,11 +2065,11 @@ char_dev_table:
 ; branch here.  Lives in common memory because it only ever runs in system
 ; mode and bank 4 is short of headroom (docs/boot.md, "Remaining strategies").
 ;
-; A vector is a bit per character-device table entry: bit 15 = entry 0 (CON),
-; bit 14 = entry 1, ...  A +3 has no printer or serial port, so only the CON
+; A vector is a bit per character-device table entry: bit 15 = entry 0 (CRT),
+; bit 14 = entry 1, ...  A +3 has no printer or serial port, so only the CRT
 ; bit does anything; the rest are sinks, which CP/M 3 allows.
 
-; dev_out - emit C to the console if HL selects CON, else discard.
+; dev_out - emit C to the console if HL selects CRT, else discard.
 ; @proc dev_out
 ; @param %vec:u16  hl
 ; @param %char:u8  c
@@ -2079,8 +2077,8 @@ char_dev_table:
 ; @end
 dev_out:
     ld a, h
-    and 0x80                       ; CON is bit 15 of the vector
-    ret z                          ; not assigned to CON: drop it
+    and 0x80                       ; CRT is bit 15 of the vector
+    ret z                          ; not assigned to CRT: drop it
     ld a, %char
     jp scr_putchar
 

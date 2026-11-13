@@ -461,7 +461,7 @@ aux_in:
 ; @out a
 ; @clobbers af,hl
 ; @end
-; Ready when @LOVEC selects CON (the only sink that can emit).
+; Ready when @LOVEC selects CRT (the only sink that can emit).
 list_status:
     ld hl, (scb_lovec)
     jr dev_status
@@ -478,11 +478,11 @@ aux_in_status:
 ; @out a
 ; @clobbers af,hl
 ; @end
-; Ready when @AOVEC selects CON.
+; Ready when @AOVEC selects CRT.
 aux_out_status:
     ld hl, (scb_aovec)
 
-; dev_status - A = 0xFF when the vector in HL selects CON, else 0.  Status
+; dev_status - A = 0xFF when the vector in HL selects CRT, else 0.  Status
 ; reports "ready" only for a device that can actually accept output.
 ; Falls through from aux_out_status.
 ; @proc dev_status
@@ -492,7 +492,7 @@ aux_out_status:
 ; @end
 dev_status:
     ld a, h
-    and 0x80                       ; CON is bit 15
+    and 0x80                       ; CRT is bit 15
     jr z, .ds_no
     ld a, 0xFF
     ret
