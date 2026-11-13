@@ -120,7 +120,7 @@ class Headroom(unittest.TestCase):
         self.assertEqual(table["ccp_fcb"].addr, 0xFB21)
         # Moved down by 36 bytes when the unused dd_reserved cushion was
         # removed; miniccp.zpa's CCP_RUN_PROG is kept in step by an assert.
-        self.assertEqual(table["ccp_run_prog"].addr, 0xFCA6)
+        self.assertEqual(table["ccp_run_prog"].addr, 0xFCA4)
 
     def test_common_window_still_has_room(self):
         table = labels()

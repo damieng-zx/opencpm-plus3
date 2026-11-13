@@ -2183,7 +2183,8 @@ class Smoke:
                              + "\n".join(f111))
         if not any("F104 SETDATE" in l for l in self.history):
             raise SmokeError("BDOSTEST did not reach F104")
-        for marker in ("F37 RESETDRV : PASS", "F98 CLEANUP  : PASS",
+        for marker in ("F07 AUX_IST  : PASS", "F08 AUX_OST  : PASS",
+                       "F37 RESETDRV : PASS", "F98 CLEANUP  : PASS",
                        "F107 SERIAL  : PASS", "F112 PRTBLK  : PASS"):
             if not any(marker in l for l in self.history):
                 raise SmokeError("BDOSTEST did not report " + marker)

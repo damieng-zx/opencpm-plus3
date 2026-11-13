@@ -53,8 +53,8 @@ start:
     call tst_f04        ; F4  A_WRITE  — non-blocking output (may be unimpl)
     call tst_f05        ; F5  L_WRITE  — non-blocking output (may be unimpl)
     call tst_f06        ; F6  D_IO     — test read-status mode (E=FFh)
-    call tst_f07        ; F7  GET_IOB  — get IOBYTE (may be unimpl)
-    call tst_f08        ; F8  SET_IOB  — set/get IOBYTE round-trip
+    call tst_f07        ; F7  AUX_IST  — auxiliary input status
+    call tst_f08        ; F8  AUX_OST  — auxiliary output status
     call tst_f10        ; F10 C_RSTR   — skip (always blocks)
     call tst_f12        ; F12 VERSION  — return version number
     call tst_f13        ; F13 RESET    — reset disk system
@@ -343,76 +343,58 @@ tst_f06:
     jp print_crlf
 
 ; ============================================================
-; F7: Get IOBYTE
-;   Returns current IOBYTE in A. Unimplemented = returns 0.
+; F7: Auxiliary input status
+;   CP/M 3: A = FFh if a character is ready on AUX, 00h if not.
+;   Either is acceptable here (the port may have no device); anything
+;   else means the call is still the CP/M 2.2 "get IOBYTE".
 ; ============================================================
 tst_f07:
     ld de, lbl_f07
     call print_label
 
     ld c, 7
-    call BDOS               ; Returns IOBYTE in A (0 if unimpl)
-    call print_hex_a
-    ld de, msg_h_ret
-    ld c, 9
     call BDOS
-    jp print_crlf
+    jp aux_status_report
 
 ; ============================================================
-; F8: Set IOBYTE
-;   Set IOBYTE to a known value, then read back with F7.
-;   If F8 is implemented, F7 should return the same value.
+; F8: Auxiliary output status
+;   CP/M 3: A = FFh if AUX can take a character, 00h if not.  The
+;   CP/M 2.2 "set IOBYTE" took E; run it with a value no status
+;   would produce so a call that still echoes E is caught.
 ; ============================================================
 tst_f08:
     ld de, lbl_f08
     call print_label
-    ld a, (ours)               ; CP/M 3 has no IOBYTE calls: F8 does nothing and
-    or a                       ; F7 returns 0.  We keep them from CP/M 2.2.
-    jp z, skip_foreign
 
-    ; First save current IOBYTE via F7
-    ld c, 7
-    call BDOS
-    push af                 ; Save original IOBYTE
-
-    ; Set IOBYTE to 0xA5
     ld e, 0A5h
     ld c, 8
     call BDOS
+    jp aux_status_report
 
-    ; Read back with F7
-    ld c, 7
-    call BDOS               ; A = current IOBYTE
-    push af                 ; Save readback value
-
-    ; Restore original IOBYTE
-    pop af                  ; A = readback
-    push af                 ; re-save readback
-    ld e, a                 ; Hmm, need original. Let me restructure.
-    ; Actually: just restore 0 (original was 0 at boot)
-    pop af                  ; A = readback
-    push af
-    ld e, 0
-    ld c, 8
+; aux_status_report - PASS when A is 00h or FFh and L equals A, else FAIL.
+;   In:       A = value returned by F7/F8, L = second return register
+;   Clobbers: AF, BC, DE, HL
+aux_status_report:
+    ld b, a
+    cp l
+    jr nz, .asr_fail
+    ld a, b
+    or a
+    jr z, .asr_pass
+    inc a                   ; FFh -> 0
+    jr nz, .asr_fail
+.asr_pass:
+    ld de, msg_pass_short
+    ld c, 9
     call BDOS
-
-    ; Report: if readback == 0xA5, it round-tripped
-    pop af                  ; A = readback value
-    pop bc                  ; discard saved original
-    push af                 ; save readback for comparison
+    jp print_crlf
+.asr_fail:
+    ld a, b
     call print_hex_a
     ld de, msg_h
     ld c, 9
     call BDOS
-    pop af                  ; A = readback value
-    cp 0A5h
-    jr z, .pass
-    ld de, msg_fail_suffix
-    ld c, 9
-    call BDOS
-    jp print_crlf
-.pass:
-    ld de, msg_pass_suffix
+    ld de, msg_fail_short
     ld c, 9
     call BDOS
     jp print_crlf
@@ -2122,8 +2104,8 @@ lbl_f03:    DB "F03 A_READ   : $"
 lbl_f04:    DB "F04 A_WRITE  : $"
 lbl_f05:    DB "F05 L_WRITE  : $"
 lbl_f06:    DB "F06 D_IO/R   : $"
-lbl_f07:    DB "F07 GET_IOB  : $"
-lbl_f08:    DB "F08 SET_IOB  : $"
+lbl_f07:    DB "F07 AUX_IST  : $"
+lbl_f08:    DB "F08 AUX_OST  : $"
 lbl_f09:    DB "F09 C_WSTR   : [$"
 lbl_f10:    DB "F10 C_RSTR   : $"
 lbl_f11:    DB "F11 C_STAT   : $"

@@ -182,9 +182,9 @@ fail:
 ; P0: page-zero IOBYTE / user-drive bytes
 ; ==========================================================================
 p0_test:
-    ; F8 (set IOBYTE) and the user/drive byte at 0004h are CP/M 2.2 behaviour
-    ; that this system keeps; CP/M 3 does not support F7/F8 and its BDOS
-    ; leaves 0004h to the CCP, so Locomotive's fails both.
+    ; The user/drive byte at 0004h is CP/M 2.2 behaviour that this system
+    ; keeps; CP/M 3 leaves 0004h to the CCP, so Locomotive's fails it.
+    ; (0003h, the old IOBYTE, is reserved in CP/M 3 and no longer used.)
     ld a, (ours)
     or a
     jr nz, .p0_here
@@ -192,10 +192,6 @@ p0_test:
     call print
     jp tab_test
 .p0_here:
-    ld e, 0x5A
-    ld c, 8
-    call BDOS                     ; F8: IOBYTE = 0x5A
-
     ld e, 3
     ld c, 32
     call BDOS                     ; F32: user 3
@@ -204,9 +200,6 @@ p0_test:
     ld c, 14
     call BDOS                     ; F14: drive A
 
-    ld a, (0x0003)
-    cp 0x5A
-    jr nz, .p0_bad
     ld a, (0x0004)
     cp 0x30
     jr nz, .p0_bad
@@ -215,18 +208,12 @@ p0_test:
     ld e, a
     ld c, 32
     call BDOS                     ; user 0
-    ld e, a
-    ld c, 8
-    call BDOS                     ; IOBYTE 0
     ld de, msg_p0_ok
     jr .p0_print
 .p0_bad:
     xor a
     ld e, a
     ld c, 32
-    call BDOS
-    ld e, a
-    ld c, 8
     call BDOS
     ld de, msg_p0_bad
 .p0_print:

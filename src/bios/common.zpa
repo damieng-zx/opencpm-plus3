@@ -1101,7 +1101,7 @@ ccp_fcb: ds 36
 ; @end
 start_tpa:
     ; Snapshot page-zero compatibility bytes while the system bank is
-    ; still mapped.  0003 = IOBYTE, 0004 = (user << 4) | drive.
+    ; still mapped.  0003 is reserved (zero), 0004 = (user << 4) | drive.
     ld a, (cur_user)
     add a, a
     add a, a
@@ -1112,7 +1112,7 @@ start_tpa:
     and 0x0F
     or b
     push af                    ; 0004 value
-    ld a, (iobyte)
+    xor a                      ; 0003 is reserved in CP/M 3: keep it zero
     push af                    ; 0003 value
 
     ; Switch to TPA (mode 0: 0,1,2,3)
@@ -1245,7 +1245,7 @@ ccp_run_prog:
     push hl                        ; RET from the program returns to warm boot
     jp 0x0100
 
-    assert ccp_run_prog == 0xFCA6, "miniccp.zpa CCP_RUN_PROG must match ccp_run_prog"
+    assert ccp_run_prog == 0xFCA4, "miniccp.zpa CCP_RUN_PROG must match ccp_run_prog"
 
 ; ==========================================================================
 ; BDOS directory and FCB helpers (relocated from bank 4)

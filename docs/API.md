@@ -25,7 +25,7 @@ This document covers the BDOS, BIOS, terminal, and program conventions for writi
 ```
 0000h  JP warm_boot          ; WBOOT vector
 0001h  dw bios_base          ; BIOS jump table address - 3
-0003h  db IOBYTE             ; F8/f8-compatible I/O byte
+0003h  db 0                  ; reserved (CP/M 3 has no IOBYTE)
 0004h  db user_drive         ; high nibble = user, low nibble = drive
 0005h  JP bdos               ; BDOS entry point
 0006h  dw bdos_vector        ; BDOS jump target AND the TPA memory
@@ -51,7 +51,7 @@ When a .COM program starts executing at 0100h:
   memory at and above 0xF600 is off limits.
 - **C** = current default drive (0=A)
 - **Z80 interrupts**: Enabled, IM 1
-- **Page zero**: WBOOT at 0000h, IOBYTE at 0003h, user/drive at 0004h,
+- **Page zero**: WBOOT at 0000h, 0003h reserved (always 0), user/drive at 0004h,
   BDOS at 0005h. The word at 0006h is the BDOS entry (`bdos_vector`) and
   also the memory ceiling: it equals 0xF600, like a real CP/M 3 where
   `(0006h)` is `BDOS_base + 6`. Programs that compute their top of memory
@@ -191,11 +191,13 @@ BDOS function 124 (private, used by the CCP only):
   would look like a keypress and the program would carry on.
 - E=other: Output character E directly. Bypasses BDOS paging and echo processing.
 
-#### F7 — Get IOBYTE
-- **Out**: A=IOBYTE value
+#### F7 — Auxiliary Input Status
+- **Out**: A=L=0FFh if a character is ready on the AUX input device, 00h if not
+  (always 00h here: there is no AUX input device)
 
-#### F8 — Set IOBYTE
-- **In**: E=value
+#### F8 — Auxiliary Output Status
+- **Out**: A=L=0FFh if the AUX output device can take a character, 00h if not
+  (follows the `AOVEC` redirection: ready when it selects CON)
 
 #### F9 — Print String
 - **In**: C=9, DE=address of '$'-terminated string

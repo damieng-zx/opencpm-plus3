@@ -618,24 +618,37 @@ class P2F110Delimiter(unittest.TestCase):
 
 
 class P2PageZeroBytes(unittest.TestCase):
-    """Page zero 0003/0004 track IOBYTE and user/drive."""
+    """Page zero 0004 tracks user/drive; 0003 is reserved (no IOBYTE)."""
 
     def test_start_tpa_initializes_page_zero(self):
         text = source("src/bios/common.zpa")
         body = text[text.index("start_tpa:"):]
         self.assertIn("ld (0x0003), a", body)
         self.assertIn("ld (0x0004), a", body)
-        self.assertIn("ld a, (iobyte)", body)
+        self.assertNotIn("iobyte", body)
+
+    def test_f7_f8_are_aux_status_not_iobyte(self):
+        """CP/M 3: F7/F8 are auxiliary input/output status (FFh/00h)."""
+        text = source("src/bdos/bdos.zpa")
+        self.assertNotIn("iobyte", text)
+        f7 = text[text.index("bf_f07:"):text.index("; F8:")]
+        self.assertIn("call aux_in_status", f7)
+        f8 = text[text.index("bf_f08:"):text.index("; @proc bf_f09")]
+        self.assertIn("call aux_out_status", f8)
+        self.assertNotIn("write_user_byte", f8)
+        self.assertNotIn("0x0003", f8)
+
+    def test_bdostest_checks_aux_status(self):
+        text = source("src/test/bdostest.asm")
+        self.assertIn("AUX_IST", text)
+        self.assertIn("AUX_OST", text)
+        self.assertNotIn("GET_IOB", text)
 
     def test_bdos_updates_page_zero(self):
         text = source("src/bdos/bdos.zpa")
         sync = text[text.index("sync_page0_du:"):text.index("CON_MODE_PAGE")]
         self.assertIn("ld de, 0x0004", sync)
         self.assertIn("add a, a", sync)
-
-        f8 = text[text.index("bf_f08:"):text.index("bf_f09:")]
-        self.assertIn("ld de, 0x0003", f8)
-        self.assertIn("call write_user_byte", f8)
 
         f14 = text[text.index("bf_f14:"):text.index("; F24:")]
         self.assertIn("call sync_page0_du", f14)
@@ -646,7 +659,7 @@ class P2PageZeroBytes(unittest.TestCase):
     def test_systest_page_zero(self):
         text = source("src/test/systest.asm")
         self.assertIn("P0 PASS", text)
-        self.assertIn("ld a, (0x0003)", text)
+        self.assertNotIn("ld a, (0x0003)", text)
         self.assertIn("ld a, (0x0004)", text)
 
 
