@@ -618,7 +618,7 @@ class P2F110Delimiter(unittest.TestCase):
 
 
 class P2PageZeroBytes(unittest.TestCase):
-    """Page zero 0004 tracks user/drive; 0003 is reserved (no IOBYTE)."""
+    """Page zero 0004 (user/drive) is the CCP's; 0003 is reserved."""
 
     def test_start_tpa_initializes_page_zero(self):
         text = source("src/bios/common.zpa")
@@ -644,23 +644,29 @@ class P2PageZeroBytes(unittest.TestCase):
         self.assertIn("AUX_OST", text)
         self.assertNotIn("GET_IOB", text)
 
-    def test_bdos_updates_page_zero(self):
+    def test_bdos_leaves_page_zero_to_the_ccp(self):
         text = source("src/bdos/bdos.zpa")
-        sync = text[text.index("sync_page0_du:"):text.index("CON_MODE_PAGE")]
-        self.assertIn("ld de, 0x0004", sync)
-        self.assertIn("add a, a", sync)
-
+        self.assertNotIn("sync_page0_du", text)
+        self.assertNotIn("0x0004", text)
         f14 = text[text.index("bf_f14:"):text.index("; F24:")]
-        self.assertIn("call sync_page0_du", f14)
-
+        self.assertNotIn("write_user_byte", f14)
         f32 = text[text.index("bf_f32:"):text.index("; F37:")]
-        self.assertIn("call sync_page0_du", f32)
+        self.assertNotIn("write_user_byte", f32)
+
+    def test_ccp_writes_page_zero_at_the_prompt(self):
+        text = source("src/ccp/miniccp.zpa")
+        body = text[text.index("print_prompt:"):text.index("; parse_cmd")]
+        self.assertIn("ld c, 25", body)             # F25 drive
+        self.assertIn("ld c, 32", body)             # F32 user
+        self.assertIn("ld (0x0004), a", body)
+        self.assertEqual(body.count("add a, a"), 4)  # user << 4
 
     def test_systest_page_zero(self):
         text = source("src/test/systest.asm")
         self.assertIn("P0 PASS", text)
         self.assertNotIn("ld a, (0x0003)", text)
         self.assertIn("ld a, (0x0004)", text)
+        self.assertIn("p0_before", text)
 
 
 class P2WriteProtectDetection(unittest.TestCase):

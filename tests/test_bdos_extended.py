@@ -85,7 +85,7 @@ class MultiSectorCount(unittest.TestCase):
         self.assertIn("ld h, a", read)          # H = ms_done
         self.assertIn("ld l, 0", read)
         done = text[text.index("multi_record_done:"):
-                    text.index("sync_page0_du:")]
+                    text.index("; Paging support")]
         self.assertIn("ld (bdos_dma), hl", done)
         self.assertIn("ld (scb_dma), hl", done)
         self.assertIn("ld de, 128", done)

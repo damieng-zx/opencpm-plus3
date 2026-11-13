@@ -26,7 +26,8 @@ This document covers the BDOS, BIOS, terminal, and program conventions for writi
 0000h  JP warm_boot          ; WBOOT vector
 0001h  dw bios_base          ; BIOS jump table address - 3
 0003h  db 0                  ; reserved (CP/M 3 has no IOBYTE)
-0004h  db user_drive         ; high nibble = user, low nibble = drive
+0004h  db user_drive         ; high nibble = user, low nibble = drive;
+                             ; written by the CCP at each prompt, not by the BDOS
 0005h  JP bdos               ; BDOS entry point
 0006h  dw bdos_vector        ; BDOS jump target AND the TPA memory
                             ; ceiling (equals F600h / TPA_TOP).  CP/M 3

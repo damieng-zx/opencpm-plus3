@@ -1,7 +1,7 @@
 """The CCP's built-in USER command.
 
 USER sets the CP/M user area through BDOS F32 and asks "Enter User# :" when
-there is no number.  The BDOS keeps page-zero byte 0004h in sync, and
+there is no number.  The CCP copies the user into page-zero byte 0004h at each prompt, and
 directory searches match the current user, so 'USER 3' really does show a
 different set of files; the prompt then reads "3A>".
 """

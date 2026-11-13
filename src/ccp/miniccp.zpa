@@ -182,7 +182,9 @@ ccp_start:
 ; @end
 print_prompt:
     ; Prompt: CRLF + user number (when not 0) + drive letter + '>', as in
-    ; "3A>".
+    ; "3A>".  Page-zero byte 0004h (user << 4 | drive) is the CCP's to
+    ; maintain, as in CP/M 3: the BDOS never touches it, so it is refreshed
+    ; here, before each command runs.
     ld c, 25                   ; F25: Return Current Disk
     call BDOS                  ; A = current drive (0-15)
     push af
@@ -190,9 +192,19 @@ print_prompt:
     ld e, 0xFF
     ld c, 32                   ; F32: Get User
     call BDOS
+    pop de                     ; D = drive
+    ld b, a                    ; B = user
+    add a, a
+    add a, a
+    add a, a
+    add a, a
+    or d
+    ld (0x0004), a
+    ld a, b
+    push de
     or a
     call nz, print_decimal_a
-    pop af
+    pop af                     ; A = drive
     add a, 'A'
     call putc
     ld a, '>'
@@ -912,8 +924,7 @@ parse_cmd:
 
 ; ==========================================================================
 ; USER [n] — set the CP/M user area (0-15); asks "Enter User# :" if no number
-;   Uses BDOS F32, which also keeps page-zero byte 0004h in sync for
-;   programs that read it.
+;   Uses BDOS F32; the next prompt copies the user into page-zero 0004h.
 ; ==========================================================================
 
 .do_user:
