@@ -363,12 +363,7 @@ cmd_wrap:
     ld (top_seg), a
 .redraw:
     call ensure_visible
-    ld a, 1
-    ld (structural), a
-    call draw_all
-    xor a
-    ld (structural), a
-    ret
+    jp draw_all
 
 cmd_redraw:
     jp draw_all
@@ -474,6 +469,12 @@ reset_buffer_only:
     ld (eof_z), a
     ld (undo_type), a
     ld (structural), a
+    ld (view_moved), a
+    ld (cursor_valid), a
+    ld (redraw_line), a
+    ld (redraw_line + 1), a
+    ld (redraw_pos), a
+    ld (redraw_pos + 1), a
     ret
 
 ; addr_from_pos - HL = logical pos -> HL = memory address
@@ -697,6 +698,11 @@ do_newline:
     ld (undo_type), a
     ld hl, (cur_pos)
     ld (undo_pos), hl
+    ; the line being split is the first row to redraw
+    ld hl, (line_start)
+    ld (redraw_pos), hl
+    ld hl, (cur_line)
+    ld (redraw_line), hl
     ld a, CR
     call buffer_insert
     jr c, .full
@@ -821,6 +827,11 @@ do_backspace:
     dec hl
     ld (cur_line), hl
     call recompute_col
+    ; the merged line is the first row to redraw
+    ld hl, (line_start)
+    ld (redraw_pos), hl
+    ld hl, (cur_line)
+    ld (redraw_line), hl
     ld a, 1
     ld (modified), a
     ld a, 1
@@ -881,6 +892,11 @@ do_delete:
     ld hl, (cur_pos)
     call buffer_delete
 .joined:
+    ; the current (merged) line is the first row to redraw
+    ld hl, (line_start)
+    ld (redraw_pos), hl
+    ld hl, (cur_line)
+    ld (redraw_line), hl
     ld a, 1
     ld (modified), a
     ld a, 1
@@ -949,7 +965,12 @@ do_undo:
     ld a, 1
     ld (structural), a
     ld hl, (undo_pos)
-    jp sync_from_pos
+    call sync_from_pos
+    ld hl, (line_start)
+    ld (redraw_pos), hl
+    ld hl, (cur_line)
+    ld (redraw_line), hl
+    ret
     ret
 
 ; ==========================================================================
@@ -1385,6 +1406,9 @@ sync_from_pos:
 ; ==========================================================================
 draw_all:
     call clear_screen
+    xor a
+    ld (cursor_valid), a
+    ld (view_moved), a
     ld hl, (top_pos)
     ld (draw_pos), hl
     ld a, (top_seg)
@@ -1392,6 +1416,9 @@ draw_all:
     xor a
     ld (draw_row), a
     ld (draw_done), a
+    jp draw_rows
+
+draw_rows:
 .row_loop:
     ld a, (draw_row)
     cp TEXT_ROWS
@@ -1448,6 +1475,88 @@ draw_all:
 .rows_done:
     call draw_status
     jp place_cursor
+
+; draw_from_current - redraw from the current line's first screen row down.
+;   Rows above the edit are untouched, so Enter and line joins do not clear
+;   and repaint the whole screen.
+draw_from_current:
+    ld a, (wrap_mode)
+    or a
+    jr nz, .wrap
+    ld hl, (redraw_line)
+    ld de, (top_line)
+    call cmp16
+    jr c, .full
+    ld hl, (redraw_line)
+    ld de, (top_line)
+    xor a
+    sbc hl, de
+    ld a, l
+    cp TEXT_ROWS
+    jr nc, .full
+    ld (draw_row), a
+    xor a
+    ld (draw_seg), a
+    jr .setup
+.wrap:
+    call current_line_start_row
+    bit 7, h
+    jr nz, .full
+    ld a, h
+    or a
+    jr nz, .full
+    ld a, l
+    cp TEXT_ROWS
+    jr nc, .full
+    ld (draw_row), a
+    xor a
+    ld (draw_seg), a
+.setup:
+    ld hl, (redraw_pos)
+    ld (draw_pos), hl
+    xor a
+    ld (draw_done), a
+    ld (view_moved), a
+    ld (cursor_valid), a
+    jp draw_rows
+.full:
+    jp draw_all
+
+; current_line_start_row - HL = signed screen row of the redraw line's
+;   first display segment.
+current_line_start_row:
+    ld hl, (top_pos)
+    ld (ccr_pos), hl
+    ld hl, (top_line)
+    ld (ccr_line), hl
+    ld hl, 0
+    ld (ccr_sum), hl
+.loop:
+    ld hl, (ccr_line)
+    ld de, (redraw_line)
+    call cmp16
+    jr nc, .done
+    ld hl, (ccr_pos)
+    call line_segments
+    ld e, a
+    ld d, 0
+    ld hl, (ccr_sum)
+    add hl, de
+    ld (ccr_sum), hl
+    ld hl, (ccr_pos)
+    call next_line
+    ld (ccr_pos), hl
+    ld hl, (ccr_line)
+    inc hl
+    ld (ccr_line), hl
+    jr .loop
+.done:
+    ld hl, (ccr_sum)
+    ld a, (top_seg)
+    ld e, a
+    ld d, 0
+    or a
+    sbc hl, de
     ret
 
 ; last_line_exists - carry set if a final empty line follows the last break
@@ -1497,6 +1606,8 @@ render_draw_segment:
 ; render_segment - render one window of a line
 ;   r_pos = line start, r_row = screen row, r_start_col = first display column
 render_segment:
+    xor a
+    ld (cursor_valid), a
     ld hl, (r_pos)
     call line_end
     ld (r_end), hl
@@ -1853,6 +1964,15 @@ sb_dec16:
     jp sb_char
 
 draw_status:
+    ld a, (cursor_valid)
+    or a
+    jr z, .nocur
+    ld a, (cursor_row)
+    cp STATUS_ROW
+    jr nz, .nocur
+    xor a
+    ld (cursor_valid), a
+.nocur:
     call build_status
     ld a, STATUS_ROW
     ld b, a
@@ -1892,7 +2012,96 @@ draw_status:
 ; ==========================================================================
 ; Cursor placement and scrolling
 ; ==========================================================================
+; cursor_char_at_pos - A = character displayed under the text cursor
+cursor_char_at_pos:
+    ld hl, (cur_pos)
+    ld de, (len)
+    call cmp16
+    jr nc, .space
+    call peek
+    cp CR
+    jr z, .space
+    cp LF
+    jr z, .space
+    cp TAB
+    jr z, .tab
+    cp ' '
+    jr z, .space_char
+    cp 0x20
+    jr nc, .done
+    ld a, '.'
+    ret
+.tab:
+    ld a, (show_ws)
+    or a
+    ld a, ' '
+    ret z
+    ld a, '>'
+    ret
+.space_char:
+    ld a, (show_ws)
+    or a
+    ld a, ' '
+    ret z
+    ld a, '~'
+    ret
+.space:
+    ld a, ' '
+.done:
+    ret
+
+; erase_cursor - restore the character in the saved cursor cell
+erase_cursor:
+    ld a, (cursor_valid)
+    or a
+    ret z
+    ld a, (cursor_row)
+    ld b, a
+    ld a, (cursor_col)
+    ld c, a
+    call goto
+    ld a, (cursor_char)
+    call putc
+    xor a
+    ld (cursor_valid), a
+    ret
+
+; draw_cursor - draw the saved cursor cell in reverse video
+draw_cursor:
+    ld a, (cursor_row)
+    ld b, a
+    ld a, (cursor_col)
+    ld c, a
+    call goto
+    ld a, ESC
+    call putc
+    ld a, '['
+    call putc
+    ld a, (cursor_inverse)
+    or a
+    ld a, '7'
+    jr nz, .attr
+    ld a, '0'
+.attr:
+    call putc
+    ld a, 'm'
+    call putc
+    ld a, (cursor_char)
+    call putc
+    ld a, ESC
+    call putc
+    ld a, '['
+    call putc
+    ld a, '0'
+    call putc
+    ld a, 'm'
+    call putc
+    ld a, 1
+    ld (cursor_valid), a
+    ret
+
 place_cursor:
+    call erase_cursor
     ld a, (wrap_mode)
     or a
     jr nz, .wrap
@@ -1901,42 +2110,52 @@ place_cursor:
     or a
     sbc hl, de
     ld a, l
-    ld b, a
+    cp TEXT_ROWS
+    jr nc, .hide
+    ld (cursor_row), a
     ld hl, (cur_col)
     ld de, (left_col)
     or a
     sbc hl, de
     ld a, l
-    ld c, a
-    jp goto
-    ret
+    ld (cursor_col), a
+    ld a, (text_cols)
+    ld b, a
+    ld a, (cursor_col)
+    cp b
+    jr nc, .hide
+    jr .char
 .wrap:
     call compute_cursor_row
     bit 7, h
-    jr z, .nonneg
-    ld hl, 0
-.nonneg:
+    jr nz, .hide
     ld a, h
     or a
-    jr nz, .clamp
+    jr nz, .hide
     ld a, l
     cp TEXT_ROWS
-    jr c, .row_ok
-.clamp:
-    ld a, TEXT_ROWS - 1
-.row_ok:
-    ld (pc_row), a
+    jr nc, .hide
+    ld (cursor_row), a
     ld hl, (cur_col)
     ld a, (text_cols)
     ld e, a
     ld d, 0
     call div16
-    ld (pc_col), a
-    ld a, (pc_row)
+    ld (cursor_col), a
+    ld a, (text_cols)
     ld b, a
-    ld a, (pc_col)
-    ld c, a
-    jp goto
+    ld a, (cursor_col)
+    cp b
+    jr nc, .hide
+.char:
+    call cursor_char_at_pos
+    ld (cursor_char), a
+    ld a, 1
+    ld (cursor_inverse), a
+    jp draw_cursor
+.hide:
+    xor a
+    ld (cursor_valid), a
     ret
 
 compute_cursor_row:
@@ -2032,7 +2251,7 @@ ensure_visible:
     xor a
     ld (top_seg), a
     ld a, 1
-    ld (structural), a
+    ld (view_moved), a
     jr .horiz
 .below:
     ld hl, (cur_line)
@@ -2049,7 +2268,7 @@ ensure_visible:
     xor a
     ld (top_seg), a
     ld a, 1
-    ld (structural), a
+    ld (view_moved), a
 .horiz:
     ld hl, (cur_col)
     ld de, (left_col)
@@ -2069,7 +2288,7 @@ ensure_visible:
     ld hl, (cur_col)
     ld (left_col), hl
     ld a, 1
-    ld (structural), a
+    ld (view_moved), a
     ret
 .right:
     ld hl, (cur_col)
@@ -2081,7 +2300,7 @@ ensure_visible:
     inc hl
     ld (left_col), hl
     ld a, 1
-    ld (structural), a
+    ld (view_moved), a
     ret
 
 scroll_up_seg:
@@ -2091,7 +2310,7 @@ scroll_up_seg:
     dec a
     ld (top_seg), a
     ld a, 1
-    ld (structural), a
+    ld (view_moved), a
     ret
 .prev:
     ld hl, (top_pos)
@@ -2105,7 +2324,7 @@ scroll_up_seg:
     dec a
     ld (top_seg), a
     ld a, 1
-    ld (structural), a
+    ld (view_moved), a
     ret
 
 scroll_down_seg:
@@ -2128,44 +2347,49 @@ scroll_down_seg:
     xor a
     ld (top_seg), a
     ld a, 1
-    ld (structural), a
+    ld (view_moved), a
     ret
 .next_seg:
     ld (top_seg), a
     ld a, 1
-    ld (structural), a
+    ld (view_moved), a
     ret
 .no_move:
     ret
 
 after_edit:
     call ensure_visible
-    ld a, (structural)
+    ld a, (view_moved)
     or a
     jr nz, .full
+    ld a, (structural)
+    or a
+    jr nz, .structural
     call redraw_current_line
     call draw_status
     jp place_cursor
-    ret
+.structural:
+    xor a
+    ld (structural), a
+    jp draw_from_current
 .full:
+    xor a
+    ld (view_moved), a
     xor a
     ld (structural), a
     jp draw_all
-    ret
 
 after_move:
     call ensure_visible
-    ld a, (structural)
+    ld a, (view_moved)
     or a
     jr nz, .full
     call draw_status
     jp place_cursor
-    ret
 .full:
     xor a
-    ld (structural), a
+    ld (view_moved), a
     jp draw_all
-    ret
 
 redraw_current_line:
     ld a, (wrap_mode)
@@ -2386,11 +2610,13 @@ prompt_string:
     ld (hl), 0
     xor a
     ld (in_prompt), a
+    call draw_status
     scf
     ret
 .cancel:
     xor a
     ld (in_prompt), a
+    call draw_status
     or a
     ret
 
@@ -2411,6 +2637,8 @@ prompt_compute_width:
     ret
 
 redraw_prompt:
+    xor a
+    ld (cursor_valid), a
     ld a, STATUS_ROW
     ld b, a
     ld c, 0
@@ -2463,10 +2691,14 @@ redraw_prompt:
     ld a, (prompt_w)
     ld hl, prompt_len
     add a, (hl)
-    ld c, a
-    ld b, STATUS_ROW
-    jp goto
-    ret
+    ld (cursor_col), a
+    ld a, STATUS_ROW
+    ld (cursor_row), a
+    ld a, ' '
+    ld (cursor_char), a
+    xor a
+    ld (cursor_inverse), a
+    jp draw_cursor
 
 ; ==========================================================================
 ; Filenames
@@ -2770,6 +3002,12 @@ reset_cursor:
     ld (modified), a
     ld (undo_type), a
     ld (structural), a
+    ld (view_moved), a
+    ld (cursor_valid), a
+    ld (redraw_line), a
+    ld (redraw_line + 1), a
+    ld (redraw_pos), a
+    ld (redraw_pos + 1), a
     ld (top_pos), a
     ld (top_pos + 1), a
     ret
@@ -3782,9 +4020,15 @@ rcr_sum:     dw 0
 rcr_row:     db 0
 rcr_seg:     db 0
 rcr_segs:    db 0
-pc_row:      db 0
-pc_col:      db 0
-ev_count:    db 0
+cursor_valid: db 0
+cursor_inverse: db 1
+cursor_row:   db 0
+cursor_col:   db 0
+cursor_char:  db 0
+view_moved:   db 0
+redraw_line:  dw 0
+redraw_pos:   dw 0
+ev_count:     db 0
 
 file_fcb:    ds 36
 work_fcb:    ds 36
