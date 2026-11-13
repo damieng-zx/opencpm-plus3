@@ -1261,7 +1261,21 @@ class Smoke:
 
             self.command("edit edtest.txt", 1500)
             self.expect("EDIT.COM opened the file",
-                        "editor test", "A:EDTEST.TXT")
+                        "ditor test", "A:EDTEST.TXT")
+            # BREAK opens the menu; BREAK+Q is the ESC-Q shortcut.
+            self.mcp.call("key", {"name": "shift+space", "frames": 30})
+            self.mcp.call("run", {"frames": 400})
+            self.expect("EDIT.COM BREAK menu", "Menu - press any key")
+            self.key("x", 300)
+            self.mcp.call("key", {"name": "shift+space", "frames": 3})
+            self.mcp.call("key", {"name": "q", "frames": 3})
+            self.mcp.call("run", {"frames": 800})
+            self.wait_for(["A>"], frames=500)
+            self.command("dir", 1200)
+            self.expect("EDIT.COM after BREAK-Q",
+                        "EDIT     COM", "EDTEST   TXT")
+            self.command("edit edtest.txt", 1500)
+            self.expect("EDIT.COM reopened", "ditor test")
             self.mcp.call("type", {"text": "X"})
             self.mcp.call("run", {"frames": 300})
             self.key("shift+sym+s", 1200)
@@ -1279,7 +1293,7 @@ class Smoke:
             self.dsk = full
             self.boot()
             self.command("edit edtest.txt", 1500)
-            self.expect("EDIT.COM opened the full-disk file", "editor test")
+            self.expect("EDIT.COM opened the full-disk file", "ditor test")
             self.mcp.call("type", {"text": "Y"})
             self.mcp.call("run", {"frames": 300})
             self.key("shift+sym+s", 1200)

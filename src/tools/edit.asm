@@ -119,6 +119,23 @@ get_key:
     ld (userf_dw), hl
     call userf_trampoline
     jr c, .token
+    ld a, (esc_prefix)
+    or a
+    jr z, .poll
+    ; BREAK+letter is a shortcut; a bare BREAK opens the menu after a
+    ; short pause (10 frames at 50 Hz).
+    ld hl, (ISR_TICK)
+    ld de, (esc_tick)
+    or a
+    sbc hl, de
+    ld de, 15
+    call cmp16
+    jr c, .poll
+    xor a
+    ld (esc_prefix), a
+    call show_help
+    jr .loop
+.poll:
     call poll_extend_hold
     jr .loop
 .token:
@@ -128,8 +145,27 @@ get_key:
     ld a, c
     ld (key_raw), a
     call clear_message
-    jp process_key
+    ld a, (esc_prefix)
+    or a
+    jr z, .normal
+    xor a
+    ld (esc_prefix), a
+    ld a, (key_raw)
+    call extend_command
+    or a
+    jr z, .menu
+    push af
+    call wait_extend_release
+    pop af
+    call do_command
+    xor a
     ret
+.menu:
+    call show_help
+    xor a
+    ret
+.normal:
+    jp process_key
 
 ; get_raw - non-blocking raw key token.  Carry set + key_shift/key_raw.
 get_raw:
@@ -193,7 +229,7 @@ process_caps:
     cp 18
     jr z, .tab
     cp 35
-    jr z, .none
+    jr z, .menu
     cp 30
     jr z, .enter
     ; Caps+letter etc.
@@ -238,6 +274,15 @@ process_caps:
 .enter:
     call do_newline
     call after_edit
+    xor a
+    ret
+.menu:
+    ; BREAK is a prefix: BREAK+letter runs that command, a bare BREAK
+    ; opens the menu after a short timeout.
+    ld a, 1
+    ld (esc_prefix), a
+    ld hl, (ISR_TICK)
+    ld (esc_tick), hl
     xor a
     ret
 .none:
@@ -1409,6 +1454,7 @@ draw_all:
     xor a
     ld (cursor_valid), a
     ld (view_moved), a
+    ld (screen_end_row), a
     ld hl, (top_pos)
     ld (draw_pos), hl
     ld a, (top_seg)
@@ -1423,9 +1469,6 @@ draw_rows:
     ld a, (draw_row)
     cp TEXT_ROWS
     jr nc, .rows_done
-    ld a, (draw_done)
-    or a
-    jr nz, .blank
     ; compare draw_pos with len
     ld hl, (draw_pos)
     ld de, (len)
@@ -1463,10 +1506,25 @@ draw_rows:
     ld (draw_seg), a
     jr .next_row
 .set_done:
-    ld a, 1
-    ld (draw_done), a
-.blank:
+    ; Blank only the rows that used to hold text and no longer do.  Rows
+    ; below screen_end_row were already blank, so an edit near the end of
+    ; the file does not rewrite the whole lower screen.
+    ld a, (draw_row)
+    ld hl, screen_end_row
+    cp (hl)
+    jr nc, .end_rows
+.blank_to_end:
     call blank_row
+    ld a, (draw_row)
+    inc a
+    ld (draw_row), a
+    ld hl, screen_end_row
+    cp (hl)
+    jr c, .blank_to_end
+.end_rows:
+    ld a, (draw_row)
+    ld (screen_end_row), a
+    jr .rows_done
 .next_row:
     ld a, (draw_row)
     inc a
@@ -1792,21 +1850,17 @@ build_status:
 .nostar:
     ld a, ' '
     call sb_char
-    ld a, 'L'
-    call sb_char
     ld hl, (cur_line)
+    inc hl
+    call sb_dec16
+    ld a, ':'
+    call sb_char
+    ld hl, (cur_col)
     inc hl
     call sb_dec16
     ld a, (cols)
     cp 51
     jr c, .compact
-    ld a, ' '
-    call sb_char
-    ld a, 'C'
-    call sb_char
-    ld hl, (cur_col)
-    inc hl
-    call sb_dec16
     ld a, ' '
     call sb_char
     ld a, (mode_ins)
@@ -1829,11 +1883,6 @@ build_status:
     call sb_str
     jr .pad
 .compact:
-    ld a, 'C'
-    call sb_char
-    ld hl, (cur_col)
-    inc hl
-    call sb_dec16
     ld a, ' '
     call sb_char
     ld a, (mode_ins)
@@ -2073,28 +2122,7 @@ draw_cursor:
     ld a, (cursor_col)
     ld c, a
     call goto
-    ld a, ESC
-    call putc
-    ld a, '['
-    call putc
-    ld a, (cursor_inverse)
-    or a
-    ld a, '7'
-    jr nz, .attr
-    ld a, '0'
-.attr:
-    call putc
-    ld a, 'm'
-    call putc
-    ld a, (cursor_char)
-    call putc
-    ld a, ESC
-    call putc
-    ld a, '['
-    call putc
-    ld a, '0'
-    call putc
-    ld a, 'm'
+    ld a, '_'
     call putc
     ld a, 1
     ld (cursor_valid), a
@@ -2150,8 +2178,6 @@ place_cursor:
 .char:
     call cursor_char_at_pos
     ld (cursor_char), a
-    ld a, 1
-    ld (cursor_inverse), a
     jp draw_cursor
 .hide:
     xor a
@@ -2696,8 +2722,6 @@ redraw_prompt:
     ld (cursor_row), a
     ld a, ' '
     ld (cursor_char), a
-    xor a
-    ld (cursor_inverse), a
     jp draw_cursor
 
 ; ==========================================================================
@@ -3310,14 +3334,14 @@ draw_help_box:
     ld a, (h_left)
     ld c, a
     call goto
-    ld a, '+'
+    ld a, 0x96
     call putc
     ld a, (h_width)
     sub 2
     ld b, a
-    ld a, '-'
+    ld a, 0x9A
     call .spaces
-    ld a, '+'
+    ld a, 0x9C
     call putc
     ; sides
     ld a, (h_top)
@@ -3331,14 +3355,14 @@ draw_help_box:
     ld a, (h_left)
     ld c, a
     call goto
-    ld a, '|'
+    ld a, 0x95
     call putc
     ld a, (h_width)
     sub 2
     ld b, a
     ld a, ' '
     call .spaces
-    ld a, '|'
+    ld a, 0x95
     call putc
     ld hl, h_row
     inc (hl)
@@ -3351,14 +3375,14 @@ draw_help_box:
     ld a, (h_left)
     ld c, a
     call goto
-    ld a, '+'
+    ld a, 0x93
     call putc
     ld a, (h_width)
     sub 2
     ld b, a
-    ld a, '-'
+    ld a, 0x9A
     call .spaces
-    ld a, '+'
+    ld a, 0x99
     call putc
     ; text
     ld hl, help_table
@@ -3932,6 +3956,8 @@ structural:  db 0
 in_prompt:   db 0
 case_sens:   db 1
 ext_tick:    dw 0
+esc_prefix:  db 0
+esc_tick:    dw 0
 hold_armed:  db 1
 msg_active:  db 0
 allow_new:   db 0
@@ -3963,6 +3989,7 @@ draw_pos:    dw 0
 draw_row:    db 0
 draw_seg:    db 0
 draw_done:   db 0
+screen_end_row: db 23
 r_row:       db 0
 r_pos:       dw 0
 r_end:       dw 0
@@ -4021,7 +4048,6 @@ rcr_row:     db 0
 rcr_seg:     db 0
 rcr_segs:    db 0
 cursor_valid: db 0
-cursor_inverse: db 1
 cursor_row:   db 0
 cursor_col:   db 0
 cursor_char:  db 0
@@ -4069,9 +4095,9 @@ msg_full:    db 'Buffer full', 0
 msg_writeerr: db 'Write error', 0
 msg_renameerr: db 'Rename error', 0
 msg_notfound: db 'Not found', 0
-msg_helpstat: db 'Press any key to close', 0
+msg_helpstat: db 'Menu - press any key', 0
 
-help1:  db 'EXTEND commands', 0
+help1:  db 'EDIT commands', 0
 help2:  db 'O Open    S Save', 0
 help3:  db 'N New     Q Quit', 0
 help4:  db 'F Find    R Repl', 0
