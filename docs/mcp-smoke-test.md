@@ -309,7 +309,7 @@ order byte: 0-3 here, `FFh` on any other CP/M 3), and prints `SKIP` for what
 is ours.  The skips and why:
 
 - **Not CP/M 3 behaviour.**  `F59`, `F107`'s serial number, our private `F120`-`F123`, `CD_INFO`,
-  the SCB being too small for offset 63h, the clock check that reads our SCB
+  the clock check that reads our SCB
   from common memory, `KM_KT_GET` as a queue that gives back what
   `KM_KT_PUT` put in (on Locomotive's the tokens are typed into the console),
   and the string limits of `KM_SET_EXPAND`.

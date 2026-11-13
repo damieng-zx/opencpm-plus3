@@ -522,9 +522,26 @@ class P2F49Bounds(unittest.TestCase):
     def test_offsets_are_bounded(self):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index("bf_f49:"):text.index("scb_read_field:")]
-        self.assertIn("cp 99", body)
+        # Offsets 0-99 are valid (99 = the last byte), 100+ are not.
+        self.assertIn("cp 100", body)
         self.assertRegex(body, r"j[pr] nc, \.scb_bad")
         self.assertIn("jp bdos_efail", body)
+
+    def test_offset_99_is_one_byte_wide(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f49:"):text.index("scb_read_field:")]
+        get = body[body.index(".scb_get:"):body.index(".scb_setbyte:")]
+        self.assertIn("cp 99", get)             # the get masks H at offset 99
+        self.assertIn("ld h, 0", get)
+        word = body[body.index(".scb_setword:"):]
+        self.assertIn("cp 100", word)           # no high-byte write at 99
+        self.assertIn(".scb_no_high:", word)
+
+    def test_disktest_reads_scb_offsets_62_and_63(self):
+        tester = source("src/test/disktest.asm")
+        self.assertIn("ld (hl), 0x63", tester)
+        self.assertIn("ld de, (0x0006)", tester)
+        self.assertIn("ld (hl), 0x62", tester)
 
     def test_f48_and_unknown_f49_use_eok(self):
         text = source("src/bdos/bdos.zpa")

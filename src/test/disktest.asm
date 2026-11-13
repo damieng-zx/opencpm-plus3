@@ -1699,20 +1699,28 @@ test18:
     jp .t18_fail
 .t18_width_ok:
 
-    ; F49 invalid offset 0x63 -> A=0xFF.  How big the SCB is is the system's own
-    ; (Locomotive's has a field at 63h), so only here.
-    ld a, (ours)
-    or a
-    jp z, .t18_f109
+    ; F49 offsets run 0-99: 62h is the top of the TPA, the address in 0006h.
+    ; Offset 63h, the last SCB byte, must be accepted too (it was refused as
+    ; "would run past the SCB"); what it holds is the system's own business,
+    ; but it is not the 0FFh of an invalid offset.
     ld hl, scb_pb
-    ld (hl), 0x63
+    ld (hl), 0x62
     inc hl
     ld (hl), 0
     ld de, scb_pb
     ld c, 49
     call BDOS
-    cp 0xFF
+    ld de, (0x0006)
+    or a
+    sbc hl, de                 ; HL = the word at 62h, which is (0006)
     jp nz, .t18_fail
+    ld hl, scb_pb
+    ld (hl), 0x63
+    ld de, scb_pb
+    ld c, 49
+    call BDOS
+    cp 0xFF
+    jp z, .t18_fail
 
 .t18_f109:
     ; F109 get/set/restore console mode

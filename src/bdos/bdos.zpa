@@ -4056,11 +4056,12 @@ bf_f49:
     inc de
     ; DE now points to PB[2]
 
-    ; Reject offsets outside the 100-byte SCB.  Offset 0x63 is the high
-    ; byte of scb_tpa; a word access there would run into the visible BIOS
-    ; table, so the whole range 0x63+ is invalid.
+    ; The SCB is 100 bytes, offsets 0-99.  Offset 99 (0x63) is the high byte
+    ; of scb_tpa, the last one: a word access there would reach the visible
+    ; BIOS table just after it, so a get returns only that byte (H = 0) and a
+    ; set word stores only its low byte.  Offsets 100+ are invalid.
     ld a, c
-    cp 99
+    cp 100
     jr nc, .scb_bad
 
     ; Build the SCB value for this offset
@@ -4080,6 +4081,11 @@ bf_f49:
 .scb_get:
     ; Get: return word from SCB at offset C
     call scb_read_field        ; Returns HL = word
+    ld a, c
+    cp 99
+    jr nz, .scb_got
+    ld h, 0                    ; the last offset has no high byte
+.scb_got:
     ld a, l
     jp bdos_ret
 
@@ -4112,8 +4118,12 @@ bf_f49:
     push de                    ; Save value (D=high, E=low)
     call scb_write_field       ; Write low byte at offset C
     inc c
+    ld a, c
+    cp 100
+    jr nc, .scb_no_high        ; the low byte was the last SCB byte
     ld e, d                    ; E = high byte
     call scb_write_field       ; Write high byte at offset C+1
+.scb_no_high:
     pop hl                     ; HL = value (H=high, L=low)
     ld a, l
     jp bdos_ret

@@ -411,11 +411,12 @@ BDOS function 124 (private, used by the CCP only):
   - operation 0x00: get word → returns SCB word at offset
   - operation 0xFE: set byte
   - operation 0xFF: set word
-- **Out**: A=0xFF, HL=0 for an invalid offset (0x63+) or unknown
+- **Out**: A=0xFF, HL=0 for an invalid offset (100 and above) or unknown
   operation; otherwise the value read/written.
-- **Note**: The SCB is 100 bytes (0x00-0x63). Offset 0x63 is the high
-  byte of `scb_tpa`, so it is rejected to keep word accesses from running
-  into the visible BIOS table.
+- **Note**: The SCB is 100 bytes (offsets 0-99, 0x00-0x63).  Offset 99
+  (0x63) is the high byte of `scb_tpa`, the last byte: a get there returns
+  just that byte (H=0) and a set word stores only its low byte, so word
+  accesses cannot run into the visible BIOS table after the SCB.
 
 #### F50 — Direct BIOS Call
 - **In**: DE=PB (parameter block address)
