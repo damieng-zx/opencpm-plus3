@@ -435,16 +435,19 @@ BDOS function 124 (private, used by the CCP only):
 - **Note**: Our buffers are per-call, so there is nothing to purge.
 
 #### F99 — Truncate File
-- **In**: DE=FCB; R0/R1/R2 = required file length in 128-byte records
-- **Out**: A=0 on success, 0xFF if the file is not found, the target would
-  extend the file, the drive is invalid, the file is read-only, or R2 is
-  non-zero (this filesystem never exceeds 65535 records).
+- **In**: DE=FCB; R0/R1/R2 = the number of the file's new **last** record,
+  so the file keeps R+1 records (as in CP/M 3).  The file must be closed;
+  an FCB that is still open is not detected.
+- **Out**: A=0 on success, 0xFF if the file is not found, R is not below
+  the current size (it would extend the file), the drive is invalid, the
+  file is read-only, or R2 is non-zero (this filesystem never exceeds
+  65535 records).
 - **Effect**: Extents past the new length are removed from the directory
   and their blocks returned to the allocation vector. The extent holding
-  the cut keeps only the blocks that hold records below the target and
-  gets `RC = target - extent_base`. Truncating to zero keeps a single
-  empty extent, so the file still exists with size 0. The FCB is
-  re-synchronised to extent 0 (as F15 would leave it), with `CR = 0`.
+  the cut keeps only the blocks that hold the records up to R and
+  gets `RC = (R + 1) - extent_base`. A file cannot be truncated to
+  nothing (there is no record number for that); delete it instead. The
+  FCB is re-synchronised to extent 0 (as F15 would leave it), with `CR = 0`.
 - **Note**: No XFCB is involved — this filesystem has no passwords or
   date stamps, so the password hook in the CP/M 3 definition is a no-op
   here.

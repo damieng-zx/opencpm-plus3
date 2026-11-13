@@ -212,6 +212,27 @@ class TruncateFile(unittest.TestCase):
         self.assertIn("ld c, 46", body)                 # F46 free-space check
         self.assertIn("cp 0xFF", body)                  # extension rejected
 
+    def test_f99_r_is_the_last_record_so_the_length_is_r_plus_one(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f99:"):text.index("; F120: Get SETDEF order byte")]
+        head = body[:body.index("; --- pass 1")]
+        self.assertIn("ld l, (ix + 33)", head)
+        self.assertIn("inc hl", head)                   # target = R + 1
+        self.assertIn("ld (f99_target), hl", head)
+        self.assertIn("record plus one", head)
+
+    def test_disktest_f99_closes_first_and_runs_everywhere(self):
+        text = source("src/test/disktest.asm")
+        t29 = text[text.index("test29:"):text.index("test30:")]
+        t30 = text[text.index("test30:"):text.index("; --- shared helpers")]
+        for name, body in (("T29", t29), ("T30", t30)):
+            self.assertNotIn("msg_skip_ours", body, name)   # not ours-only
+            self.assertIn("ld c, 99", body, name)
+        self.assertIn("call t29_f99", t29)
+        self.assertIn("ld a, 40", t29)                  # R = size is refused
+        self.assertIn("ld a, 19", t29)                  # R = 19 keeps 20
+        self.assertIn("F99 wants the file closed", t30)
+
 
 class LoadOverlay(unittest.TestCase):
     def test_f59_reads_load_address_from_fcb(self):

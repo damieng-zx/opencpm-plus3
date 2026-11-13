@@ -3007,21 +3007,16 @@ test28:
 
 test29:
     ; === T29: F99 truncate file ===
-    ; Write 40 records, truncate to 20, check the size, the free space and
-    ; that records 0..19 survive; then truncate to 0 and check the disk is
-    ; back to its original free space.
+    ; F99 sets the file's LAST record to the random record number R in the
+    ; FCB (so the new size is R + 1), needs the file closed, and fails
+    ; (FFh) when R is not below the current size.
+    ; Write 40 records and close; R = 100 and R = 40 are refused; R = 19
+    ; leaves 20 records (check the size, the free space and that records
+    ; 0..19 survive); R = 0 leaves one; deleting it returns the disk to its
+    ; original free space.
     ld de, msg_t29
     ld c, 9
     call BDOS
-    ; F99: Locomotive's does not shorten the file as ours does.
-    ld a, (ours)
-    or a
-    jr nz, .t29_here
-    ld de, msg_skip_ours
-    ld c, 9
-    call BDOS
-    ret
-.t29_here:
 
     ld hl, fn_test6
     call delete_name
@@ -3074,7 +3069,8 @@ test29:
     ld de, DMA
     ld c, 26
     call BDOS
-    ld e, 0
+    ld a, (home)
+    ld e, a                    ; F46 for the drive under test
     ld c, 46
     call BDOS
     or a
@@ -3084,42 +3080,32 @@ test29:
 
     ld a, 1
     ld (t29_step), a
-    ; Reject an attempt to extend the file.
-    ld hl, fn_test6
-    call set_fcb
-    ld de, FCB1
-    ld c, 15                   ; open
-    call BDOS
+    ; Reject an attempt to extend the file: record 100 is beyond the end,
+    ; and record 40 is one past the last (the file's size is 40, so the
+    ; last record is 39).  The file is closed.
+    ld a, 100
+    call t29_f99
     cp 0xFF
-    jp z, .t29_fail
-    ld a, 100                  ; beyond EOF
-    ld (FCB1 + 33), a
-    xor a
-    ld (FCB1 + 34), a
-    ld (FCB1 + 35), a
-    ld de, FCB1
-    ld c, 99
-    call BDOS
+    jp nz, .t29_fail
+    ld a, 40
+    call t29_f99
     cp 0xFF
     jp nz, .t29_fail
 
     ld a, 2
     ld (t29_step), a
-    ; Truncate to 20 records.
-    ld a, 20
-    ld (FCB1 + 33), a
-    xor a
-    ld (FCB1 + 34), a
-    ld (FCB1 + 35), a
-    ld de, FCB1
-    ld c, 99
-    call BDOS
+    ; Last record 19: the file keeps 20 records.
+    ld a, 19
+    call t29_f99
     or a
     jp nz, .t29_fail
 
     ld a, 3
     ld (t29_step), a
-    ; F35 must now report 20 records.
+    ; F35 must now report 20 records (the FCB is a fresh one: those that
+    ; named the file before F99 are not valid after it).
+    ld hl, fn_test6
+    call set_fcb
     ld de, FCB1
     ld c, 35
     call BDOS
@@ -3139,7 +3125,8 @@ test29:
     ld de, DMA
     ld c, 26
     call BDOS
-    ld e, 0
+    ld a, (home)
+    ld e, a                    ; F46 for the drive under test
     ld c, 46
     call BDOS
     or a
@@ -3191,34 +3178,25 @@ test29:
 
     ld a, 7
     ld (t29_step), a
-    ; Truncate to zero: the file stays, but empty.
-    xor a
-    ld (FCB1 + 33), a
-    ld (FCB1 + 34), a
-    ld (FCB1 + 35), a
-    ld de, FCB1
-    ld c, 99
-    call BDOS
-    or a
-    jp nz, .t29_fail
+    ; Close the read FCB (F99 wants the file closed), then last record 0:
+    ; the file keeps one record.
     ld de, FCB1
     ld c, 16
     call BDOS
+    xor a
+    call t29_f99
+    or a
+    jp nz, .t29_fail
 
     ld a, 8
     ld (t29_step), a
     ld hl, fn_test6
     call set_fcb
     ld de, FCB1
-    ld c, 15
-    call BDOS
-    cp 0xFF
-    jp z, .t29_fail
-    ld de, FCB1
     ld c, 35
     call BDOS
     ld a, (FCB1 + 33)
-    or a
+    cp 1
     jp nz, .t29_fail
     ld a, (FCB1 + 34)
     or a
@@ -3226,11 +3204,14 @@ test29:
 
     ld a, 9
     ld (t29_step), a
-    ; All blocks are back.
+    ; Delete it: all blocks are back.
+    ld hl, fn_test6
+    call delete_name
     ld de, DMA
     ld c, 26
     call BDOS
-    ld e, 0
+    ld a, (home)
+    ld e, a                    ; F46 for the drive under test
     ld c, 46
     call BDOS
     or a
@@ -3272,21 +3253,28 @@ test29:
     call BDOS
     ret
 
+; t29_f99 - F99 on fn_test6 with a fresh FCB and R = A (R1 = R2 = 0)
+;   In:       A = R0
+;   Out:      A = F99's return code
+;   Clobbers: AF, BC, DE, HL
+t29_f99:
+    push af
+    ld hl, fn_test6
+    call set_fcb
+    pop af
+    ld (FCB1 + 33), a
+    xor a
+    ld (FCB1 + 34), a
+    ld (FCB1 + 35), a
+    ld de, FCB1
+    ld c, 99
+    jp BDOS
+
 test30:
     ; === T30: 16-bit block numbers (2K-block B: image) ===
     ld de, msg_t30
     ld c, 9
     call BDOS
-    ; 16-bit blocks via F99 (see T29).
-    ld a, (ours)
-    or a
-    jr nz, .t30_here
-    ld de, msg_skip_ours
-    ld c, 9
-    call BDOS
-    ret
-.t30_here:
-
     ; Remember the default drive and select B:.  Only run when B: is a
     ; 2K-block disk with 16-bit block numbers (DSM > 255); otherwise skip.
     ld c, 25                   ; F25: current default drive
@@ -3429,19 +3417,21 @@ test30:
 
     ld a, 8
     ld (t30_step), a
-    ld a, 5
-    ld (FCB1 + 33), a
-    xor a
-    ld (FCB1 + 34), a
-    ld (FCB1 + 35), a
     ld de, FCB1
-    ld c, 99                   ; truncate to 5 records
+    ld c, 16                   ; F99 wants the file closed
+    call BDOS
+    call .t30_fcb
+    ld a, 4                    ; the last record is 4: 5 records remain
+    ld (FCB1 + 33), a
+    ld de, FCB1
+    ld c, 99
     call BDOS
     or a
     jp nz, .t30_fail
 
     ld a, 9
     ld (t30_step), a
+    call .t30_fcb              ; a fresh FCB: F99 invalidates the old ones
     ld de, FCB1
     ld c, 35
     call BDOS
@@ -3475,6 +3465,12 @@ test30:
 
     ld a, 11
     ld (t30_step), a
+    call .t30_fcb
+    ld de, FCB1
+    ld c, 15                   ; reopen after F99
+    call BDOS
+    cp 0xFF
+    jp z, .t30_fail_open
     ld a, 4
     call .t30_read
     jp nz, .t30_fail
@@ -3574,6 +3570,13 @@ test30:
     ret
 
 ; .t30_read - read random record A of FCB1; Z = success.
+.t30_fcb:                      ; FCB1 = fn_b16 on B:, nothing else set
+    ld hl, fn_b16
+    call set_fcb
+    ld a, 2
+    ld (FCB1), a
+    ret
+
 .t30_read:
     ld (FCB1 + 33), a
     xor a

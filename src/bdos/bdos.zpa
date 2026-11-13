@@ -4688,9 +4688,13 @@ bf_f112:
 
 
 ; F99: Truncate File
-;   In:  DE = FCB; R0/R1/R2 = required length in 128-byte records
-;   Out: A = 0 (truncated) or 0xFF (not found, would extend, bad drive,
-;        read-only file, or R2 != 0)
+;   In:  DE = FCB; R0/R1/R2 = the number of the file's new LAST record, so
+;        the new length is R + 1 records (CP/M 3: "sets the last record of a
+;        file to the random record number")
+;   Out: A = 0 (truncated) or 0xFF (not found, R at or beyond the current
+;        length, bad drive, read-only file, or R2 != 0)
+;   The caller must have closed the file (CP/M 3 requires it; an FCB that
+;   is still open is not detected here).
 ;   Extents past the new length are deleted and their blocks returned to
 ;   the allocation vector; the extent holding the cut keeps only the
 ;   blocks below it and gets RC = target - extent_base.  The FCB is
@@ -4710,14 +4714,18 @@ bf_f99:
     call is_fcb_readonly
     jp nz, .f99_err
 
-    ; New length comes from R0/R1; R2 must be zero on this filesystem.
+    ; The new last record is R0/R1; R2 must be zero on this filesystem.  The
+    ; length kept is that record plus one.
     ld a, (ix + 35)
     or a
     jp nz, .f99_err
-    ld a, (ix + 34)
-    ld (f99_target + 1), a
-    ld a, (ix + 33)
-    ld (f99_target), a
+    ld h, (ix + 34)
+    ld l, (ix + 33)
+    inc hl
+    ld a, h
+    or l
+    jp z, .f99_err              ; R = 0FFFFh: no disk holds a file that big
+    ld (f99_target), hl
 
     ; --- pass 1: find the file and its current length -------------------
     xor a

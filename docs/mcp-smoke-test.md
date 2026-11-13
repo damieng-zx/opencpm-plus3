@@ -212,7 +212,7 @@ runner mounts it on B: after boot, lists and types `HELLO16.TXT`, then runs
 `DISKTEST 30` (T30 is the 16-bit block test, skipped when B: is not a
 2K-block/16-bit-block disk).  T30 creates a file, writes 20 records, checks
 F35, the F46 free-space delta (two blocks = 32 records), reads records back,
-truncates with F99 (one block comes back) and deletes it, requiring
+truncates with F99 to last record 4 (one block comes back) and deletes it, requiring
 `T30 B16 16-bit blocks PASS`.
 
 `tools/zx84_negative.py` builds corrupted copies of the image and requires
@@ -315,7 +315,7 @@ is ours.  The skips and why:
   and the string limits of `KM_SET_EXPAND`.
 - **Locomotive's differs and which is right is not settled.**  `F40` zero
   fill (records before the target in a fresh block are not zeroed there),
-  `F99` truncation (the file keeps its size), what `F108` returns, the
+  what `F108` returns, the
   `SECTRN` result with no table, and `FLUSH`'s return code.
 - **Things only we restrict.**  A bank other than 1 in `DD_FORMAT`,
   `DD_L_READ`/`DD_L_WRITE`; a bad spec in `DD_L_XDPB`/`DD_L_DPB`; an XDPB
