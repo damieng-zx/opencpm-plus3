@@ -1905,7 +1905,7 @@ build_status:
     call sb_char
 .pad:
     ld a, (cols)
-    sub 6
+    sub 5
     ld (stat_target), a
 .padloop:
     ld a, (stat_len)
@@ -3314,12 +3314,14 @@ show_help:
 
 draw_help_box:
     ld a, (cols)
-    cp 44
-    jr c, .narrow
+    srl a
+    cp 22
+    jr nc, .min_ok
+    ld a, 22
+.min_ok:
+    cp 40
+    jr c, .setw
     ld a, 40
-    jr .setw
-.narrow:
-    sub 4
 .setw:
     ld (h_width), a
     ld b, a
@@ -3347,7 +3349,7 @@ draw_help_box:
     ld a, (h_top)
     inc a
     ld (h_row), a
-    ld b, 11
+    ld b, 9
 .sloop:
     push bc
     ld a, (h_row)
@@ -3370,7 +3372,7 @@ draw_help_box:
     djnz .sloop
     ; bottom border
     ld a, (h_top)
-    add a, 12
+    add a, 10
     ld b, a
     ld a, (h_left)
     ld c, a
@@ -3390,7 +3392,7 @@ draw_help_box:
     ld a, (h_top)
     inc a
     ld (h_row), a
-    ld b, 10
+    ld b, 8
 .tloop:
     push bc
     ld a, (h_row)
@@ -4079,7 +4081,7 @@ str_ins:     db ' INS', 0
 str_ovr:     db ' OVR', 0
 str_wrap:    db ' WRAP', 0
 str_ws:      db ' WS', 0
-str_extend:  db 'EXTEND', 0
+str_extend:  db 'BREAK', 0
 
 msg_open:    db 'Open: ', 0
 msg_saveas:  db 'Save as: ', 0
@@ -4105,12 +4107,10 @@ help5:  db 'V Ws      W Wrap', 0
 help6:  db 'I Ins     Z Undo', 0
 help7:  db 'D Del     L Redraw', 0
 help8:  db 'H Help', 0
-help9:  db 'Arrows CAPS+5/6/7/8', 0
-help10: db 'Any key closes', 0
 
 help_table:
-    dw help1, help2, help3, help4, help5
-    dw help6, help7, help8, help9, help10
+    dw help1, help2, help3, help4
+    dw help5, help6, help7, help8
 
 ; EXTEND command table, indexed by raw key
 extend_table:
