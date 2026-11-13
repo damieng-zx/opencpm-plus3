@@ -691,21 +691,8 @@ class Smoke:
             if value != expected:
                 raise SmokeError(
                     f"DD_SETUP edge {name} {value:02X}, expected {expected:02X}")
-        # Restore the test-11 defaults for the rest of the run.
-        for name, value in (("motor_off_ticks", 0xFA),
-                            ("fdc_spec1", 0x4F),
-                            ("fdc_spec2", 0x05)):
-            self.mcp.call("write_memory", {
-                "address": hex(label_address(name)),
-                "hex_bytes": f"{value:02X}", "bank": 4})
-        for name, expected in (("motor_off_ticks", 250),
-                               ("fdc_spec1", 0x4F),
-                               ("fdc_spec2", 0x05)):
-            value = self.memory(4, label_address(name), 1)[0]
-            if value != expected:
-                raise SmokeError(
-                    f"DD_SETUP defaults {name} {value:02X}, "
-                    f"expected {expected:02X}")
+        # (The DONE keypress runs XTETEST's cleanup, which restores these
+        # defaults itself; the checks below validate that cleanup.)
         # Keyboard state lives in bank 6 (A63F+).  Test 27 leaves 0/0,
         # which the handler must store as 256 scans.
         for name in ("kbd_repeat_delay", "kbd_repeat_rate"):
@@ -746,13 +733,6 @@ class Smoke:
                 raise SmokeError(
                     f"KM_SET_KEY table[{index}] {value:02X}, "
                     f"expected {expected:02X}")
-        # The emulator types upper-case letters with CAPS SHIFT, so restore
-        # the test overrides before the remaining commands are typed.
-        for index in (2 * 4 + 1, 3 * 4 + 2, 4 * 4 + 3,
-                      5 * 4 + 1, 5 * 4 + 2, 5 * 4 + 3,
-                      6 * 4 + 1, 39 * 4 + 1):
-            self.mcp.call("write_memory", {
-                "address": hex(0xA900 + index), "hex_bytes": "FF", "bank": 6})
         # KM_SET_EXPAND slot for token 85h: length 5 + "HELLO".
         slot = self.memory(6, 0xA9A0 + 5 * 32, 6)
         if slot != bytes((5, ord("H"), ord("E"), ord("L"),
@@ -769,8 +749,42 @@ class Smoke:
         if maxslot != expect31:
             raise SmokeError(
                 f"KM_SET_EXPAND 9Eh slot {maxslot.hex()}, expected {expect31.hex()}")
-        # DONE can appear a few frames before the CCP redraws its prompt.
+
+        # DONE waits for a key so the state above can be inspected; the
+        # keypress also runs XTETEST's cleanup before the CCP prompt returns.
+        self.key("enter", frames=5)
         self.wait_for(["A>"], frames=50, attempts=40)
+        for name, expected in (("motor_off_ticks", 250),
+                               ("fdc_spec1", 0x4F),
+                               ("fdc_spec2", 0x05)):
+            value = self.memory(4, label_address(name), 1)[0]
+            if value != expected:
+                raise SmokeError(
+                    f"XTETEST cleanup left {name} {value:02X}, "
+                    f"expected {expected:02X}")
+        for index in (2 * 4 + 1, 3 * 4 + 2, 4 * 4 + 3,
+                      5 * 4 + 1, 5 * 4 + 2, 5 * 4 + 3,
+                      6 * 4 + 1, 39 * 4 + 1):
+            value = self.memory(6, 0xA900 + index, 1)[0]
+            if value != 0xFF:
+                raise SmokeError(
+                    f"XTETEST left KM_SET_KEY table[{index}] "
+                    f"{value:02X}, expected FF after cleanup")
+        for token, name in ((0x85, "HELLO"), (0x9E, "max")):
+            length = self.memory(6, 0xA9A0 + (token - 0x80) * 32, 1)[0]
+            if length != 0:
+                raise SmokeError(
+                    f"XTETEST left KM_SET_EXPAND {token:02X}h ({name}) "
+                    f"length {length}, expected 0")
+        # The warm boot may arm the restored 250-frame timeout on its first
+        # disk access; give it time to expire before requiring the motor off.
+        self.mcp.call("run", {"frames": 400})
+        motor = self.memory(3, label_address("motor_flag"), 1)[0]
+        last_1ffd = self.memory(3, label_address("last_1ffd"), 1)[0]
+        if motor != 0 or last_1ffd & 0x08:
+            raise SmokeError(
+                f"XTETEST left the motor on: flag={motor:02X} "
+                f"last_1ffd={last_1ffd:02X}")
 
     def run_xtetest_format(self) -> None:
         """Run the destructive DD_FORMAT test on a scratch disk copy."""
@@ -1486,7 +1500,7 @@ class Smoke:
             self.wait_for(["Copied 40 tracks."], frames=600, attempts=40)
             self.expect("DISKCOPY A->B",
                         "Source: SS, 40 tracks, 9 sectors of 512 bytes.",
-                        "Every track verified.")
+                        "100%", "Every track verified.")
             for track, sector in ((0, 1), (0, 5), (1, 1), (3, 4), (9, 9),
                                   (17, 2), (25, 7), (39, 9)):
                 a = self.mcp.call("sector_read", {
@@ -1546,7 +1560,7 @@ class Smoke:
                 self.mcp.call("load", {"file": str(src), "drive": "A"})
                 self.key("enter", 300)
             self.wait_for(["Copied 40 tracks."], frames=600, attempts=40)
-            self.expect("DISKCOPY A: A:", "Every track verified.")
+            self.expect("DISKCOPY A: A:", "100%", "Every track verified.")
 
             # --- Layout capture: copy a 10-sector HiForm disc ---
             self.log("FORMAT B: HiForm 203 (copy source)")
@@ -1565,7 +1579,7 @@ class Smoke:
                           frames=50, attempts=4)
             self.key("enter", 300)
             self.wait_for(["Copied 42 tracks."], frames=600, attempts=60)
-            self.expect("DISKCOPY B: A:", "Every track verified.")
+            self.expect("DISKCOPY B: A:", "100%", "Every track verified.")
             info = self.track_info(0, drive=0)
             if "Sectors: 10" not in info or "Gap3: 16" not in info:
                 raise SmokeError(
@@ -2058,9 +2072,12 @@ class Smoke:
             raise SmokeError("BDOSTEST failures:\n" + "\n".join(failures))
         if not any("F59 LOADOVL" in l for l in self.history):
             raise SmokeError("BDOSTEST did not reach F59")
-        if not any("F111 PRTBLK" in l and "F111OK" in l
-                   for l in self.history):
+        f111 = [l for l in self.history if "F111 PRTBLK" in l]
+        if not any("F111OK" in l for l in f111):
             raise SmokeError("BDOSTEST F111 did not print its block")
+        if any("F104" in l for l in f111):
+            raise SmokeError("BDOSTEST F111 label ran into F104:\n"
+                             + "\n".join(f111))
         if not any("F104 SETDATE" in l for l in self.history):
             raise SmokeError("BDOSTEST did not reach F104")
         for marker in ("F37 RESETDRV : PASS", "F98 CLEANUP  : PASS",

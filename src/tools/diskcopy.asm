@@ -309,6 +309,20 @@ start:
     jr .pass_loop
 
 .copied:
+    ; The progress line is drawn before each operation, so its last update
+    ; was the final verify with ops_done = 2*total-1, which rounds down to
+    ; 99%.  Redraw it once with the completed count before the Done message.
+    ld a, (total_tracks)
+    dec a
+    ld (t_track), a
+    ld a, (total_tracks)
+    ld l, a
+    ld h, 0
+    add hl, hl                  ; ops_done = 2 * total tracks
+    ld (ops_done), hl
+    ld de, st_verify
+    ld (status_ptr), de
+    call progress
     call crlf
     ld de, msg_done
     call pstr

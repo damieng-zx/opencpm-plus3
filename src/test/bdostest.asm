@@ -2152,7 +2152,7 @@ lbl_f33:    DB "F33 RDRAND   : $"
 lbl_f34:    DB "F34 WRRAND   : $"
 lbl_f35:    DB "F35 FILSIZ   : $"
 lbl_f59:    DB "F59 LOADOVL  : $"
-lbl_f111:   DB "F111 PRTBLK  : ["
+lbl_f111:   DB "F111 PRTBLK  : [$"
 f111_cb:    DW f111_text
             DW 6
 f111_text:  DB "F111OK"

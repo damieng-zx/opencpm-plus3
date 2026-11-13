@@ -2149,6 +2149,13 @@ start:
     ld c, 9
     call BDOS
 
+    ; Stop the motor now: DD_SETUP's "0 = never turn off" edge value is
+    ; deliberately left in memory for the smoke, but tests 31-34 never touch
+    ; the disk, so a user run must not leave the drive spinning.
+    ld hl, DD_OFF_MOTOR
+    ld (userf_dw), hl
+    call userf_trampoline
+
     ; === Test 31: KM_SET_SPEED repeat cadence ===
     ; Fast (delay 1, rate 1) while the harness holds a key must repeat;
     ; slow (delay 250) over the same hold must deliver exactly one character.
@@ -2460,9 +2467,23 @@ t34_print:
     call BDOS
 
     ; === Done ===
+    ; Wait for a key before cleaning up: the smoke runner reads the
+    ; KM_SET_KEY/KM_SET_EXPAND state this test deliberately leaves behind,
+    ; then presses a key; a direct user run gets the same cleanup on the
+    ; keypress that dismisses DONE.
     ld de, msg_done
     ld c, 9
     call BDOS
+
+.done_wait:
+    ld c, 6                     ; direct console input
+    ld e, 0xFF
+    call BDOS
+    or a
+    jr z, .done_wait
+
+    ; Undo the keyboard overrides and motor state this test leaves behind.
+    call xt_cleanup
 
     ; Locomotive's KM_KT_PUT (test 17) types the tokens into the console, so
     ; read them back out before the CCP prompt would show them.
@@ -2474,6 +2495,74 @@ t34_print:
     jr nz, .drain_keys
 
     rst 0
+
+
+; ============================================================
+; xt_cleanup — undo the keyboard overrides and motor state
+;   XTETEST changes live bank-6/bank-4 state that a warm boot does not
+;   reset: the KM_SET_KEY entries from tests 19b/25, the KM_SET_EXPAND
+;   slots from 20/26, and the motor state left by DD_SETUP's "never turn
+;   off" edge value.  Restore them before returning to the CCP so a direct
+;   run leaves normal typing and no spinning drive.
+; ============================================================
+xt_cleanup:
+    ld hl, KM_SET_KEY
+    ld (userf_dw), hl
+
+    ; Key 2 CAPS (test 19b/25).
+    ld bc, 0xFF02
+    ld de, 0x0200
+    call userf_trampoline
+    ; Key 3 SYMB, key 4 EXTEND.
+    ld bc, 0xFF03
+    ld de, 0x0400
+    call userf_trampoline
+    ld bc, 0xFF04
+    ld de, 0x0800
+    call userf_trampoline
+    ; Key 5 CAPS, SYMB and EXTEND.
+    ld bc, 0xFF05
+    ld de, 0x0200
+    call userf_trampoline
+    ld de, 0x0400
+    call userf_trampoline
+    ld de, 0x0800
+    call userf_trampoline
+    ; Key 6 CAPS and boundary key 39 CAPS.
+    ld bc, 0xFF06
+    ld de, 0x0200
+    call userf_trampoline
+    ld bc, 0xFF27
+    ld de, 0x0200
+    call userf_trampoline
+
+    ; Empty the expansion slots tests 20 and 26 filled.
+    ld hl, KM_SET_EXPAND
+    ld (userf_dw), hl
+    ld hl, 0xDD20
+    ld bc, 0x8500
+    call userf_trampoline
+    ld hl, 0xDD20
+    ld bc, 0x9E00
+    call userf_trampoline
+
+    ; Restore the DD_SETUP values test 11 used, then stop the motor.  Test 30
+    ; deliberately left motor-off = 0 ("never") for the smoke to read; if
+    ; that stayed in memory, the first warm-boot disk access would arm a
+    ; zero countdown and the drive would spin forever.
+    ld hl, dd_setup_defaults
+    ld de, 0xD600
+    ld bc, 7
+    ldir
+    ld hl, DD_SETUP
+    ld (userf_dw), hl
+    ld hl, 0xD600
+    call userf_trampoline
+
+    ; Stop the drive motor.
+    ld hl, DD_OFF_MOTOR
+    ld (userf_dw), hl
+    jp userf_trampoline
 
 
 ; ============================================================
@@ -2900,4 +2989,4 @@ msg_flash:  db "FLASH TEXT", 0x0D, 0x0A, '$'
 msg_nz:     db "NZ", 0x0D, 0x0A, '$'
 msg_zf:     db "Z", 0x0D, 0x0A, '$'
 msg_crlf:   db 0x0D, 0x0A, '$'
-msg_done:   db "DONE", 0x0D, 0x0A, '$'
+msg_done:   db "DONE - press a key", 0x0D, 0x0A, '$'
