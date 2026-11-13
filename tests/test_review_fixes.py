@@ -527,6 +527,14 @@ class P2F49Bounds(unittest.TestCase):
         self.assertRegex(body, r"j[pr] nc, \.scb_bad")
         self.assertIn("jp bdos_efail", body)
 
+    def test_f50_intercepts_selmem(self):
+        text = source("src/bdos/bdos.zpa")
+        body = text[text.index("bf_f50:"):text.index("_f50_func:")]
+        self.assertRegex(body, r"cp 27\s+jr z, \.f50_bad")
+        self.assertIn("jp bdos_eok", body[body.index(".f50_bad:"):])
+        tester = source("src/test/disktest.asm")
+        self.assertIn("ld a, 27", tester)
+
     def test_offset_99_is_one_byte_wide(self):
         text = source("src/bdos/bdos.zpa")
         body = text[text.index("bf_f49:"):text.index("scb_read_field:")]

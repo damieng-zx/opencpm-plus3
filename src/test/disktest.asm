@@ -1811,6 +1811,34 @@ test18:
     or l
     jp z, .t18_fail
 
+    ; F50 fn 27 (SELMEM) is intercepted: the Programmer's Guide says it
+    ; returns A = 0, and the memory map is left alone (a program may not
+    ; switch banks behind the BDOS), so the BDOS calls that follow still work
+    ; whatever bank was asked for.  Locomotive's returns A = 1Bh, not 0, so
+    ; the value is only checked here.
+    ld hl, f50_pb
+    ld b, 8
+    xor a
+.t18_clr2:
+    ld (hl), a
+    inc hl
+    djnz .t18_clr2
+    ld a, 27
+    ld (f50_pb), a
+    ld a, 0x0F
+    ld (f50_pb + 1), a         ; A = bank
+    ld de, f50_pb
+    ld c, 50
+    call BDOS
+    ld b, a
+    ld a, (ours)
+    or a
+    jr z, .t18_selmem_ok
+    ld a, b
+    or a
+    jp nz, .t18_fail
+.t18_selmem_ok:
+
     ld de, msg_pass
     ld c, 9
     call BDOS

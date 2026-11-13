@@ -423,7 +423,7 @@ BDOS function 124 (private, used by the CCP only):
 - **PB format**: `[func, A, C, B, E, D, L, H]` (8 bytes)
 - **Out**: A, HL = BIOS return values
 - **Note**: Calls BIOS function number `func` with specified registers.
-- **Note**: F50 follows the public BIOS numbering. Function 30 (`USERF`) is not supported through F50 because `USERF` requires an inline `DW` after `CALL`, which the 8-byte F50 parameter block cannot express.
+- **Note**: F50 follows the public BIOS numbering. Function 27 (`SELMEM`) is answered by the BDOS itself with A=0 and does nothing, as in CP/M 3. Function 30 (`USERF`) is not supported through F50 because `USERF` requires an inline `DW` after `CALL`, which the 8-byte F50 parameter block cannot express.
 
 #### F59 — Load Overlay
 - **In**: DE=FCB of an already-open file; FCB+21h holds the load address.

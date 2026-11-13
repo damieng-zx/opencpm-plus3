@@ -4284,6 +4284,9 @@ bf_f50:
     ;   - fn 30 (USERF) is rejected: the F50 parameter block has only
     ;     registers, but USERF requires an inline DW after CALL.
     ;   - fn 31 is reserved.
+    ;   - fn 27 (SELMEM) is answered here with A=0 and nothing done: a
+    ;     program may not switch the memory map behind the BDOS (CP/M 3's
+    ;     BDOS does the same, so it cannot corrupt the system's banks).
     ;   - fn 32 is SCRMODE via the bank-4 BIOS table.
     ;   - all other callable functions dispatch to the matching bank-4 slot.
     ld a, (_f50_func)
@@ -4293,6 +4296,8 @@ bf_f50:
     jr z, .f50_bad
     cp 31
     jr z, .f50_bad
+    cp 27
+    jr z, .f50_bad             ; SELMEM: intercepted, A = 0
     ld l, a
     ld h, 0
     ld d, h
