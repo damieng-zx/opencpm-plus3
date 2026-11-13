@@ -159,7 +159,7 @@ fn_mltio: jp multi_io              ; 23: Multi-sector count
 fn_flush: jp flush_buf             ; 24: Flush buffers
 fn_mov:   jp bios_move             ; 25: Block move
 fn_tim:   jp bios_time             ; 26: Time/date
-fn_bnksl: jp bank_sel              ; 27: Bank select (in common memory)
+fn_bnksl: jp bank_sel_cpm          ; 27: Bank select (in common memory)
 fn_stbnk: jp set_bnk               ; 28: Set DMA bank
 fn_xmov:  jp bios_xmove            ; 29: Set move banks
         jp 0                     ; 30: reserved
@@ -701,12 +701,29 @@ flush_buf:
     xor a                          ; Success
     ret
 
+; cpm_bank — a CP/M 3 bank number as this BIOS counts them
+;   CP/M 3: 0 = system, 1 = TPA.  Internally (bank_sel, dma_bank, xmove_*)
+;   0 = TPA and non-zero = system.  Any bank but 0 is the TPA here.
+; @proc cpm_bank
+; @param %bank:u8  a
+; @out   a
+; @clobbers af
+; @end
+cpm_bank:
+    or a
+    ld a, 1                        ; CP/M bank 0 (system) -> internal 1
+    ret z
+    xor a                          ; anything else (the TPA) -> internal 0
+    ret
+
+; SETBNK — set the bank for DMA (CP/M 3 numbering, stored internally)
 ; @proc set_bnk
 ; @param %bank:u8  a
-; @clobbers
+; @clobbers af
 ; @end
 set_bnk:
-    ld (dma_bank), %bank
+    call cpm_bank
+    ld (dma_bank), a
     ret
 
 
@@ -735,14 +752,16 @@ bios_move:
     ret
 
 ; @proc bios_xmove
-; @param %dst_bank:u8  b           ; destination bank number
-; @param %src_bank:u8  c           ; source bank number
+; @param %dst_bank:u8  b           ; destination bank number (CP/M 3's)
+; @param %src_bank:u8  c           ; source bank number (CP/M 3's)
 ; @clobbers af
 ; @end
 bios_xmove:
     ld a, %src_bank
+    call cpm_bank                  ; CP/M 3: 0 = system, 1 = TPA
     ld (xmove_src), a
     ld a, %dst_bank
+    call cpm_bank
     ld (xmove_dst), a
     ld a, 1
     ld (xmove_active), a

@@ -96,16 +96,10 @@ start:
     ; MOVE works in the bank selected by XMOVE (fn 29).  Select TPA->TPA
     ; so the source and destination addresses below COMMON_BASE resolve
     ; to our own memory rather than the system bank.
-    ; Our BIOS numbers the TPA 0 and the system bank 1 (its bank_sel); CP/M 3
-    ; makes bank 1 the TPA, which is what Locomotive's BIOS expects.
+    ; CP/M 3 numbers the banks 0 = system, 1 = TPA, here and on Locomotive's.
     ld a, 29
     call compute_bios_entry
     ld bc, 0x0101                 ; B = dest bank 1 (TPA), C = src bank 1
-    ld a, (ours)
-    or a
-    jr z, .xm_bank
-    ld bc, 0x0000                 ; ours: bank 0 is the TPA
-.xm_bank:
     call call_bios_ent
 
     ld hl, src_txt

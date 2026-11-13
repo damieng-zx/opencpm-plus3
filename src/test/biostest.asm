@@ -406,14 +406,35 @@ t_b24:
 t_b29:
     ld de, lbl_29
     call print
-    ld bc, 0x0101              ; the TPA is bank 1 in CP/M 3 ...
-    ld a, (ours)
-    or a
-    jr z, .tpa
-    ld bc, 0                   ; ... and 0 in our BIOS (its bank_sel numbering)
-.tpa:
+    ; CP/M 3 numbers the banks: 0 = system, 1 = TPA.  Move from the system
+    ; bank to the TPA first: the 64 bytes at 0000h there are the system's
+    ; own, not page zero, so they must differ from what the TPA holds.
     ld a, B_XMOVE
     call compute_bios_entry
+    ld bc, 0x0100              ; B = destination 1 (TPA), C = source 0 (system)
+    call call_bios_ent
+    ld a, B_MOVE
+    call compute_bios_entry
+    ld hl, move_big            ; destination, in the TPA
+    ld de, 0                   ; source, in the system bank
+    ld bc, 64
+    call call_bios_ent
+    ld hl, move_big
+    ld de, 0                   ; the TPA's page zero
+    ld b, 64
+.sysdiff:
+    ld a, (de)
+    cp (hl)
+    jr nz, .differs
+    inc hl
+    inc de
+    djnz .sysdiff
+    jp bfail                   ; identical: bank 0 was the TPA
+.differs:
+    ; Now TPA -> TPA, which t_b25's MOVE relies on.
+    ld a, B_XMOVE
+    call compute_bios_entry
+    ld bc, 0x0101
     call call_bios_ent
     jp bpass
 
@@ -459,7 +480,7 @@ t_b28:
     call print
     ld a, B_SETBNK
     call compute_bios_entry
-    xor a                      ; DMA bank 0 (TPA)
+    ld a, 1                    ; DMA bank 1 (the TPA, CP/M 3 numbering)
     call call_bios_ent
     jp bpass
 
@@ -600,6 +621,7 @@ lbl_29:  db "B29 XMOVE   : $"
 move_src:   db "BIOSMOVE"
 move_junk:  db "XXXXXXXX"
 move_dst:   ds 8
+move_big:   ds 64
 
 bios_ent:   dw 0
 disk_buf:   ds 128

@@ -444,10 +444,44 @@ class VerificationStackTestMath(unittest.TestCase):
     def test_move_selects_tpa_banks_with_xmove(self):
         text = source("src/test/systest.asm")
         self.assertIn("ld a, 29", text)
-        # Our BIOS numbers the TPA 0; CP/M 3 (Locomotive's) makes it bank 1, and
-        # the test picks per system.
+        # CP/M 3's numbering (0 = system, 1 = TPA) on every system.
         self.assertIn("ld bc, 0x0101                 ; B = dest bank 1 (TPA)", text)
-        self.assertIn("ld bc, 0x0000                 ; ours: bank 0 is the TPA", text)
+        self.assertNotIn("ours: bank 0 is the TPA", text)
+
+
+class BankNumbering(unittest.TestCase):
+    """CP/M 3 numbers the banks 0 = system, 1 = TPA; the core counts the
+    other way (bank_sel: 0 = TPA), so the program entry points convert."""
+
+    def test_selmem_entry_converts(self):
+        bios = source("src/bios/bios.zpa")
+        common = source("src/bios/common.zpa")
+        self.assertIn("jp bank_sel_cpm", bios)
+        self.assertIn("jp bank_sel_cpm", common)
+        body = common[common.index("bank_sel_cpm:"):common.index("; BDOS directory")]
+        # bank 0 -> the system bank (bank_sel non-zero), else the TPA (0).
+        body = re.sub(r";[^\n]*", "", body)
+        self.assertRegex(body, r"jr z, \.sys\s+xor a\s+jp bank_sel\s+\.sys:\s+ld a, 1\s+jp bank_sel")
+
+    def test_xmove_and_setbnk_convert(self):
+        text = source("src/bios/bios.zpa")
+        cpm = text[text.index("cpm_bank:"):text.index("set_bnk:")]
+        cpm = re.sub(r";[^\n]*", "", cpm)
+        self.assertRegex(cpm, r"or a\s+ld a, 1\s+ret z\s+xor a\s+ret")
+        setb = text[text.index("set_bnk:"):text.index("; Block Move")]
+        self.assertIn("call cpm_bank", setb)
+        xm = text[text.index("bios_xmove:"):text.index("; Time")]
+        self.assertEqual(xm.count("call cpm_bank"), 2)
+
+    def test_internal_callers_keep_the_core_numbering(self):
+        common = source("src/bios/common.zpa")
+        ibm = common[common.index("interbank_move:"):common.index("_ibm_src_bank:")]
+        self.assertRegex(ibm, r"ld a, 1\s+call bank_sel\(a\)")   # back to system
+
+    def test_biostest_moves_from_the_system_bank(self):
+        text = source("src/test/biostest.asm")
+        self.assertIn("ld bc, 0x0100              ; B = destination 1 (TPA)", text)
+        self.assertNotIn("(ours)", text[text.index("t_b29:"):text.index("t_b25:")])
 
 
 class VerificationF46FreeSpace(unittest.TestCase):

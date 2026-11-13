@@ -620,9 +620,9 @@ jump table directly:
 | 24 | FLUSH | — | A=0 | Flush disk buffers (stub). |
 | 25 | MOVE | HL=dst,DE=src,BC=len | — | Block move (LDIR). |
 | 26 | TIME | C=0/0xFF | — | Get/set time (stub). |
-| 27 | BNKSEL | A=bank | — | Select bank (0=TPA, else system). |
-| 28 | SETBNK | A=bank | — | Set DMA bank for next I/O. |
-| 29 | XMOVE | B=dst,C=src | — | Set up cross-bank move. |
+| 27 | SELMEM | A=bank | — | Select bank (CP/M 3's numbers: 0=system, 1=TPA). |
+| 28 | SETBNK | A=bank | — | Set DMA bank for next I/O (0=system, 1=TPA). |
+| 29 | XMOVE | B=dst,C=src | — | Set up cross-bank move for the next MOVE (0=system, 1=TPA). |
 | 30 | USERF | inline DW | varies | XBIOS dispatch (Amstrad extensions).  Implements the TE calls plus the disc calls (`DD_INIT`, `DD_SETUP`, `DD_LOGIN`, `DD_SEL_FORMAT`, `DD_READ_ID`, `DD_READ_SECTOR`, `DD_WRITE`, `DD_CHECK_SECTOR`, `DD_FORMAT`, `DD_L_DPB`, `DD_L_XDPB`, `DD_L_READ`, `DD_L_WRITE`, motor on/off/timeout, `DD_L_SEEK`, `KM_SET_SPEED`, `KM_SET_KEY`, `KM_SET_EXPAND`, `KM_KT_PUT` and `KM_KT_GET`).  See [XBIOS/TE Interface](cpm-plus-xbios.md). |
 | 31 | — | — | — | Reserved (JP 0). |
 | 32 | SCRMODE | A=32, 51 or 64 | — | Set screen column count (clears screen). |

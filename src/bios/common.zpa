@@ -160,7 +160,7 @@ bios_visible:
     jp bv_tramp + 3*(24 - 2)       ; 24: FLUSH
     jp bv_tramp + 3*(25 - 2)       ; 25: MOVE
     jp bv_tramp + 3*(26 - 2)       ; 26: TIME
-    jp bank_sel                    ; 27: BNKSEL (already in common — direct)
+    jp bank_sel_cpm                ; 27: SELMEM (already in common — direct)
     jp bv_tramp + 3*(28 - 2)       ; 28: SETBNK
     jp bv_tramp + 3*(29 - 2)       ; 29: XMOVE
     jp userf_stub                  ; 30: USERF (XBIOS dispatch)
@@ -566,6 +566,11 @@ isr_handler:
 ;
 ; Must live in common memory because switching banks invalidates
 ; the caller's address space.
+;
+; This is the BIOS's own numbering: 0 = TPA (mode 0), non-zero = system
+; (mode 3).  CP/M 3 numbers them the other way round (0 = system, 1 = TPA);
+; the programs' entry points (SELMEM, SETBNK, XMOVE) convert, see
+; bank_sel_cpm and cpm_bank.
 ;
 ; @proc bank_sel
 ; @param %bank:u8  a            ; 0 = TPA (mode 0), non-zero = system (mode 3)
@@ -1247,6 +1252,28 @@ ccp_run_prog:
     jp 0x0100
 
     assert ccp_run_prog == 0xFCA4, "miniccp.zpa CCP_RUN_PROG must match ccp_run_prog"
+
+; ==========================================================================
+; bank_sel_cpm — BIOS function 27 (SELMEM) with CP/M 3's bank numbers
+;
+; CP/M 3 calls the system bank 0 and the TPA bank 1; bank_sel counts the
+; other way, so a program's A is converted here.  Any bank but 0 selects the
+; TPA, as the one non-system bank this machine has.  Placed after the pinned
+; common-stub addresses, like the routines below.
+;
+; @proc bank_sel_cpm
+; @param %bank:u8  a            ; CP/M 3: 0 = system, otherwise the TPA
+; @clobbers af,bc
+; @end
+bank_sel_cpm:
+    or %bank
+    jr z, .sys
+    xor a                          ; the TPA is bank_sel's 0
+    jp bank_sel
+.sys:
+    ld a, 1                        ; the system bank is bank_sel's non-zero
+    jp bank_sel
+
 
 ; ==========================================================================
 ; BDOS directory and FCB helpers (relocated from bank 4)
