@@ -69,8 +69,10 @@ class RecordMapping(unittest.TestCase):
 
     def test_the_old_inline_conversion_is_gone(self):
         # The block->record->track/sector/DMA sequence used to be written out
-        # in each path; only abs_to_bios should carry the division now.
+        # in each path; only abs_to_bios should carry the division now.  The
+        # directory helpers at the end (dir_sector_to_bios) are separate.
         text = source("src/bdos/bdos.zpa")
+        text = text[:text.index("; BDOS directory and FCB helpers")]
         self.assertEqual(text.count("call div_hl_bc"), 1)
 
 

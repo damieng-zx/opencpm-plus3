@@ -128,10 +128,10 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 14,266 | 16,384 (`C000-FFFF`) | 2,118 |
-| common stub             | 2,535  | 2,560 (`F600-FFFF`)  | 25    |
-| bank-5 screen code      | 2,628  | 7,488 (`62C0-7FFF`)  | 4,860 |
-| `CPM3C.SYS` (both)      | 5,163  | 7,168 (staging)      | 2,005 |
+| `CPM3.SYS` head         | 14,953 | 16,384 (`C000-FFFF`) | 1,431 |
+| common stub             | 1,929  | 2,560 (`F600-FFFF`)  | 631   |
+| bank-5 screen code      | 2,602  | 7,488 (`62C0-7FFF`)  | 4,886 |
+| `CPM3C.SYS` (both)      | 4,531  | 7,168 (staging)      | 2,637 |
 | loader (180K)           | 1,399  | 8,704 (17 sectors)   | 7,305 |
 | loader (720K, `-DDS720`)| 1,410  | 8,704 (17 sectors)   | 7,294 |
 
@@ -168,8 +168,14 @@ head from 47 bytes of slack to 650.  The move is safe because those
 routines only ever run in system mode (the BDOS dispatch switches banks
 before calling any handler), and appending them after the fixed layout
 keeps `copy_record_to_tpa/from_tpa`, `ccp_fcb` and `ccp_run_prog` at the
-addresses RAMDISK.FID and the CCP hardcode.  `tests/test_boot_split.py`
-pins both facts.
+addresses RAMDISK.FID and the CCP hardcode.
+
+Once the `CPM3.SYS`/`CPM3C.SYS` split gave bank 4 about 2K of slack while
+the common stub was down to 23 bytes, the block went **back to bank 4**, at
+the end of `src/bdos/bdos.zpa` (November 2026, before 0.9).  Common memory
+is the scarce one: it is the only place for code that must run while the
+banks change, so its slack is kept for that.  `tests/test_boot_split.py`
+checks the block is below `4000h`.
 
 A size pass in November 2026 took the head from 16,151 bytes (233 spare)
 to 15,561 and the common stub from 2,556 (4 spare) to 2,528 without

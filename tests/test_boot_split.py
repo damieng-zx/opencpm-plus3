@@ -82,19 +82,19 @@ class BootSplit(unittest.TestCase):
 
 
 class Headroom(unittest.TestCase):
-    """The BDOS directory/FCB block lives in the common stub for headroom."""
+    """The BDOS directory/FCB block lives in bank 4, leaving the common stub room."""
 
     RELOCATED = ("find_free_block", "read_dir_entry", "write_dir_entry",
                  "dir_sector_to_bios", "search_next_entry", "match_fcb",
                  "bf_f15", "bf_f16", "bf_f17", "bf_f18", "close_dir_update")
 
-    def test_relocated_helpers_are_in_common_memory(self):
+    def test_directory_helpers_are_in_bank4(self):
         table = labels()
         if not table:
             self.skipTest("build/bios.lst not present; run build.cmd first")
         for name in self.RELOCATED:
             self.assertIn(name, table)
-            self.assertGreaterEqual(table[name].addr, 0xF600, name)
+            self.assertLess(table[name].addr, 0x4000, name)
 
     def test_head_keeps_a_working_margin(self):
         table = labels()

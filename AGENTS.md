@@ -258,11 +258,11 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   42-track layouts work)
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
 - `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/font64.ch8` (all 256 glyphs) by `tools/mkfont64.py`, which writes each row into both nibbles (`0xA0` -> `0xAA`) so the renderer merges a glyph into either half of a screen byte with one mask and no shift
-- `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O).  The directory/FCB
-  helpers (`find_free_block`, `read_dir_entry`, `write_dir_entry`,
-  `dir_sector_to_bios`, `search_next_entry`, `match_fcb`, `bf_f15`-`bf_f18`,
-  `close_dir_update`) live at the end of `common.asm` instead, in common
-  memory, to leave room in the 16K bank-4 image; see `docs/boot.md`
+- `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O), including the
+  directory/FCB helpers at its end (`find_free_block`, `read_dir_entry`,
+  `write_dir_entry`, `dir_sector_to_bios`, `search_next_entry`, `match_fcb`,
+  `bf_f15`-`bf_f18`, `close_dir_update`); they spent a while in common memory
+  and came back to bank 4 to leave the common stub room; see `docs/boot.md`
 - `src/ccp/miniccp.zpa` — CCP with the CP/M 3 built-ins DIR, DIRSYS, ERASE, RENAME, TYPE and USER (and their short forms DIRS, ERA, REN, TYP, USE) plus HELP, `cmd1!cmd2` chaining (the rest of the line is kept by private BDOS F125) and `.COM` loading; built as `CCP.COM`.  Its work buffers are `equ` addresses above the image, so they do not count against the 4K staging window.  On a cold start it submits `PROFILE.SUB` from the default drive — the SCB byte at `0x0A` (`scb_coldboot`) marks a cold boot and the CCP clears it, so a warm boot does not run the profile again.  Lines of a submit file that begin with `<` are queued for the running program (BDOS F124, a private CCP helper) and served by `con_in`/`con_status` as console input
 - `src/tools/dir.asm` — `DIR.COM`, the option form of DIR that the CCP's
   built-in hands over (`FULL`, `SIZE`, `ATT`, `DIR`/`SYS`/`RO`/`RW`,

@@ -458,7 +458,7 @@ class BankNumbering(unittest.TestCase):
         common = source("src/bios/common.zpa")
         self.assertIn("jp bank_sel_cpm", bios)
         self.assertIn("jp bank_sel_cpm", common)
-        body = common[common.index("bank_sel_cpm:"):common.index("; BDOS directory")]
+        body = common[common.index("bank_sel_cpm:"):common.index("; Screen helpers relocated")]
         # bank 0 -> the system bank (bank_sel non-zero), else the TPA (0).
         body = re.sub(r";[^\n]*", "", body)
         self.assertRegex(body, r"jr z, \.sys\s+xor a\s+jp bank_sel\s+\.sys:\s+ld a, 1\s+jp bank_sel")
