@@ -990,6 +990,17 @@ parse_cmd:
     ; First, extract just the command name (up to space or null)
     call parse_filename        ; Fills type_fcb from (HL)
     jp c, .com_unknown         ; Parse error
+    ; A wildcard is not a command name: Open would take the first match.
+    push hl
+    ld hl, type_fcb + 1
+    ld b, 11
+    ld a, '?'
+.com_wild:
+    cp (hl)
+    jp z, .com_wild_bad
+    inc hl
+    djnz .com_wild
+    pop hl
 
     ; --- Build the working search-path list ---
     ; Explicit drive in the command (e.g. "B:FOO") uses just that drive.
@@ -1366,6 +1377,8 @@ parse_cmd:
 
     ; (Loading and execution handled by stub at 0x0008)
 
+.com_wild_bad:
+    pop hl
 .com_unknown:
     ; Repeat the command word followed by a question mark, as CP/M 3 does.
     ld hl, (ccp_cmdp)

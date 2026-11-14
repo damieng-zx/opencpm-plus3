@@ -293,6 +293,10 @@ BDOS function 124 (private, used by the CCP only):
 - **In**: DE=FCB address
 - **Out**: A=0 (found) or 0xFF (not found)
 - **Note**: Sets CR=0. FCB must have drive and filename filled in.
+- **Note**: Opens the extent named by the FCB's EX byte (normally 0), as
+  CP/M does; a program may open extent *n* of a file directly by setting
+  EX = *n* (Colossal Cave Adventure does).  EX = `'?'` opens the first
+  extent found.
 
 #### F16 — Close File
 - **In**: DE=FCB address
@@ -304,6 +308,9 @@ BDOS function 124 (private, used by the CCP only):
 - **Out**: A=entry index (0-3) or 0xFF (not found)
 - **Note**: Copies matching 128-byte directory sector to DMA.
   Return value 0-3 = offset into DMA (entry = DMA + index*32).
+- **Note**: Only the entry for the FCB's EX matches, so a normal search
+  (EX = 0) reports a multi-extent file once.  EX = `'?'` returns every
+  extent (STAT does this to add up a file's size).
 - **Note**: A `'?'` in the drive byte (FCB+0) asks for *every* directory
   entry on the current drive, whatever its name or user, and behaves like a
   full directory scan. This is how `DIR.COM` and `DIRSYS` build their file
@@ -318,6 +325,7 @@ BDOS function 124 (private, used by the CCP only):
 #### F19 - Delete File
 - **In**: DE=FCB address (supports wildcards)
 - **Out**: A=0 (deleted) or 0xFF (none found)
+- **Note**: Deletes every extent of each matching file, whatever the FCB's EX.
 - **Note**: A file with the R/O attribute (bit 7 of the filetype byte,
   entry offset 9) is never deleted.  With F45's error mode bit set the call
   returns 0xFF; otherwise it prints `Bdos Err: R/O` and warm boots, like
@@ -478,8 +486,9 @@ BDOS function 124 (private, used by the CCP only):
 - **In**: DE=address of 4-byte date/time: `[days_lo, days_hi, hour_BCD, min_BCD]`
 
 #### F105 — Get Date/Time
-- **Out**: DMA gets 5 bytes: `[days_lo, days_hi, hour, min, sec]`
-- **Out**: A=seconds, HL=day counter
+- **In**: DE=address of a 4-byte DAT
+- **Out**: DAT gets `[days_lo, days_hi, hour_BCD, min_BCD]`
+- **Out**: A=seconds (BCD), HL=day counter
 
 #### F107 — Get Serial Number
 - **In**: DE=buffer in the TPA

@@ -824,9 +824,20 @@ xbios_handler:
     ld h, (hl)
     ld l, a
     ld (.xb_jump + 1), hl          ; patch the handler address
+    ld a, (disk_drive)
+    ld (.xb_drive + 1), a          ; the disc calls select their own unit
     pop hl                         ; caller HL back
 .xb_jump:
-    jp 0                           ; patched: jump to the handler
+    call 0                         ; patched: call the handler
+    ; Put back the unit the BDOS selected: it skips SELDSK while its
+    ; cached drive is unchanged, so a DD_* call on unit 1 would otherwise
+    ; send A:'s next file I/O to B:.
+    push af
+.xb_drive:
+    ld a, 0                        ; patched: disk_drive on entry
+    ld (disk_drive), a
+    pop af
+    ret
 .xb_bad:
     pop hl
 .xb_unknown:
@@ -2243,7 +2254,9 @@ xbios_handler:
     or a
     ret
 .ddp_not_ready:
-    xor a
+    ld a, 1
+    or a                          ; NZ and carry clear: the callers stop here
+    ld a, 0                       ; error 0: drive not ready
     ret
 .ddp_seek_error:
     ld a, 2

@@ -2117,10 +2117,12 @@ build_alv:
     pop de
     jr c, .dir_done            ; Past end of directory
 
-    ; Check if entry is active (user != 0xE5)
+    ; Only file entries (user 0-15) own blocks.  Deleted (E5h) entries,
+    ; XFCBs (16-31), the disc label (20h), SFCB date stamps (21h) and
+    ; never-written garbage hold no allocation map.
     ld a, (hl)
-    cp 0xE5
-    jr z, .dir_next
+    cp 16
+    jr nc, .dir_next
 
     ; Mark allocation blocks as used (8 or 16 slots, 8- or 16-bit each).
     push de
@@ -2134,7 +2136,12 @@ build_alv:
     ld a, h
     or l
     jr z, .skip_blk
-    call set_alloc_bit
+    ex de, hl
+    ld hl, (cached_dsm)
+    or a
+    sbc hl, de                 ; carry: block > DSM, a damaged entry
+    ex de, hl
+    call nc, set_alloc_bit     ; never write past the ALV
 .skip_blk:
     ld a, (map_idx)
     inc a
@@ -2368,6 +2375,7 @@ bf_f19:
     jr c, .del_none            ; invalid drive → not found
     call is_fcb_readonly
     jr nz, .del_none           ; read-only → not deleted
+    ld (ix + 12), '?'          ; delete every extent, whatever the FCB's EX
 
     ld de, 0                   ; Directory entry index
     ld b, 0                    ; B = found count
@@ -2393,11 +2401,13 @@ bf_f19:
 
     ; A read-only file (bit 7 of the filetype byte, entry offset 9) may
     ; not be deleted.  CP/M reports "File R/O" here and leaves it alone.
+    push de                    ; DE = entry index: the scan resumes from it
     push hl
     ld de, 9
     add hl, de
     ld a, (hl)
     pop hl
+    pop de
     bit 7, a
     jr nz, .del_ro_err
 
@@ -4754,8 +4764,9 @@ bf_f104:
 
 
 ; F105: Get Date and Time
-;   Out: DMA[0..4] = days_lo, days_hi, hour, min, sec (BCD)
-;        A = BCD sec, HL = scb_date
+;   In:  DE = the caller's 4-byte DAT
+;   Out: DAT[0..3] = days_lo, days_hi, BCD hour, BCD minute
+;        A = BCD sec (CP/M 3 returns the seconds only in A), HL = scb_date
 ;   Clobbers: AF, BC, DE, HL
 ; @proc bf_f105
 ; @param %param:u16 de
@@ -4767,30 +4778,25 @@ bf_f104:
 bf_f105:
     pop de
     pop bc
-    ld de, (bdos_dma)
     ld a, (scb_date)
-    call write_user_byte(a, de) preserving %func ; DMA[0] = days_lo
+    call write_user_byte(a, de) preserving %func ; DAT[0] = days_lo
     inc de
     ld a, (scb_date+1)
-    call write_user_byte(a, de) preserving %func ; DMA[1] = days_hi
+    call write_user_byte(a, de) preserving %func ; DAT[1] = days_hi
     inc de
     ; minutes → BCD hour + BCD minute
     ld hl, (scb_minute)
     call div_hl_60                  ; A = hour, L = minute
     ld b, l                         ; B = minute (bin_to_bcd preserves BC)
     call bin_to_bcd                 ; A = BCD hour
-    call write_user_byte(a, de) preserving %func ; DMA[2] = BCD hour
+    call write_user_byte(a, de) preserving %func ; DAT[2] = BCD hour
     inc de
     ld a, b                         ; A = minute
     call bin_to_bcd                 ; A = BCD minute
-    call write_user_byte(a, de) preserving %func ; DMA[3] = BCD minute
-    inc de
+    call write_user_byte(a, de) preserving %func ; DAT[3] = BCD minute
     ld a, (scb_sec)
     call bin_to_bcd                 ; A = BCD second
-    ld b, a                         ; save BCD sec (write_user_byte may clobber A)
-    call write_user_byte(a, de) preserving %func ; DMA[4] = BCD sec
     ld hl, (scb_date)
-    ld a, b                         ; A = BCD sec (return value)
     jp bdos_ret
 
 
@@ -5871,6 +5877,19 @@ match_fcb:
     inc hl
     inc de
     djnz .cmp_loop
+
+    ; EX: '?' matches every extent; otherwise only the entry holding that
+    ; extent, as CP/M does, so Open gets extent 0 wherever it sits in the
+    ; directory and Search First/Next report a multi-extent file once.
+    ; (Each entry is one 16K logical extent on every layout we log in:
+    ; EXM is 0.)
+    ld a, (de)
+    cp '?'
+    jr z, .ex_ok
+    xor (hl)
+    and 0x1F
+    jr nz, .no_match_pop
+.ex_ok:
 
     ; Match!
     pop de

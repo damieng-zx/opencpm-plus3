@@ -174,6 +174,8 @@ list_files:
     ld (total_recs), hl
     ld (file_count), hl
 
+    ld a, '?'
+    ld (FCB1 + 12), a          ; every extent: the sizes add them up
     ld de, FCB1
     ld c, F_SEARCH_FIRST
     call BDOS

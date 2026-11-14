@@ -886,7 +886,7 @@
           "text": "123",
           "frames": 2500,
           "expect": [
-            "You are following a wide path around the outer edge"
+            "Would you like instructions"
           ]
         },
         {

@@ -1887,11 +1887,11 @@ tst_f104:
     inc hl
     djnz .f104_zero
 
-    ld de, dat_out
-    ld c, 26               ; F26 Set DMA
+    ld de, 0x0080
+    ld c, 26               ; F26 Set DMA away from the DAT: F105 must use DE
     call BDOS
 
-    ld de, dat_out         ; F105 takes the buffer in DE; F26 need not keep it
+    ld de, dat_out         ; F105 takes the buffer in DE
     ld c, 105              ; F105 Get Date/Time
     call BDOS
 
