@@ -71,6 +71,7 @@ the SGR parameter walk, the 38/48 cutoff, the ANSI-to-GRB colour table and
 the reverse-video swap around `_set_attr`.
 
 The screen colour/maths helpers (`_decode_colour`, `_decode_te_colour`,
-`_set_attr`, `_mul80`, `_lg_width`, `_cancel_paging`) live in the common
-stub, which keeps the bank-4 head above its 256-byte growth margin as the
-CSI code grows.
+`_set_attr`, `_mul80`, `_lg_width`, `_cancel_paging`) live at the end of
+`src/bios/screen.zpa` in bank 4.  They spent a while in the common stub when
+bank 4 was short of space and moved back once common memory became the
+tighter of the two.

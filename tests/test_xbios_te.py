@@ -130,7 +130,7 @@ class TeSetInk(unittest.TestCase):
         self.assertIn("out (PORT_ULA), a", body)  # ink 0 updates border
 
     def test_flash_only_when_both_inks_flash(self):
-        text = source("src/bios/common.zpa")
+        text = source("src/bios/screen.zpa")
         body = text[text.index("_set_attr:"):text.index("_mul80:")]
         self.assertIn("ld a, (scr_ink_fl)", body)
         self.assertIn("ld a, (scr_paper_fl)", body)
@@ -138,7 +138,7 @@ class TeSetInk(unittest.TestCase):
         self.assertIn("ld (scr_flash), a", body)
 
     def test_palette_decode_treats_1_and_2_as_on(self):
-        text = source("src/bios/common.zpa")
+        text = source("src/bios/screen.zpa")
         body = text[text.index("_decode_te_colour:"):
                     text.index("_set_attr:")]
         self.assertIn("and 0x03", body)

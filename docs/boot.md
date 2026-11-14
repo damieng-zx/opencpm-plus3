@@ -128,10 +128,10 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 14,953 | 16,384 (`C000-FFFF`) | 1,431 |
-| common stub             | 1,929  | 2,560 (`F600-FFFF`)  | 631   |
+| `CPM3.SYS` head         | 15,097 | 16,384 (`C000-FFFF`) | 1,287 |
+| common stub             | 1,785  | 2,560 (`F600-FFFF`)  | 775   |
 | bank-5 screen code      | 2,602  | 7,488 (`62C0-7FFF`)  | 4,886 |
-| `CPM3C.SYS` (both)      | 4,531  | 7,168 (staging)      | 2,637 |
+| `CPM3C.SYS` (both)      | 4,387  | 7,168 (staging)      | 2,781 |
 | loader (180K)           | 1,399  | 8,704 (17 sectors)   | 7,305 |
 | loader (720K, `-DDS720`)| 1,410  | 8,704 (17 sectors)   | 7,294 |
 
@@ -175,7 +175,10 @@ the common stub was down to 23 bytes, the block went **back to bank 4**, at
 the end of `src/bdos/bdos.zpa` (November 2026, before 0.9).  Common memory
 is the scarce one: it is the only place for code that must run while the
 banks change, so its slack is kept for that.  `tests/test_boot_split.py`
-checks the block is below `4000h`.
+checks the block is below `4000h`.  The screen colour/maths helpers
+(`_decode_colour` to `_cancel_paging`) followed them back to the end of
+`src/bios/screen.zpa`; bank 4 is mapped in screen mode too, so the bank-5
+callers of `_mul80` still reach it.
 
 A size pass in November 2026 took the head from 16,151 bytes (233 spare)
 to 15,561 and the common stub from 2,556 (4 spare) to 2,528 without
