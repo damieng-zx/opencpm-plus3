@@ -141,8 +141,10 @@ f46_mask:   equ 0xA6C1         ; bit mask within the current byte
 f46_byte:   equ 0xA6C2         ; current ALV byte
 
 ; --- F40 zero-fill scratch ---
-f40_zfill:  equ 0xA6C3         ; 1 = the next allocation must be zeroed
-f40_pending: equ 0xA6C4        ; request consumed by bf_f21_core
+f40_zfill:  equ 0xA6C3         ; request flags for the next bf_f21_core:
+f40_pending: equ 0xA6C4        ; the request bf_f21_core is carrying out
+WR_ZFILL    equ 0x01           ; zero a newly allocated block (F40)
+WR_RANDOM   equ 0x02           ; random write: CR is not advanced (F34/F40)
 f40_block:  equ 0xA6C5         ; block being filled
 f40_left:   equ 0xA6C7         ; records still to write
 f40_rec:    equ 0xA6C8         ; next absolute record in that block
@@ -1075,6 +1077,11 @@ bf_f10:
     jp .loop
 
 .ctlc:
+    ; ^C reboots only on an empty line, as in CP/M 3; mid-line it is
+    ; ignored, so a stray ^C does not throw away a half-typed command.
+    ld a, (f10_len)
+    or a
+    jp nz, .loop
     ld a, '^'
     call f10_putc
     ld a, 'C'
@@ -1371,13 +1378,29 @@ bf_f14:
     ; the user and matches +3DOS's behaviour (CP/M Plus also treats
     ; SELDSK at the BIOS as a deferred first-login hint). The next file
     ; op (fn 15, 17, 19, etc.) will call select_drive and pick up the
-    ; DPH/DPB/ALV for the new drive then.
+    ; DPH/DPB/ALV for the new drive then.  A drive with no DPH at all is
+    ; refused here (A = 0FFh, H = 4: invalid drive), leaving cur_disk.
     pop de
     pop bc
     ld a, e
+    cp 16
+    jr nc, .f14_bad
+    ld l, a
+    ld h, 0
+    add hl, hl
+    ld bc, drive_table
+    add hl, bc
+    ld a, (hl)
+    inc hl
+    or (hl)
+    jr z, .f14_bad             ; no DPH: no such drive
+    ld a, e
     ld (cur_disk), a
-    ld hl, 0                   ; Return 0 = OK. Drive validity is checked
-    ld a, l                    ; on the first file op, not here.
+    jp bdos_eok
+.f14_bad:
+    ld a, 0xFF
+    ld l, a
+    ld h, 4                    ; invalid drive
     jp bdos_ret
 
 ; F24: Return login vector
@@ -1691,22 +1714,28 @@ bf_f37:
     ; These drives are about to be logged out; force a fresh format probe
     ; when they are logged in again.
     call logout_floppies
-    ; Clear login bits for specified drives
-    ld hl, (login_vec)
-    ld a, e
-    cpl
-    and l
-    ld l, a
-    ld a, d
-    cpl
-    and h
-    ld h, a
-    ld (login_vec), hl
+    ; Clear the login and read-only bits for the specified drives
+    ld hl, login_vec
+    call .f37_clear
+    ld hl, ro_vec
+    call .f37_clear
     ; Invalidate cached_drive so select_drive won't short-circuit on
     ; a drive whose login bits we just cleared (mirrors F13 logic).
     ld a, 0xFF
     ld (cached_drive), a
     jp bdos_ret
+
+.f37_clear:                    ; (HL) &= ~DE, a 16-bit drive vector
+    ld a, e
+    cpl
+    and (hl)
+    ld (hl), a
+    inc hl
+    ld a, d
+    cpl
+    and (hl)
+    ld (hl), a
+    ret
 
 
 ; ==========================================================================
@@ -2372,16 +2401,19 @@ bf_f19:
     pop bc
     ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
     call setup_select_fcb(de)
-    jr c, .del_none            ; invalid drive → not found
+    jp c, .del_none            ; invalid drive → not found
     call is_fcb_readonly
-    jr nz, .del_none           ; read-only → not deleted
+    jp nz, .del_none           ; read-only → not deleted
     ld (ix + 12), '?'          ; delete every extent, whatever the FCB's EX
 
+    ; Two passes: the first only checks that no matching file is R/O, so
+    ; a wildcard delete stops before it has erased anything rather than
+    ; part-way through; the second deletes.
     ld de, 0                   ; Directory entry index
-    ld b, 0                    ; B = found count
+    ld bc, 0                   ; B = found count, C = 0: the checking pass
 .del_scan:
     push de
-    push bc                    ; lint: ignore — only B matters, C is don't-care
+    push bc                    ; B = found count, C = pass
     call read_dir_entry        ; HL = entry, carry = past end
     pop bc
     pop de
@@ -2410,6 +2442,9 @@ bf_f19:
     pop de
     bit 7, a
     jr nz, .del_ro_err
+    ld a, c
+    or a
+    jr z, .del_counted         ; checking pass
 
     ; Match — free all blocks and mark entry as deleted
     push de
@@ -2439,6 +2474,7 @@ bf_f19:
     call write_dir_entry
     pop bc
     pop de
+.del_counted:
     inc b                      ; B = found count++
 
 .del_next:
@@ -2449,6 +2485,13 @@ bf_f19:
     ld a, b
     or a
     jr z, .del_none
+    dec c
+    jr z, .del_ok              ; the deleting pass has finished
+    ld bc, 1                   ; B = 0, C = 1: delete
+    ld d, b
+    ld e, b
+    jr .del_scan
+.del_ok:
     xor a
     ld l, a
     ld h, 0
@@ -2500,7 +2543,7 @@ f20_body:
     ; this operation (and unaffected by what some earlier BDOS call left
     ; cached for a different drive).
     call setup_select_fcb(de)
-    jp c, .read_drv_err
+    jr c, .read_drv_err
 
     ; Get current position from FCB
     ; CR (byte 32) = current record within extent (0-127)
@@ -2539,7 +2582,7 @@ f20_body:
     call get_fcb_block         ; HL = block number
     ld a, h
     or l
-    jp z, .eof                 ; Block 0 = no more data
+    jr z, .eof                 ; Block 0 = no more data
 
     ; Point the BIOS at this record (track, sector and DMA).  F21 and F33
     ; use the same helper.
@@ -2548,7 +2591,7 @@ f20_body:
     ; Read
     call disk_read
     or a
-    jp nz, .read_err
+    jr nz, .read_err
 
     ; Advance CR
     pop ix                     ; Restore FCB pointer
@@ -2566,87 +2609,11 @@ f20_body:
 ;   If found, copy allocation map to FCB, reset CR, continue reading.
 ; ------------------------------------------------------------------
 .next_extent:
-    ; Increment extent number, reset CR
-    ld a, (ix + 12)            ; EX
-    inc a
-    ld (ix + 12), a
-    ld (ix + 32), 0
-
-    ; Search directory for an entry with same user, name, and matching EX.
-    ; IX still holds fcb_buf across the whole search (it is preserved on
-    ; the stack by the push ix at .do_read's entry, which we reuse).
-    ld hl, 0
-    ld (search_pos), hl
-
-.next_ext_search:
-    ld de, (search_pos)
-    call read_dir_entry        ; HL = entry, carry = past end
-    jr c, .eof
-
-    ; Filter: user byte 0xE5 (deleted) or != cur_user
-    ld a, (hl)
-    cp 0xE5
-    jr z, .next_ext_skip
-    ld b, a
-    ld a, (cur_user)
-    cp b
-    jr nz, .next_ext_skip
-
-    ; Compare name+ext bytes (entry[1..11] vs fcb[1..11])
-    push hl                    ; save entry_ptr
-    inc hl                     ; HL = &entry[1]
-    push ix
-    pop de
-    inc de                     ; DE = &fcb[1]
-    ld b, 11
-.next_ext_cmp:
-    ld a, (de)
-    and 0x7F                   ; mask FCB attribute bit too
-    ld c, a
-    ld a, (hl)
-    and 0x7F                   ; strip attribute bit
-    cp c
-    jr nz, .next_ext_name_fail
-    inc hl
-    inc de
-    djnz .next_ext_cmp
-
-    ; HL now points at entry[12] (EX). Compare to our EX.
-    ld a, (hl)
-    ld b, a
-    ld a, (ix + 12)
-    cp b
-    jr nz, .next_ext_name_fail
-
-    ; Match. HL = &entry[12]. Advance to entry[15] (RC), copy to fcb.RC,
-    ; then copy entry[16..31] (allocation map) to fcb[16..31].
-    ld de, 3
-    add hl, de                 ; HL = &entry[15]
-    ld a, (hl)
-    ld (ix + 15), a            ; FCB.RC = entry.RC
-    inc hl                     ; HL = &entry[16]
-
-    push ix
-    pop de
-    ld a, e
-    add a, 16
-    ld e, a
-    jr nc, .next_ext_nc
-    inc d
-.next_ext_nc:                  ; DE = &fcb[16]
-    ld bc, 16
-    ldir                       ; Copy allocation map
-
-    pop hl                     ; discard saved entry_ptr
-    jp .do_read
-
-.next_ext_name_fail:
-    pop hl                     ; discard saved entry_ptr
-.next_ext_skip:
-    ld de, (search_pos)
-    inc de
-    ld (search_pos), de
-    jr .next_ext_search
+    ; Step to the next extent (EX, then S2) and load its RC and allocation
+    ; map.  IX still holds fcb_buf (pushed at f20_body's entry).
+    call next_extent
+    call find_fcb_extent
+    jr z, .do_read
 
 .eof:
     pop ix
@@ -2729,7 +2696,7 @@ bf_f21_core:
     ; If CR == 128 this extent is full — create a new extent first
     ld a, (ix + 32)            ; CR
     cp 128
-    jr z, .wseq_new_extent
+    jp z, .wseq_new_extent
 
 .wseq_do:
     ; Compute block_index = CR >> BSH
@@ -2771,7 +2738,13 @@ bf_f21_core:
     jr nc, .wseq_no_rc         ; RC >= CR+1 already
     ld (ix + 15), b            ; RC = CR + 1
 .wseq_no_rc:
+    ; A random write leaves CR on the record it wrote, so a sequential
+    ; call after it starts there, as CP/M specifies.
+    ld a, (f40_pending)
+    and WR_RANDOM
+    jr nz, .wseq_no_adv
     inc (ix + 32)              ; CR++
+.wseq_no_adv:
     call writeback_fcb()
     call close_dir_update      ; Persist RC/alloc for this extent
     jp bdos_eok_x
@@ -2791,7 +2764,7 @@ bf_f21_core:
     ; F40 zero fill: a newly allocated block is filled with zeros before
     ; the record is written, so unwritten records read back as zeros.
     ld a, (f40_pending)
-    or a
+    and WR_ZFILL
     jr z, .wseq_alloc_nofill
     push hl                    ; zero_fill_block clobbers HL
     call zero_fill_block       ; HL = block
@@ -2830,75 +2803,15 @@ bf_f21_core:
     call writeback_fcb()         ; Save FCB to TPA for close to read
     call wseq_close_cur        ; Close current extent via directory update
 
-    ld de, 0                   ; Scan for a free (E5h) directory entry
-.wseq_ne_find:
-    push de
-    call read_dir_entry        ; HL = entry, carry = past end
-    pop de
-    jr c, .wseq_full
-
-    push de
-    ld a, (hl)
-    cp 0xE5
-    jr nz, .wseq_ne_next
-
-    ; Found a free directory entry — initialise it as new extent
-    push hl
-    ld b, 32
-.wseq_ne_zero:
-    ld (hl), 0
-    inc hl
-    djnz .wseq_ne_zero
-    pop hl                     ; HL = entry base
-
-    ; Set user
-    ld a, (cur_user)
-    ld (hl), a
-
-    ; Copy filename from FCB[1..11] → entry[1..11], masking attribute bits
-    inc hl                     ; HL = &entry[1]
-    push ix
-    pop de
-    inc de                     ; DE = &FCB[1]
-    ex de, hl                  ; HL = &FCB[1], DE = &entry[1]
-    ld b, 11
-.wseq_ne_copy:
-    ld a, (hl)
-    and 0x7F                   ; Strip attribute bit
-    ld (de), a
-    inc hl
-    inc de
-    djnz .wseq_ne_copy        ; After: DE = &entry[12], HL = &FCB[12]
-
-    ; Set new EX = old EX + 1 in both FCB and directory entry
-    ld a, (ix + 12)            ; Current FCB.EX
-    inc a
-    ld (ix + 12), a            ; FCB.EX = EX + 1
-    ld (de), a                 ; entry.EX = EX + 1 (DE = &entry[12])
-    ; Bytes 13-31 already zero: S1=0, S2=0, RC=0, alloc[0..15]=0
-
-    call write_dir_entry
-
-    ; Reset FCB for new extent
-    ld (ix + 32), 0            ; CR = 0
-    ld (ix + 15), 0            ; RC = 0
-    push ix
-    pop hl
-    ld de, 16
-    add hl, de                 ; HL = &FCB[16]
-    ld b, 16
-.wseq_ne_clr:
-    ld (hl), 0
-    inc hl
-    djnz .wseq_ne_clr
-
-    pop de                     ; Balance push de from ne_find loop
-    jp .wseq_do                ; Write the record into the new extent
-
-.wseq_ne_next:
-    pop de
-    inc de
-    jr .wseq_ne_find
+    ; Step to the next extent.  A file being rewritten already has it:
+    ; carry on in its blocks, as CP/M does, rather than adding a second
+    ; entry for the same extent.  Otherwise start a new, empty one.
+    call next_extent
+    call find_fcb_extent       ; Z: RC and allocation map loaded
+    jp z, .wseq_do
+    call create_fcb_extent
+    jp nc, .wseq_do
+    jr .wseq_full
 
 ; ------------------------------------------------------------------
 ; @proc wseq_close_cur
@@ -3003,6 +2916,19 @@ bf_f22:
     call is_fcb_readonly
     jr nz, .mk_full            ; read-only → error
 
+    ; CP/M 3 refuses to make a file that already exists (extended error 8
+    ; in H).  F22 zeroes the FCB's EX below, so '?' can stand in for it.
+    ld (ix + 12), '?'
+    push ix
+    pop de
+    call find_name             ; Z = some extent of that name exists
+    jr nz, .mk_new
+    ld a, 0xFF
+    ld l, a
+    ld h, 8                    ; file already exists
+    jp bdos_ret
+.mk_new:
+
     ; Scan directory for a free (E5h) entry
     ld de, 0
 .mk_scan:
@@ -3095,7 +3021,19 @@ bf_f23:
     call is_fcb_readonly
     jr nz, .ren_none           ; read-only → not renamed
 
-    ; Scan directory for entries matching old name (bytes 1-11)
+    ; The new name must not exist yet (extended error 8, as CP/M 3).
+    ; Its EX slot (byte 28) is never copied, so '?' can stand in for it.
+    ld (ix + 28), '?'
+    push ix
+    pop hl
+    ld de, 16
+    add hl, de
+    ex de, hl                  ; DE = FCB + 16: the new name as an FCB
+    call find_name
+    jr z, .ren_exists
+
+    ; Rename every extent of the old name
+    ld (ix + 12), '?'
     ld de, 0
     ld b, 0                    ; B = found count
 .ren_scan:
@@ -3109,38 +3047,11 @@ bf_f23:
     push de
     push bc
     push hl
-    ; Check user + old name (bytes 1-11)
-    ld a, (hl)
-    cp 0xE5
-    jr z, .ren_skip
-    ld a, (cur_user)
-    cp (hl)
-    jr nz, .ren_skip
-    ; Compare name bytes 1-11
-    push hl
-    inc hl
     push ix
     pop de
-    inc de                     ; DE = &FCB[1]
-    ld c, 11
-.ren_cmp:
-    ld a, (de)
-    cp '?'
-    jr z, .ren_cmp_ok
-    ld a, (hl)
-    and 0x7F
-    push bc
-    ld b, a
-    ld a, (de)
-    cp b
-    pop bc
-    jr nz, .ren_cmp_fail
-.ren_cmp_ok:
-    inc hl
-    inc de
-    dec c
-    jr nz, .ren_cmp
-    pop hl                     ; HL = entry base
+    call match_fcb             ; Z = an extent of the old name
+    pop hl
+    jr nz, .ren_skip
 
     ; A read-only file may not be renamed (filetype bit 7, entry offset 9).
     push hl
@@ -3151,35 +3062,48 @@ bf_f23:
     bit 7, a
     jr nz, .ren_ro_err
 
-    ; Match — copy new name (FCB bytes 17-27) to entry bytes 1-11
+    ; Match — the new name (FCB bytes 17-27) replaces entry bytes 1-11;
+    ; the entry keeps its own attribute bits.
     push hl                    ; save entry base
     inc hl                     ; HL = &entry[1]
-    push hl                    ; save &entry[1] for DE (LDIR destination)
     push ix
-    pop hl
-    ld bc, 17
-    add hl, bc                 ; HL = &FCB[17] (LDIR source)
-    pop de                     ; DE = &entry[1]
-    ld bc, 11
-    ldir
+    pop de
+    ld a, e
+    add a, 17
+    ld e, a
+    jr nc, .ren_nc
+    inc d                      ; DE = &FCB[17]
+.ren_nc:
+    ld b, 11
+.ren_copy:
+    ld a, (de)
+    xor (hl)
+    and 0x7F
+    xor (hl)                   ; new name bits 0-6, entry attribute bit 7
+    ld (hl), a
+    inc hl
+    inc de
+    djnz .ren_copy
     pop hl                     ; HL = entry base
     call write_dir_entry
 
-    pop hl                     ; balance push hl from .ren_scan
     pop bc
     pop de
     inc b
     inc de
     jr .ren_scan
 
-.ren_cmp_fail:
-    pop hl                     ; balance push hl from cmp setup
 .ren_skip:
-    pop hl
     pop bc
     pop de
     inc de
     jr .ren_scan
+
+.ren_exists:
+    ld a, 0xFF
+    ld l, a
+    ld h, 8                    ; file already exists
+    jp bdos_ret
 
 .ren_done:
     ld a, b
@@ -3212,42 +3136,59 @@ bf_f23:
 ; @out   a
 ; @clobbers af,bc
 ; @end
-; rand_to_seq — Convert random record (FCB[33-35]) to EX and CR
+; rand_to_seq — Convert random record (FCB[33-35]) to S2, EX and CR
 ;   In:  IX = FCB
 ;   Out: A = 0 (OK), 6 (out of range)
-;        EX set in FCB[12], CR set in FCB[32]
+;        EX set in FCB[12], S2 in FCB[14], CR in FCB[32]
 ;   Clobbers: AF, BC
 ;
-;   Random record R = FCB[33] + FCB[34]*256 (+ FCB[35]*65536, ignored)
-;   For our disk: EXM=0, so:
-;     EX = R / 128
-;     CR = R % 128 (= R & 0x7F)
+;   Random record R = FCB[33] + FCB[34]*256 (R2 must be 0).
+;   Each entry is one 16K extent (EXM=0), so:
+;     CR = R & 7Fh,  EX = (R >> 7) & 1Fh,  S2 = R >> 12
 rand_to_seq:
     ld a, (ix + 35)            ; R2 (high byte)
     or a
     jr nz, .rand_overflow
-    ld a, (ix + 34)            ; R1
-    ld b, a
     ld a, (ix + 33)            ; R0
-    ; R = B:A (16-bit). EX = R / 128 = (B:A) >> 7
-    ; CR = R & 0x7F = A & 0x7F
     ld c, a
     and 0x7F
     ld (ix + 32), a            ; CR = R & 0x7F
-    ; EX = R1*2 + (R0 >> 7)
-    ld a, c                    ; A = R0
-    rlca                       ; rotate left, bit 7 -> bit 0, old bit 7 -> carry
-    and 0x01                   ; A = R0 >> 7 (just the top bit)
-    ld c, a                    ; C = R0 >> 7
+    ld a, c
+    rla                        ; carry = R0 bit 7
     ld a, (ix + 34)            ; R1
-    add a, a                   ; A = R1 * 2
-    or c                       ; A = R1*2 + (R0>>7) = EX
-    ld (ix + 12), a            ; FCB.EX = EX
+    ld b, a
+    rla                        ; A = low byte of R >> 7
+    and 0x1F
+    ld (ix + 12), a            ; EX
+    ld a, b
+    rrca
+    rrca
+    rrca
+    rrca
+    and 0x0F
+    ld (ix + 14), a            ; S2 = R1 >> 4
     xor a                      ; Success
     ret
 
 .rand_overflow:
     ld a, 6                    ; "seek past end" error
+    ret
+
+
+; @proc next_extent
+; @clobbers af
+; @end
+; next_extent — Step IX's FCB to the start of the next logical extent:
+;   EX + 1, carrying into S2 after extent 31, and CR = 0.
+;   Clobbers: AF
+next_extent:
+    ld (ix + 32), 0
+    ld a, (ix + 12)
+    inc a
+    and 0x1F
+    ld (ix + 12), a
+    ret nz
+    inc (ix + 14)
     ret
 
 
@@ -3268,84 +3209,20 @@ bf_f33:
     pop bc
     ; Cache DPB/ALV for the FCB's drive.
     call setup_select_fcb(de)
-    jp c, .rdrand_range
+    jr c, .rdrand_range
 
     ; Convert random record to EX/CR
     call rand_to_seq
     or a
-    jp nz, .rdrand_err
+    jr nz, .rdrand_err
 
-    ; Find the correct extent in the directory for the target EX.
-    ld hl, 0
-    ld (search_pos), hl
-
-.rdrand_search:
-    ld de, (search_pos)
-    push de
-    call read_dir_entry
-    pop de
-    jp c, .rdrand_unwritten
-
-    push de
-    push hl
-    ld a, (hl)
-    cp 0xE5
-    jp z, .rdrand_skip
-    ld a, (cur_user)
-    cp (hl)
-    jp nz, .rdrand_skip
-
-    ; Compare name bytes 1-11
-    push hl
-    inc hl
-    push ix
-    pop de
-    inc de
-    ld b, 11
-.rdrand_cmp:
-    ld a, (hl)
-    and 0x7F
-    ld c, a
-    ld a, (de)
-    and 0x7F                   ; mask FCB attribute bit too
-    cp c
-    jr nz, .rdrand_cmp_fail
-    inc hl
-    inc de
-    djnz .rdrand_cmp
-    pop hl                     ; HL = entry base
-
-    ; Name matches — check EX
-    push hl
-    ld de, 12
-    add hl, de
-    ld a, (hl)                 ; entry EX
-    pop hl
-    ld b, a
-    ld a, (ix + 12)            ; target EX
-    cp b
-    jr nz, .rdrand_skip
-
-    ; Found! Copy RC + allocation map to FCB
-    push hl
-    ld de, 15
-    add hl, de
-    ld a, (hl)
-    ld (ix + 15), a            ; FCB.RC = entry.RC
-    inc hl                     ; HL = &entry[16]
-    ; Copy 16 bytes from entry[16-31] to FCB[16-31]
-    push hl                    ; save &entry[16] for LDIR source
-    push ix
-    pop hl
-    ld bc, 16
-    add hl, bc                 ; HL = &FCB[16]
-    ex de, hl                  ; DE = &FCB[16] (LDIR destination)
-    pop hl                     ; HL = &entry[16]
-    ld bc, 16
-    ldir
-    pop hl
-    pop de                     ; search_pos
-    pop de                     ; discard outer push
+    ; Load the target extent's RC and allocation map.  No extent: 4.  A
+    ; record at or past its RC was never written: 1.
+    call find_fcb_extent
+    jr nz, .rdrand_unwritten
+    ld a, (ix + 32)            ; CR
+    cp (ix + 15)               ; RC
+    jr nc, .rdrand_past_rc
 
     ; Now do the read: block lookup + BIOS read
     push ix
@@ -3384,19 +3261,11 @@ bf_f33:
 
 .rdrand_unwritten2:
     pop ix
+.rdrand_past_rc:
     ld a, 1
     ld l, a
     ld h, 0
     jp bdos_ret
-
-.rdrand_cmp_fail:
-    pop hl                     ; balance push hl from cmp setup
-.rdrand_skip:
-    pop hl
-    pop de
-    inc de
-    ld (search_pos), de
-    jp .rdrand_search
 
 .rdrand_unwritten:
     ld a, 4
@@ -3423,47 +3292,9 @@ bf_f33:
 ;        NZ = no entry with this user/name/EX
 ;   Clobbers: AF, BC, DE, HL
 find_fcb_extent:
-    ld hl, 0
-    ld (search_pos), hl
-.loop:
-    ld de, (search_pos)
-    push de                    ; save search position across read_dir_entry
-    call read_dir_entry
-    jr c, .not_found_pop
-    push hl                    ; save entry pointer
-    ld a, (hl)
-    cp 0xE5
-    jr z, .skip
-    ld a, (cur_user)
-    cp (hl)
-    jr nz, .skip
-
-    push hl                    ; save entry for the failure path
-    inc hl                     ; HL = &entry[1]
-    push ix
-    pop de
-    inc de                     ; DE = &fcb[1]
-    ld b, 11
-.cmp:
-    ld a, (de)
-    and 0x7F
-    ld c, a
-    ld a, (hl)
-    and 0x7F
-    cp c
-    jr nz, .cmp_fail
-    inc hl
-    inc de
-    djnz .cmp
-    ; HL = &entry[12]; match EX
-    ld a, (hl)
-    ld b, a
-    ld a, (ix + 12)
-    cp b
-    jr nz, .cmp_fail
-
-    ; Found — HL = &entry[12].
-    ld de, 3
+    call find_fcb_entry        ; HL = entry
+    ret nz
+    ld de, 15
     add hl, de                 ; HL = &entry[15] (RC)
     ld a, (hl)
     ld (ix + 15), a
@@ -3478,23 +3309,91 @@ find_fcb_extent:
 .no_carry:
     ld bc, 16
     ldir                       ; entry alloc map -> FCB[16..31]
-    pop hl                     ; discard entry (cmp save)
-    pop hl                     ; discard entry
-    pop de                     ; discard search position
     xor a
     ret
-.cmp_fail:
-    pop hl                     ; discard entry (cmp save)
-.skip:
-    pop hl                     ; discard entry
-    pop de                     ; discard search position
+
+
+; ==========================================================================
+; @proc find_fcb_entry
+; @out   hl
+; @out   zero
+; @clobbers af,bc,de,hl,iy
+; @end
+; find_fcb_entry — Find the directory entry for IX's user, name, EX and S2.
+;   In:  IX = FCB (fcb_buf)
+;   Out: Z = found, HL = the entry in dirbuf; NZ = none
+;   Clobbers: AF, BC, DE, HL
+find_fcb_entry:
+    ld de, 0
+.loop:
+    push de                    ; entry index across the read and the match
+    call read_dir_entry
+    jr c, .none
+    push hl
+    call fcb_user
+    ld c, a
+    push ix
+    pop de
+    call match_fcb_user        ; Z = this entry is the extent
+    pop hl
+    pop de
+    ret z
     inc de
-    ld (search_pos), de
     jr .loop
-.not_found_pop:
-    pop de                     ; discard search position
-.not_found:
-    or 1
+.none:
+    pop de
+    or 1                       ; NZ
+    ret
+
+
+; ==========================================================================
+; @proc fcb_user
+; @out   a
+; @clobbers af
+; @end
+; fcb_user — A = the user whose directory entries hold IX's file: 0 for a
+;   file Open found as a user-0 system file (f8', FCB byte 8 bit 7),
+;   otherwise the current user.
+fcb_user:
+    xor a
+    bit 7, (ix + 8)
+    ret nz
+    ld a, (cur_user)
+    ret
+
+
+; ==========================================================================
+; @proc find_name
+; @param %fcb:u16 de
+; @out   zero
+; @clobbers af,bc,de,hl,iy
+; @end
+; find_name — Is there a directory entry matching the FCB at DE?
+;   In:  DE = FCB in common or bank-4 memory (match_fcb rules: '?' matches
+;        anything, so EX = '?' finds any extent of the name)
+;   Out: Z = found, NZ = none
+;   Clobbers: AF, BC, DE, HL
+find_name:
+    ld bc, 0                   ; BC = entry index
+.loop:
+    push de                    ; FCB (search_fcb belongs to F17/F18)
+    push bc
+    ld d, b
+    ld e, c
+    call read_dir_entry        ; HL = entry
+    pop bc
+    pop de
+    jr c, .none
+    push de
+    push bc
+    call match_fcb             ; Z = match
+    pop bc
+    pop de
+    ret z
+    inc bc
+    jr .loop
+.none:
+    or 1                       ; NZ
     ret
 
 
@@ -3545,12 +3444,16 @@ create_fcb_extent:
     djnz .copy                 ; DE = &entry[12]
     ld a, (ix + 12)
     ld (de), a                 ; entry.EX = FCB.EX
+    inc de
+    inc de
+    ld a, (ix + 14)
+    and 0x3F
+    ld (de), a                 ; entry.S2 = FCB.S2 (extent bits only)
     call write_dir_entry
 
     ; The new extent starts with no records and no allocated blocks.
     xor a
     ld (ix + 13), a            ; S1
-    ld (ix + 14), a            ; S2
     ld (ix + 15), a            ; RC
     push ix
     pop hl
@@ -3582,50 +3485,50 @@ create_fcb_extent:
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f34:
+    ld a, WR_RANDOM
+    ; fall through
+
+; wr_random — F34 and F40.  A = the bf_f21_core request flags.
+; @proc wr_random
+; @param %flags:u8  a
+; @out   a
+; @out   hl
+; @clobbers af,bc,de,hl,ix,iy
+; @end
+wr_random:
     pop de
     pop bc
+    push af                    ; request flags, for bf_f21_core
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
 
     call rand_to_seq
     or a
-    jr nz, .wrrand_err
+    jr nz, .wrrand_ret
 
     ; Look up the target extent; create it when the random record lies
     ; beyond the current end of file.  Without this the write below would
     ; use the current FCB's allocation map and corrupt an earlier extent.
     call select_fcb_drive
-    jr c, .wrrand_range
+    ld a, 6                    ; invalid drive: random record out of range
+    jr c, .wrrand_ret
     call is_fcb_readonly
-    jr nz, .wrrand_ro
+    jr nz, .wrrand_ret
     call find_fcb_extent
     jr z, .wrrand_write
     call create_fcb_extent
-    jr c, .wrrand_full
+    ld a, 5                    ; no directory space for the extent
+    jr c, .wrrand_ret
 
 .wrrand_write:
+    ; Set the request only now, so an error above leaves none behind.
+    pop af
+    ld (f40_zfill), a
     jp bf_f21_core
 
-.wrrand_ro:
+.wrrand_ret:
     ld l, a
     ld h, 0
-    jp bdos_ret
-
-.wrrand_full:
-    ld a, 1                    ; directory full
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-
-.wrrand_range:
-    ld a, 6                    ; random record out of range
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-
-.wrrand_err:
-    ld l, a
-    ld h, 0
-    jp bdos_ret
+    jp bdos_ret                ; rebases SP, dropping the flags
 
 
 ; F35: Compute File Size
@@ -3662,10 +3565,7 @@ bf_f35:
     push de
     push hl
     ; Check user + name match
-    ld a, (hl)
-    cp 0xE5
-    jr z, .fsz_skip
-    ld a, (cur_user)
+    call fcb_user
     cp (hl)
     jr nz, .fsz_skip
 
@@ -3680,6 +3580,7 @@ bf_f35:
     and 0x7F
     ld c, a
     ld a, (de)
+    and 0x7F                   ; Open copies the attribute bits into the FCB
     cp c
     jr nz, .fsz_cmp_fail
     inc hl
@@ -3687,34 +3588,15 @@ bf_f35:
     djnz .fsz_cmp
     pop hl                     ; HL = entry base
 
-    ; Match — compute last record: EX * 128 + RC
-    ; And update max in R0/R1
-    push hl
-    ld de, 12
-    add hl, de
-    ld a, (hl)                 ; EX
-    ld b, a
-    ld de, 3
-    add hl, de                 ; HL = &entry[15]
-    ld c, (hl)                 ; RC
-
-    ; last_record = EX * 128 + RC (16-bit)
-    pop hl
-
-    ; Clean 16-bit calculation
-    ld a, b                    ; A = EX
-    ld h, 0
-    ld l, a
-    ; HL = EX
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl                ; HL = EX * 128
-    ld b, 0
-    add hl, bc                 ; HL = EX * 128 + RC
+    ; Match — this extent ends at its first record + RC
+    ex de, hl                  ; DE = entry
+    call extent_base           ; HL = (S2 * 32 + EX) * 128
+    ex de, hl
+    ld bc, 15
+    add hl, bc
+    ld c, (hl)                 ; BC = RC
+    ex de, hl
+    add hl, bc                 ; HL = last record + 1
 
     ; Compare with current max in FCB[33-34]. Use SBC HL, DE as a
     ; destructive compare, then ADD HL, DE to restore HL. The carry out
@@ -3722,7 +3604,7 @@ bf_f35:
     ; Equal is harmless (falls through and re-stores the same value).
     ld e, (ix + 33)
     ld d, (ix + 34)            ; DE = current max
-    or a
+    ; (carry is clear: base + RC cannot overflow)
     sbc hl, de
     add hl, de                 ; restore HL
     jr c, .fsz_skip            ; HL < DE, keep current max
@@ -3771,21 +3653,13 @@ bf_f36:
     pop bc
     call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
 
-    ; R = EX * 128 + CR
-    ld a, (ix + 12)            ; EX
-    ld l, a
-    ld h, 0
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl
-    add hl, hl                ; HL = EX * 128
-    ld a, (ix + 32)            ; CR
-    ld c, a
+    ; R = (S2 * 32 + EX) * 128 + CR
+    push ix
+    pop de
+    call extent_base           ; HL = first record of the extent
+    ld c, (ix + 32)            ; CR
     ld b, 0
-    add hl, bc                 ; HL = EX * 128 + CR
+    add hl, bc
 
     ld (ix + 33), l            ; R0
     ld (ix + 34), h            ; R1
@@ -3841,42 +3715,8 @@ writeback_fcb_rrr:
 ; @clobbers af,bc,de,hl,ix,iy
 ; @end
 bf_f40:
-    pop de
-    pop bc
-    call setup_fcb(de)         ; IX = fcb_buf, copies 36 bytes from TPA
-    call rand_to_seq
-    or a
-    jr nz, .wrrand0_err
-    call select_fcb_drive
-    jr c, .wrrand0_range
-    call is_fcb_readonly
-    jr nz, .wrrand0_ro
-    call find_fcb_extent
-    jr z, .wrrand0_write
-    call create_fcb_extent
-    jr c, .wrrand0_full
-.wrrand0_write:
-    ld a, 1
-    ld (f40_zfill), a          ; bf_f21_core zero-fills the new block
-    jp bf_f21_core
-.wrrand0_ro:
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-.wrrand0_full:
-    ld a, 5                    ; directory full
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-.wrrand0_range:
-    ld a, 6                    ; random record out of range
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-.wrrand0_err:
-    ld l, a
-    ld h, 0
-    jp bdos_ret
+    ld a, WR_RANDOM | WR_ZFILL
+    jp wr_random
 
 
 ; ==========================================================================
@@ -5121,7 +4961,7 @@ bf_f99:
     jr nz, .p1_next
     ld a, 1
     ld (f99_found), a
-    call f99_base_of            ; HL = extent base in records
+    call extent_base            ; HL = extent base in records
     push de
     push hl
     ld hl, de
@@ -5178,7 +5018,7 @@ bf_f99:
     ld (f99_entry), de
     call f99_match_de
     jp nz, .p2_next
-    call f99_base_of            ; HL = base
+    call extent_base            ; HL = base
     ld de, (f99_target)
     ld a, h
     cp d
@@ -5338,14 +5178,15 @@ f99_match_de:
     ret
 
 
-; @proc f99_base_of
+; @proc extent_base
 ; @param %entry:u16 de
 ; @out   hl
 ; @out   de
 ; @clobbers af,bc
 ; @end
-; f99_base_of — HL = first record of the extent whose directory entry is DE.
-f99_base_of:
+; extent_base — HL = first record of the extent whose directory entry (or
+; FCB: EX and S2 sit at the same offsets) is DE: (S2 * 32 + EX) * 128.
+extent_base:
     push de
     ex de, hl
     ld bc, 12
@@ -5595,10 +5436,12 @@ read_dir_entry:
 
     ; Directory sector = entry / 4 (4 entries per 128-byte sector)
     ; Offset within sector = (entry % 4) * 32
-    ld a, e                    ; Low byte of entry number (max 63 for us)
+    ld a, e
     push af                    ; Save for offset calculation
-    srl a
-    srl a                      ; A = entry / 4 = directory sector number
+    srl d
+    rra
+    srl d
+    rra                        ; A = entry / 4 = directory sector (DRM < 1024)
 
     ; Check if this sector is already cached in dirbuf
     ld b, a                    ; B = sector number
@@ -5671,10 +5514,12 @@ read_dir_entry:
 
 
 ; @proc write_dir_entry
+; @out   a
 ; @clobbers af,bc,de,hl,iy
 ; @end
 ; write_dir_entry — Write back the current directory sector
 ;   Re-seeks to the directory sector saved by read_dir_entry.
+;   Out: A = BIOS WRITE result (0 OK, 1 error, 2 read-only)
 ;   Clobbers: AF, BC, DE, HL
 write_dir_entry:
     ld a, (last_dir_sec)       ; Re-establish correct track/sector
@@ -5826,11 +5671,24 @@ search_next_entry:
 ; @clobbers af,bc,de,hl
 ; @end
 ; match_fcb — Compare directory entry at HL with FCB at DE
-;   Compares user number and filename (bytes 0-12).
+;   Compares the current user, filename, EX and S2.
 ;   '?' in the FCB matches any character.
 ;   Out: Z = match, NZ = no match
 ;   Clobbers: AF, BC, DE, HL
 match_fcb:
+    ld a, (cur_user)
+    ld c, a
+    ; fall through
+
+; @proc match_fcb_user
+; @param %entry:u16 hl
+; @param %fcb:u16   de
+; @param %user:u8   c
+; @out   zero
+; @clobbers af,bc,de,hl
+; @end
+; match_fcb_user — match_fcb for the files of user C (0-15)
+match_fcb_user:
     ; CP/M 3: a '?' in the drive byte of the search FCB matches every
     ; directory entry, including the label and timestamp entries that a
     ; normal filename search skips.  DIR.COM relies on that to read the
@@ -5842,23 +5700,13 @@ match_fcb:
     ; Byte 0 of directory entry = user number.  Valid values 0-15 are
     ; real user areas; 0x10-0x1F are reserved for disc labels / timestamps
     ; in CP/M 3; 0xE5 means "deleted"; anything else is garbage (e.g. a
-    ; never-written entry on a BFORMAT disc).  Only user 0-15 entries
-    ; should be considered for a normal directory match.
+    ; never-written entry on a BFORMAT disc).  None of those equals C.
     ld a, (hl)
-    cp 16
-    jr nc, .no_match           ; 16+ (labels, deleted, garbage) — skip
+    cp c
+    jr nz, .no_match
 
     push hl
     push de
-    ; Check user: if search FCB byte 0 is '?', match any user
-    ld a, (de)                 ; FCB byte 0 (drive code, not user for search)
-    ; For search, byte 0 is drive. User is matched against cur_user.
-    ld a, (cur_user)
-    ld c, a                    ; C = current user
-    ld a, (hl)                 ; Entry user
-    cp c
-    jr nz, .no_match_pop       ; Different user
-
     ; Compare filename bytes 1-11 (8 name + 3 type)
     inc hl
     inc de
@@ -5882,12 +5730,21 @@ match_fcb:
     ; extent, as CP/M does, so Open gets extent 0 wherever it sits in the
     ; directory and Search First/Next report a multi-extent file once.
     ; (Each entry is one 16K logical extent on every layout we log in:
-    ; EXM is 0.)
+    ; EXM is 0.)  A file past 512K carries the extent's high bits in S2,
+    ; so S2 must match too, as in CP/M's own search.
     ld a, (de)
     cp '?'
     jr z, .ex_ok
     xor (hl)
     and 0x1F
+    jr nz, .no_match_pop
+    inc hl
+    inc de
+    inc hl
+    inc de                     ; S2
+    ld a, (de)
+    xor (hl)
+    and 0x3F
     jr nz, .no_match_pop
 .ex_ok:
 
@@ -5920,73 +5777,81 @@ match_fcb:
 bf_f15:
     pop de
     pop bc
-    ; Copy FCB from TPA to fcb_buf
-    call setup_fcb(de)         ; IX = fcb_buf, DE preserved
-    ld de, fcb_buf
-    push de
-
-    ; Select drive from FCB (or cur_disk if FCB[0]=0). Don't touch cur_disk.
+    call setup_fcb(de)         ; IX = fcb_buf
     call select_fcb_drive
-    jr c, .not_found           ; invalid drive → treat as "file not found"
+    jr c, .none                ; invalid drive → "file not found"
+    res 7, (ix + 8)            ; f8': set while looking in user 0
+    ld (ix + 14), 0            ; S2: Open starts at the file's first module,
+                               ; as CP/M's does (programs leave junk there)
 
-    ; Search for the file in the directory
-    pop de                     ; DE = fcb_buf
-    push de
-    ld (search_fcb), de
-    ld hl, 0
-    ld (search_pos), hl
-
+.restart:
+    ld de, 0
 .search:
-    ld de, (search_pos)
     push de
     call read_dir_entry
-    pop de
     jr c, .not_found
-
-    push de
     push hl
-    ld de, (search_fcb)
-    call match_fcb
+    call fcb_user
+    ld c, a
+    push ix
+    pop de
+    call match_fcb_user
     pop hl
     pop de
+    jr nz, .next
+    ; In user 0 only a system file (t2', entry byte 10) will do.
+    bit 7, (ix + 8)
     jr z, .found
-
+    push hl
+    ld bc, 10
+    add hl, bc
+    bit 7, (hl)
+    pop hl
+    jr nz, .found
+.next:
     inc de
-    ld (search_pos), de
     jr .search
 
 .not_found:
     pop de
+    ; CP/M 3: a file that is not in the current user may be a system file
+    ; in user 0.
+    bit 7, (ix + 8)
+    jr nz, .none               ; user 0 searched already
+    ld a, (cur_user)
+    or a
+    jr z, .none
+    set 7, (ix + 8)
+    jr .restart
+
+.none:
     ld a, 0xFF
     ld l, a
     ld h, 0
     jp bdos_ret
 
 .found:
-    ; Copy directory entry to fcb_buf
-    ; HL = directory entry, stack has fcb_buf pointer
-    pop de                     ; DE = fcb_buf
-    push de
-    push hl
-    ; Copy bytes 0-31 from directory to fcb_buf (except byte 0 = drive)
-    inc hl                     ; Skip user byte in directory
-    inc de                     ; Skip drive byte in fcb_buf
-    ld bc, 31
-    ldir                       ; directory → fcb_buf (both common/system — OK)
-    pop hl
+    ; The directory entry, after the user byte, becomes FCB bytes 1-31.
+    ld a, (ix + 8)             ; bit 7: found in user 0
+    push af
+    push ix
     pop de
-
-    ; Set CR = 0 (start of file)
-    push de
-    pop hl
-    ld de, 32
-    add hl, de
-    ld (hl), 0                 ; fcb_buf[32] = 0
-
-    ; Write modified FCB back to TPA
+    inc hl
+    inc de
+    ld bc, 31
+    ldir
+    pop af
+    res 7, (ix + 8)
+    rla
+    jr nc, .own_user
+    ; Its later extents are in user 0 too (f8'), and it is read-only (t1'),
+    ; as CP/M 3 opens a user-0 system file.
+    set 7, (ix + 8)
+    set 7, (ix + 9)
+.own_user:
+    ld (ix + 32), 0            ; CR = 0
     call writeback_fcb()
-
-    ld a, 0                    ; Success
+    xor a
     ld l, a
     ld h, 0
     jp bdos_ret
@@ -6012,114 +5877,79 @@ bf_f16:
     ; directory using cached_*.
     call select_fcb_drive
     jr c, .f16_err
-    call is_fcb_readonly
-    jr nz, .f16_ro
 
     call flush_deblock         ; Flush any pending write data
+    ; A = 0, 2 (read-only drive) or 0xFF (write error).  An FCB whose
+    ; extent is not in the directory closes successfully, as CP/M's does
+    ; for an unmodified FCB: reading to EOF leaves EX one past the file.
     call close_dir_update
+    or a
+    jr nz, .f16_ret
     call writeback_fcb()
     xor a
-    ld l, a
-    ld h, 0
-    jp bdos_ret
-
-.f16_ro:
+.f16_ret:
     ld l, a
     ld h, 0
     jp bdos_ret
 
 .f16_err:
     ld a, 0xFF
-    ld l, a
-    ld h, 0
-    jp bdos_ret
+    jr .f16_ret
 
 ; ------------------------------------------------------------------
 ; @proc close_dir_update
+; @out   a
 ; @clobbers af,bc,de,hl,iy
 ; @end
 ; close_dir_update — Find directory entry matching FCB and update it
-;   In:  IX = fcb_buf (with correct EX, RC, alloc map)
+;   In:  IX = fcb_buf (with correct EX, S2, RC, alloc map)
+;   Out: A = 0 (written, unchanged or no entry), 2 (read-only drive),
+;        0xFF (BIOS write error)
 ;   Clobbers: AF, BC, DE, HL
 ; ------------------------------------------------------------------
 close_dir_update:
-    ld de, 0
-.cl_scan:
-    push de
-    call read_dir_entry        ; HL = ptr to 32-byte entry, carry = past end
-    pop de
-    jr c, .cl_done
-
-    push de
-    push hl
-    ; Check user number
-    ld a, (hl)
-    cp 0xE5
-    jr z, .cl_skip
-    ld a, (cur_user)
-    ld c, a
-    ld a, (hl)
-    cp c
-    jr nz, .cl_skip
-    ; Check filename bytes 1-11 (strip attribute bits from directory)
-    push hl
-    inc hl                     ; HL = &entry[1]
+    call find_fcb_entry        ; HL = the extent's entry
+    jr nz, .cl_ok              ; none: nothing to record (see bf_f16)
+    ld de, 15
+    add hl, de                 ; HL = &entry[15] (RC)
     push ix
     pop de
-    inc de                     ; DE = &FCB[1]
-    ld b, 11
-.cl_name:
-    ld a, (hl)
-    and 0x7F
-    ld c, a
+    ld a, e
+    add a, 15
+    ld e, a
+    jr nc, .cl_nc
+    inc d                      ; DE = &FCB[15]
+.cl_nc:
+    ; Only an extent whose RC or allocation map changed is written back,
+    ; so closing a file that was only read never writes the directory
+    ; (and works on a read-only drive).
+    push hl
+    push de
+    ld b, 17
+.cl_cmp:
     ld a, (de)
-    and 0x7F                   ; Mask FCB attribute bit too
-    cp c
-    jr nz, .cl_name_fail
+    cp (hl)
+    jr nz, .cl_changed
     inc hl
     inc de
-    djnz .cl_name
-    pop hl                     ; HL = entry base (from push before inc hl)
-    ; Check EX (byte 12)
-    ld de, 12
-    add hl, de                 ; HL = &entry[12]
-    ld a, (hl)
-    ld c, a
-    ld a, (ix + 12)
-    cp c
-    jr nz, .cl_skip_from_ex    ; EX mismatch — keep scanning
-    ; Found the right entry — update RC and allocation map in-place
-    ; HL = &entry[12], stack: [de_outer, hl_outer]
-    ld de, 3
-    add hl, de                 ; HL = &entry[15] (RC)
-    ld a, (ix + 15)
-    ld (hl), a                 ; entry.RC = FCB.RC
-    inc hl                     ; HL = &entry[16]
-    ; Copy FCB allocation map → directory entry (straight copy per spec)
-    push ix
-    pop de                     ; DE = FCB base
-    push hl
-    ld bc, 16
-    ex de, hl
-    add hl, bc                 ; HL = &FCB[16]
-    ex de, hl                  ; DE = &FCB[16]
-    pop hl                     ; HL = &entry[16]
-    ex de, hl                  ; HL = &FCB[16], DE = &entry[16]
-    ld bc, 16
-    ldir                       ; FCB alloc → directory entry
-    call write_dir_entry
-    pop de                     ; Discard hl_outer
-    pop de                     ; Discard de_outer
+    djnz .cl_cmp
+    pop de
+    pop hl
+.cl_ok:
+    xor a
     ret
 
-.cl_name_fail:
-    pop hl                     ; Balance push hl before inc hl
-.cl_skip_from_ex:              ; Stack: [de_outer, hl_outer]
-.cl_skip:
-    pop hl                     ; Discard hl_outer
-    pop de                     ; Restore entry index
-    inc de
-    jr .cl_scan
-
-.cl_done:
+.cl_changed:
+    call is_fcb_readonly       ; A = 2 (R/O, if ro_error returns) or 0
+    pop hl                     ; HL = &FCB[15]
+    pop de                     ; DE = &entry[15]
+    ret nz
+    ld bc, 17
+    ldir                       ; FCB RC + allocation map -> directory entry
+    call write_dir_entry       ; A = BIOS WRITE result
+    or a
+    ret z
+    cp 2
+    ret z                      ; 2 = read-only disc
+    ld a, 0xFF
     ret

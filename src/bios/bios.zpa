@@ -746,16 +746,19 @@ set_bnk:
 ; @clobbers af,bc
 ; @end
 bios_move:
+    ; CP/M's convention is HL=dst, DE=src, BC=count, and HL/DE must be
+    ; advanced on return.  Only programs call MOVE (the BDOS never does),
+    ; so a move without XMOVE is within the TPA, the program's own bank —
+    ; not the system bank this code runs in.  interbank_move does both.
     ld a, (xmove_active)
     or a
-    jp nz, interbank_move          ; → common memory routine
-
-    ; Same-bank move.  CP/M's convention is HL=dst, DE=src, BC=count
-    ; (LDIR wants the opposite), and HL/DE must be advanced on return.
-    ex de, hl
-    ldir
-    ex de, hl
-    ret
+    jr nz, .banks_set
+    ld (xmove_src), a              ; 0 = the TPA, in bank_sel's numbering
+    ld (xmove_dst), a
+.banks_set:
+    xor a
+    ld (xmove_active), a           ; XMOVE lasts for one MOVE
+    jp interbank_move              ; → common memory routine
 
 ; @proc bios_xmove
 ; @param %dst_bank:u8  b           ; destination bank number (CP/M 3's)

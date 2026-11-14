@@ -2221,6 +2221,27 @@ class Smoke:
             raise SmokeError("DISKTEST reported a failure:\n" + history)
         self.expect("DISKTEST prompt", "A>")
 
+    def run_fixtest(self) -> None:
+        self.log("FIXTEST")
+        self.mcp.call("type", {"text": "FIXTEST"})
+        self.mcp.call("key", {"name": "enter"})
+        self.mcp.call("run", {"frames": 1500})
+        for _ in range(10):
+            self.record()
+            if "Done." in self.text():
+                break
+            self.mcp.call("run", {"frames": 1200})
+        else:
+            raise SmokeError("FIXTEST did not finish:\n" + self.text())
+        lines = [l for l in self.history if re.match(r"^X\d+ ", l.strip())]
+        missing = [n for n in range(1, 13)
+                   if not any(l.strip().startswith(f"X{n} ") and "PASS" in l
+                              for l in lines)]
+        if missing:
+            raise SmokeError(f"FIXTEST missing PASS for X{missing}:\n"
+                             + "\n".join(lines))
+        self.expect("FIXTEST prompt", "A>")
+
     def run_bdostest(self) -> None:
         self.log("BDOSTEST")
         self.mcp.call("type", {"text": "BDOSTEST"})
@@ -3311,6 +3332,7 @@ class Smoke:
         self.command("DIR", 500)
         self.expect("DIR after SYSTEST", "CPM3     SYS", "A>")
         self.run_disktest()
+        self.run_fixtest()
         self.run_bdostest()
         self.run_biostest()
         self.run_chaintest()

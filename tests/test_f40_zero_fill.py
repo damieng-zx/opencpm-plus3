@@ -16,7 +16,9 @@ from .layout import source
 class ZeroFillWiring(unittest.TestCase):
     def test_f40_requests_the_fill_before_the_shared_core(self):
         text = source("src/bdos/bdos.zpa")
-        body = text[text.index("bf_f40:"):text.index("; @proc div_hl_bc")]
+        self.assertIn("WR_ZFILL",
+                      text[text.index("bf_f40:"):text.index("; @proc div_hl_bc")])
+        body = text[text.index("wr_random:"):text.index("; F35:")]
         self.assertIn("ld (f40_zfill), a", body)
         self.assertLess(body.index("ld (f40_zfill), a"),
                         body.index("jp bf_f21_core"))

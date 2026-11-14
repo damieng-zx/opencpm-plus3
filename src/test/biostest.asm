@@ -93,7 +93,7 @@ start:
     call t_b22
     call t_b23
     call t_b24
-    call t_b29                  ; XMOVE: TPA->TPA for the MOVE below
+    call t_b29                  ; XMOVE system->TPA, then a plain MOVE below
     call t_b25
     call t_b26
     call t_b28
@@ -431,11 +431,7 @@ t_b29:
     djnz .sysdiff
     jp bfail                   ; identical: bank 0 was the TPA
 .differs:
-    ; Now TPA -> TPA, which t_b25's MOVE relies on.
-    ld a, B_XMOVE
-    call compute_bios_entry
-    ld bc, 0x0101
-    call call_bios_ent
+    ; XMOVE lasts one MOVE, so t_b25's MOVE (no XMOVE) is within the TPA.
     jp bpass
 
 t_b25:

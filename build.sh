@@ -60,6 +60,7 @@ echo "  Assembling test programs..."
 "$SJASMPLUS" --raw=build/biostest.com src/test/biostest.asm
 "$SJASMPLUS" --raw=build/chaintst.com src/test/chaintest.asm
 "$SJASMPLUS" --raw=build/fonttest.com src/test/fonttest.asm
+"$SJASMPLUS" --raw=build/fixtest.com src/test/fixtest.asm
 # SCREENBM is the screen benchmark; tools/screen_bench.py reads the phase
 # addresses from its listing, so the --lst is not optional.
 "$SJASMPLUS" --raw=build/screenbm.com --lst=build/screenbm.lst src/test/screenbm.asm
@@ -162,7 +163,7 @@ python3 tools/mkdsk.py create build/cpm3-test.dsk \
     build/stat.com \
     build/sysgen.com build/erase.com build/dir.com build/device.com build/edit.com \
     build/bdostest.com build/xtetest.com \
-    build/disktest.com build/termtest.com build/systest.com build/regtest.com \
+    build/disktest.com build/fixtest.com build/termtest.com build/systest.com build/regtest.com \
     build/inptest.com build/biostest.com build/chaintst.com \
     build/fonttest.com \
     build/screenbm.com \

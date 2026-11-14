@@ -1457,11 +1457,14 @@ MOTOR_OFF_DELAY equ 50         ; Frames of idle before ISR drops motor_flag
                                ; (50 @ 50Hz = ~1s, close to +3DOS's tm_mtroff)
 
 motor_on:
-    ; Set motor flag in common memory and assert on port
-    ld a, MOTOR_BIT
-    ld (motor_flag), a         ; Common-memory variable
+    ; Arm the ISR's motor-off timer *before* setting the flag.  The other
+    ; way round, a tick in between could expire the old countdown and clear
+    ; motor_flag after we set it, and every later 1FFD write would then stop
+    ; the motor in the middle of the transfer.
     ld a, (motor_off_ticks)
     ld (motor_countdown), a    ; Arm the motor-off timer in the ISR
+    ld a, MOTOR_BIT
+    ld (motor_flag), a         ; Common-memory variable
     ld a, BANK1_1FFD | MOTOR_BIT
     call write_1ffd
 

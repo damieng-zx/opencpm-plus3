@@ -20,11 +20,16 @@ BDOS    equ 0x0005             ; BDOS entry point
 FCB1    equ 0x005C             ; Default FCB 1
 DMA     equ 0x0080             ; Default DMA / command tail
 TPA_TOP equ 0xF600             ; First byte of common memory — initial stack top
+; The most 128-byte records a program may have: it loads from 0100h and the
+; last record must end before the loader's stack, just below TPA_TOP.
+MAX_COM_RECS equ (TPA_TOP - 0x0100 - 128) / 128
 CCP_FCB_ADDR equ 0xFB21        ; common-memory FCB for the COM loader stub
 CCP_RUN_PROG equ 0xFCA4        ; common-memory ccp_run_prog (COM header check)
 CCP_CHAIN_ADDR equ 0xF607      ; SCB[0x07]: BDOS F47 chain pending
 CCP_RC_ADDR    equ 0xF608      ; SCB[0x08]: program return code (F108)
 CCP_COLD_ADDR  equ 0xF60A      ; SCB[0x0A]: 1 = cold start, PROFILE.SUB due
+CCP_SUB_ADDR   equ 0xF60B      ; SCB[0x0B]: drive (1-16) of the running $$$.SUB, 0 = none
+CCP_SUBU_ADDR  equ 0xF60C      ; SCB[0x0C]: the user number it is in
 
 ; BDOS function numbers
 F_CIN   equ 1                  ; Console input (blocking, echoes)
@@ -314,7 +319,10 @@ parse_cmd:
     sub 'A'
     ld e, a
     ld c, 14                   ; F14: Select Disk
-    jp BDOS
+    call BDOS
+    inc a
+    ret nz
+    jp .com_unknown            ; no such drive: "E:?"
 
 .check_builtins:
     ; Walk cmd_table: name, 0, handler address.  A table end (name starts
@@ -934,8 +942,13 @@ parse_cmd:
     call prompt_line
     ret z                      ; just Return: leave the user alone
 .user_num:
-    ; First digit
     ld a, (hl)
+    cp ' '
+    jr nz, .user_digit
+    inc hl                     ; "Enter User# : 3": skip the spaces
+    jr .user_num
+.user_digit:
+    ; First digit
     cp '0'
     jr c, .user_usage
     cp '9' + 1
@@ -1210,6 +1223,26 @@ parse_cmd:
     ; on FCB2 at 006Ch doesn't clobber the tail at 0080h.)
 
 .com_do_load:
+    ; A program longer than the TPA would load over common memory (and the
+    ; loader's own stack just below it).  F35 gives the file's length; the
+    ; records already read (a PRL header) are not loaded.
+    ld de, type_fcb
+    ld c, 35                   ; F35: Compute File Size
+    call BDOS
+    ld hl, (type_fcb + 33)
+    ld a, (type_fcb + 32)
+    ld e, a
+    ld d, 0
+    or a
+    sbc hl, de                 ; HL = records to load
+    ld de, MAX_COM_RECS + 1
+    sbc hl, de                 ; (carry clear: the length covers CR)
+    jr c, .com_fits
+    pop hl                     ; discard the ORDER dispatcher's return
+    ld de, msg_too_big
+    jp pstr
+.com_fits:
+
     ; Load .COM file to 0100h via a page-zero stub.
     ;
     ; The stub and its FCB copy live in page zero (0x0008+).
@@ -1231,12 +1264,12 @@ parse_cmd:
     ld de, 0x005C
     call parse_fcb             ; HL advanced past first arg
 
-    ; Skip spaces between first and second arg
+    ; Skip the spaces and separators ("B:=A:X") between the two arguments
 .com_skip_space2:
     ld a, (hl)
     or a
     jr z, .com_clear_fcb2
-    cp ' '
+    call is_delim
     jr nz, .com_parse_arg2
     inc hl
     jr .com_skip_space2
@@ -1775,19 +1808,39 @@ try_sub:
     ld de, sub_fcb
     call parse_fcb
 
-    ; SUBMIT creates $$$.SUB on the current drive, not necessarily A:.
+    ; SUBMIT creates $$$.SUB on the current drive and user.  Once it runs,
+    ; the SCB remembers where, so a "B:" or "USER 3" line in it does not
+    ; lose the rest of the file.  The user is switched for the file's I/O
+    ; and switched back on the way out (sub_exit).
+    ld e, 0xFF
+    ld c, 32                   ; F32: Get User
+    call BDOS
+    ld (sub_user), a
+    ld a, (CCP_SUB_ADDR)
+    or a
+    jr nz, .at_saved
     ld c, 25                   ; F25: Return Current Disk
     call BDOS
     inc a                      ; 1-based drive for the FCB
+    ld (CCP_SUB_ADDR), a
+    ld a, (sub_user)
+    ld (CCP_SUBU_ADDR), a
+    ld a, (CCP_SUB_ADDR)
+.at_saved:
     ld (sub_fcb), a
+    ld a, (CCP_SUBU_ADDR)
+    ld e, a
+    ld c, 32                   ; F32: Set User
+    call BDOS
 
     ld de, sub_fcb
     ld c, 15                   ; F15: Open File
     call BDOS
     cp 0xFF
     jr nz, .opened
-    scf                        ; No $$$.SUB on the current drive
-    ret
+    xor a
+    ld (CCP_SUB_ADDR), a       ; no $$$.SUB there (any more)
+    jp sub_exit                ; carry set: nothing to run
 
 .opened:
     ld de, sub_fcb
@@ -1887,7 +1940,7 @@ try_sub:
     ld de, sub_fcb
     ld c, 16                   ; F16: Close File
     call BDOS
-    call restore_dma
+    call sub_exit
     xor a                      ; CF=0 → cmd_buf is loaded (.prompt echoes it)
     ret
 
@@ -1899,7 +1952,23 @@ try_sub:
     ld de, sub_fcb
     ld c, 19                   ; F19: Delete File
     call BDOS
+    xor a
+    ld (CCP_SUB_ADDR), a       ; the submit is over
+    ; fall through to sub_exit
+
+; sub_exit — the DMA back to 0080h and the user back to the one in force
+;   before try_sub
+;   Out: carry set
+; @proc sub_exit
+; @out   carry
+; @clobbers af,bc,de
+; @end
+sub_exit:
     call restore_dma
+    ld a, (sub_user)
+    ld e, a
+    ld c, 32                   ; F32: Set User
+    call BDOS
     scf
     ret
 
@@ -2022,6 +2091,9 @@ msg_unknown:
 
 msg_crlf:
     db 0x0D, 0x0A, '$'
+
+msg_too_big:
+    db "Program too big", 0x0D, 0x0A, '$'
 
 dir_sep:
     db " : ", '$'
@@ -2222,16 +2294,14 @@ parse_fcb:
 .parse_name_go:
     push de                    ; Save &FCB[1]
 
-    ; Parse name part (up to 8 chars, stop at '.', null, or space)
+    ; Parse name part (up to 8 chars, stop at '.' or a delimiter)
     ld b, 8
 .parse_name:
     ld a, (hl)
-    or a
-    jr z, .parse_done
-    cp ' '
-    jr z, .parse_done
     cp '.'
     jr z, .parse_dot
+    call is_delim
+    jr z, .parse_done
     cp '?'
     jr z, .pfn_store
     cp '*'
@@ -2250,11 +2320,9 @@ parse_fcb:
     djnz .pfn_star
 .skip_name:
     ld a, (hl)
-    or a
-    jr z, .parse_done
     cp '.'
     jr z, .parse_dot
-    cp ' '
+    call is_delim
     jr z, .parse_done
     inc hl
     jr .skip_name
@@ -2273,9 +2341,7 @@ parse_fcb:
     ld b, 3
 .parse_ext:
     ld a, (hl)
-    or a
-    jr z, .parse_done
-    cp ' '
+    call is_delim
     jr z, .parse_done
     cp '?'
     jr z, .pfe_store
@@ -2287,12 +2353,19 @@ parse_fcb:
     inc hl
     inc de
     djnz .parse_ext
-    jr .parse_done
+    jr .skip_ext
 .pfe_star:
     ld a, '?'
     ld (de), a
     inc de
     djnz .pfe_star
+    ; The rest of a long type, or the '*', is not part of the next name.
+.skip_ext:
+    ld a, (hl)
+    call is_delim
+    jr z, .parse_done
+    inc hl
+    jr .skip_ext
 
 .parse_done:
     ; Check we got at least one character
@@ -2305,6 +2378,28 @@ parse_fcb:
 .parse_fail:
     scf
     ret
+
+
+; is_delim — Z if A ends a file name: NUL, space, tab or one of the CP/M 3
+;   separators = , ; < > [ ] | /
+; @proc is_delim
+; @param %ch:u8 a
+; @out   zero
+; @clobbers f
+; @end
+is_delim:
+    push hl
+    push bc
+    ld hl, delims
+    ld bc, DELIMS_LEN
+    cpir                       ; Z = A is in the list
+    pop bc
+    pop hl
+    ret
+
+delims:
+    db 0, ' ', 9, "=,;<>[]|/"
+DELIMS_LEN equ $ - delims
 
 
 ; "SUBMIT " prefix prepended to cmd_buf when CCP chains a .SUB hit
@@ -2372,5 +2467,6 @@ dir_shown      equ dir_mode + 1          ; non-zero once a file was listed
 dir_other      equ dir_shown + 1         ; non-zero if the other kind matched
 dir_maxcols    equ dir_other + 1         ; columns for the DIR display
 dir_display_drive equ dir_maxcols + 1    ; drive letter shown by DIR (0 = A:)
-ccp_stack_base equ dir_display_drive + 1
+sub_user       equ dir_display_drive + 1 ; user in force when try_sub began
+ccp_stack_base equ sub_user + 1
 ccp_stack      equ ccp_stack_base + 64   ; local stack grows down from here

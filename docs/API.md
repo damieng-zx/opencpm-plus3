@@ -59,7 +59,11 @@ When a .COM program starts executing at 0100h:
   from it (WordStar, MBASIC, Turbo Pascal, ...) stay below the common area.
 - **DMA address**: 0080h (default)
 - **FCB1** (005Ch): parsed first filename argument from command line
-- **FCB2** (006Ch): parsed second filename argument
+- **FCB2** (006Ch): parsed second filename argument.  A name ends at a
+  space, a tab or one of `= , ; < > [ ] | /`; separators between the two
+  arguments are skipped, so `PIP B:=A:X.COM` gives FCB1 = `B:` and FCB2 =
+  `A:X.COM`.  Characters past the third of a type, or after a `*`, are
+  skipped too.
 - **Command tail**: length byte at 0080h, ASCII text at 0081h (no trailing CR)
 - Both FCBs are cleared (drive=0, name=spaces) if no argument was given
 
@@ -98,6 +102,22 @@ again: the SCB byte at offset 0x0A (`scb_coldboot`) is re-initialised to 1
 by a cold boot and the CCP clears it when it fires the profile. Because the
 CCP itself is reloaded from the bank-6 staging copy on every warm boot, that
 SCB byte is the only place the distinction can live.
+
+### Where the submit file lives
+
+`SUBMIT.COM` writes `$$$.SUB` on the current drive and in the current user.
+When the CCP first reads it, it records that drive and user in two SCB
+bytes, 0x0B (`scb_subdrv`, 1-16, 0 = no submit running) and 0x0C
+(`scb_subusr`).  Later lines come from there, so a `B:` or `USER 3` line
+inside a submit file does not lose the rest of it.  The CCP clears 0x0B
+when the file is finished or can no longer be opened.
+
+### Programs too big for the TPA
+
+The CCP refuses a program whose records would not fit between 0100h and
+the loader's stack below common memory (489 records, 62592 bytes; a PRL
+header is not counted) with `Program too big`, instead of loading it over
+the system.
 
 ### Submit-file program input
 
@@ -229,7 +249,7 @@ BDOS function 124 (private, used by the CCP only):
   | ^U | — | discard the line: `#`, new line (EXTEND+U types `]` on the +3) |
   | ^R | EXTEND+R | retype the line: `#`, new line, the line again |
   | ^W, 1Fh | EDIT (Caps+1), cursor up (Caps+7) | on an empty line, recall the previous line; otherwise go to its end |
-  | ^C | EXTEND+C | `^C` and warm boot |
+  | ^C | EXTEND+C | `^C` and warm boot on an empty line; ignored mid-line |
   | ESC | BREAK | echoed to the screen, not stored, so `ESC` sequences work at the prompt |
 
   The previous non-empty line is kept in bank 6 (`F10_HIST`, the last 256
@@ -254,7 +274,10 @@ BDOS function 124 (private, used by the CCP only):
 
 #### F14 — Select Disk
 - **In**: E=drive (0=A, 1=B, ...)
-- **Note**: Sets default drive for subsequent file operations.
+- **Out**: A=0, or A=0xFF and H=4 (invalid drive) for a drive with no DPH
+- **Note**: Sets default drive for subsequent file operations.  The drive
+  is not logged in until the first file operation; a refused drive leaves
+  the default drive unchanged (the CCP then reports `E:?`).
 
 #### F24 — Return Login Vector
 - **Out**: HL=16-bit bitmap (bit N = drive N logged in)
@@ -280,8 +303,8 @@ BDOS function 124 (private, used by the CCP only):
 
 #### F37 — Reset Drive
 - **In**: DE=16-bit drive bitmap
-- **Effect**: Clears login for the specified drives and makes the next
-  login probe their format again.
+- **Effect**: Clears login and the software read-only bit (F28) for the
+  specified drives and makes the next login probe their format again.
 
 #### F48 — Flush Buffers
 - **Out**: A=0
@@ -297,11 +320,20 @@ BDOS function 124 (private, used by the CCP only):
   CP/M does; a program may open extent *n* of a file directly by setting
   EX = *n* (Colossal Cave Adventure does).  EX = `'?'` opens the first
   extent found.
+- **Note**: As in CP/M 3, a file that is not in the current user but is a
+  system file (`$SYS`) in user 0 is opened from user 0.  The FCB then has
+  f8' (bit 7 of byte 8) set, so its later extents also come from user 0,
+  and t1' (R/O) set, so it cannot be written.  The CCP finds programs in
+  user 0 this way.
 
 #### F16 — Close File
 - **In**: DE=FCB address
-- **Out**: A=0 or 0xFF
-- **Note**: Flushes directory entry. Required to save written data!
+- **Out**: A=0, 2 (read-only drive) or 0xFF (write error)
+- **Note**: Records the FCB's RC and allocation map in its directory entry.
+  Required to save written data!  The entry is only written when they
+  changed, so closing a file that was only read works on a read-only
+  drive.  An FCB whose extent is not in the directory (EX one past the end
+  after reading to EOF) closes successfully.
 
 #### F17 — Search First
 - **In**: DE=FCB address (supports '?' wildcards in name/type)
@@ -329,7 +361,8 @@ BDOS function 124 (private, used by the CCP only):
 - **Note**: A file with the R/O attribute (bit 7 of the filetype byte,
   entry offset 9) is never deleted.  With F45's error mode bit set the call
   returns 0xFF; otherwise it prints `Bdos Err: R/O` and warm boots, like
-  CP/M.
+  CP/M.  The matches are checked first, so a wildcard delete that meets a
+  read-only file deletes nothing.
 
 #### F20 — Read Sequential
 - **In**: DE=FCB address
@@ -346,16 +379,24 @@ BDOS function 124 (private, used by the CCP only):
   128-byte DMA buffers. Advances CR and the DMA address, and allocates
   blocks as needed. `H` is 0 when the call succeeds; after a disk-full or
   directory-full error it is the number of records written.
+- **Note**: At the end of an extent the next one is used if the file
+  already has it (rewriting a file in place), otherwise a new directory
+  entry is made.  Extents past 31 carry into S2 (files over 512K).
 
 #### F22 — Make File
 - **In**: DE=FCB address
-- **Out**: A=0 (created) or 0xFF (directory full)
+- **Out**: A=0 (created); A=0xFF and H=0 (directory full); A=0xFF and H=8
+  (the file already exists)
 - **Note**: Creates new directory entry. FCB must have drive and filename.
-  Should be followed by writes then close.
+  Should be followed by writes then close.  As in CP/M 3 an existing name
+  is refused, so delete the old file first.
 
 #### F23 - Rename File
 - **In**: DE=FCB address
+- **Out**: A=0 (renamed); A=0xFF and H=0 (not found); A=0xFF and H=8 (the
+  new name already exists)
 - **Note**: Bytes 1-11 = old name, bytes 17-27 = new name. Supports '?' in old.
+  The entries keep their attribute bits.
   A read-only file (bit 7 of the filetype byte) is refused the same way as
   F19: A=0xFF in error mode, otherwise `Bdos Err: R/O` and a warm boot.
 
@@ -365,23 +406,30 @@ BDOS function 124 (private, used by the CCP only):
 
 #### F33 — Read Random
 - **In**: DE=FCB address (R0/R1/R2 = record number)
-- **Out**: A=0 (OK), 1 (unwritten), 4 (no extent), 6 (random record overflow)
-- **Note**: Reads 128 bytes from arbitrary record position to DMA.
+- **Out**: A=0 (OK), 1 (unwritten: an unallocated block, or a record at or
+  past the extent's RC), 4 (no extent), 6 (random record overflow)
+- **Note**: Reads 128 bytes from arbitrary record position to DMA.  EX, S2
+  and CR are set to the record, and CR is not advanced, so a sequential
+  read that follows reads the same record again.
 
 #### F34 — Write Random
 - **In**: DE=FCB address (R0/R1/R2 = record number)
-- **Out**: A=0 (OK), 1 (directory full), 2 (disk full or write-protected), 6 (random record overflow)
-- **Note**: Writes 128 bytes from DMA to arbitrary record position.
+- **Out**: A=0 (OK), 2 (disk full or write-protected), 5 (no directory
+  space), 6 (random record overflow)
+- **Note**: Writes 128 bytes from DMA to arbitrary record position.  As
+  with F33, CR is left on that record.
 
 #### F35 — Compute File Size
 - **In**: DE=FCB address
 - **Out**: FCB[33-35] = random record count (virtual file size)
-- **Note**: Scans all extents. Returns highest record + 1.
+- **Note**: Scans all extents. Returns highest record + 1.  Attribute bits
+  in the FCB's name are ignored.
 
 #### F36 — Set Random Record
 - **In**: DE=FCB address
 - **Out**: A=0, HL=0
-- **Note**: FCB[33-35] = current sequential position as random record.
+- **Note**: FCB[33-35] = current sequential position as random record:
+  (S2 × 32 + EX) × 128 + CR.
 
 #### F40 — Write Random with Zero Fill
 - **In**: DE=FCB (R0/R1/R2 set)

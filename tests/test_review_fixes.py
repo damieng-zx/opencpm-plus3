@@ -87,9 +87,10 @@ class Issue04RandomExtent(unittest.TestCase):
 
     def test_random_write_looks_up_or_creates_extent(self):
         text = source("src/bdos/bdos.zpa")
-        f34 = text[text.index("bf_f34:"):text.index("; F35:")]
+        f34 = text[text.index("wr_random:"):text.index("; F35:")]
         f40 = text[text.index("bf_f40:"):text.index("; @proc div_hl_bc")]
-        for body in (f34, f40):
+        self.assertIn("jp wr_random", f40)
+        for body in (f34,):
             self.assertIn("call find_fcb_extent", body)
             self.assertIn("call create_fcb_extent", body)
             self.assertLess(body.index("call find_fcb_extent"),
@@ -149,7 +150,7 @@ class Issue07WriteProtect(unittest.TestCase):
         # Some handlers live in the common stub now.
         text = source("src/bdos/bdos.zpa") + source("src/bios/common.zpa")
         for start, end in (
-            ("bf_f16:", "; @proc close_dir_update"),
+            ("close_dir_update:", "ldir                       ; FCB RC"),
             ("bf_f19:", "; F20:"),
             ("bf_f21:", "; F22:"),
             ("bf_f22:", "; F23:"),
@@ -196,11 +197,12 @@ class Issue08AlvSize(unittest.TestCase):
 class Issue09BiosMove(unittest.TestCase):
     """BIOS MOVE uses HL=dst, DE=src; HL must survive bios_call_bank4."""
 
-    def test_bios_move_swaps_for_ldir(self):
-        text = source("src/bios/bios.zpa")
-        body = text[text.index("bios_move:"):text.index("; @proc bios_xmove")]
-        self.assertIn("ex de, hl", body)
-        self.assertIn("ldir", body)
+    def test_bios_move_uses_hl_dst_de_src(self):
+        # interbank_move reads (DE) and writes (HL), as MOVE specifies.
+        text = source("src/bios/common.zpa")
+        body = text[text.index("interbank_move:"):text.index("_ibm_src_bank:")]
+        self.assertIn("ld a, (%src)", body)
+        self.assertIn("ld (%dst), a", body)
 
     def test_bios_call_bank4_preserves_hl(self):
         text = source("src/bios/common.zpa")
@@ -230,7 +232,11 @@ class Issue11SubDma(unittest.TestCase):
     def test_try_sub_restores_dma(self):
         text = source("src/ccp/miniccp.zpa")
         body = text[text.index("try_sub:"):text.index("echo_sub_line:")]
-        self.assertGreaterEqual(body.count("call restore_dma"), 2)
+        # Every exit goes through sub_exit, which restores the DMA (and user).
+        self.assertIn("call sub_exit", body)
+        self.assertIn("jp sub_exit", body)
+        tail = body[body.index("sub_exit:"):]
+        self.assertIn("call restore_dma", tail)
         self.assertIn("ld de, 0x0080", text)
 
     def test_try_sub_uses_current_drive(self):
@@ -326,15 +332,19 @@ class Issue16MotorSpinup(unittest.TestCase):
 class Issue17AttributeExtent(unittest.TestCase):
     """F20/F33 extent comparisons must mask the FCB attribute bit too."""
 
-    def test_f20_masks_both_sides(self):
+    def test_extent_match_masks_both_sides(self):
         text = source("src/bdos/bdos.zpa")
-        body = text[text.index(".next_ext_cmp:"):text.index(".next_ext_name_fail")]
+        body = text[text.index(".cmp_loop:"):text.index(".cmp_next:")]
         self.assertEqual(body.count("and 0x7F"), 2)
 
-    def test_f33_masks_both_sides(self):
+    def test_f20_and_f33_use_the_shared_extent_lookup(self):
         text = source("src/bdos/bdos.zpa")
-        body = text[text.index(".rdrand_cmp:"):text.index(".rdrand_cmp_fail")]
-        self.assertEqual(body.count("and 0x7F"), 2)
+        f20 = text[text.index(".next_extent:"):text.index(".eof:")]
+        f33 = text[text.index("bf_f33:"):text.index("; @proc find_fcb_extent")]
+        lookup = text[text.index("find_fcb_entry:"):text.index("; @proc find_name")]
+        self.assertIn("call find_fcb_extent", f20)
+        self.assertIn("call find_fcb_extent", f33)
+        self.assertIn("call match_fcb", lookup)
 
     def test_disktest_covers_attr_extents(self):
         self.assertIn("Attribute-bit extent test",
@@ -461,7 +471,7 @@ class BankNumbering(unittest.TestCase):
         body = common[common.index("bank_sel_cpm:"):common.index("; Character device table")]
         # bank 0 -> the system bank (bank_sel non-zero), else the TPA (0).
         body = re.sub(r";[^\n]*", "", body)
-        self.assertRegex(body, r"jr z, \.sys\s+xor a\s+jp bank_sel\s+\.sys:\s+ld a, 1\s+jp bank_sel")
+        self.assertRegex(body, r"jr z, \.sys\s+xor a\s+jr \.sel\s+\.sys:\s+ld a, 1\s+\.sel:\s+call bank_sel")
 
     def test_xmove_and_setbnk_convert(self):
         text = source("src/bios/bios.zpa")
@@ -476,7 +486,8 @@ class BankNumbering(unittest.TestCase):
     def test_internal_callers_keep_the_core_numbering(self):
         common = source("src/bios/common.zpa")
         ibm = common[common.index("interbank_move:"):common.index("_ibm_src_bank:")]
-        self.assertRegex(ibm, r"ld a, 1\s+call bank_sel\(a\)")   # back to system
+        # back to the system bank: A is 0 after the loop, so INC A gives 1
+        self.assertRegex(ibm, r"jr nz, \.loop\s+(;[^\n]*\s+)*inc a\s+call bank_sel\(a\)")
 
     def test_biostest_moves_from_the_system_bank(self):
         text = source("src/test/biostest.asm")
@@ -519,17 +530,12 @@ class P2WriteReturnCodes(unittest.TestCase):
         body = text[text.index(".wseq_full:"):text.index(".wseq_diskfull:")]
         self.assertIn("ld a, 1", body)
 
-    def test_f34_directory_full_returns_1(self):
+    def test_f34_f40_directory_full_returns_5(self):
         text = source("src/bdos/bdos.zpa")
-        body = text[text.index("bf_f34:"):text.index("; F35:")]
-        full = body[body.index(".wrrand_full:"):body.index(".wrrand_range:")]
-        self.assertIn("ld a, 1", full)
-
-    def test_f40_directory_full_returns_5(self):
-        text = source("src/bdos/bdos.zpa")
-        body = text[text.index("bf_f40:"):text.index("; @proc div_hl_bc")]
-        full = body[body.index(".wrrand0_full:"):body.index(".wrrand0_range:")]
+        body = text[text.index("wr_random:"):text.index("; F35:")]
+        full = body[body.index("call create_fcb_extent"):body.index(".wrrand_write:")]
         self.assertIn("ld a, 5", full)
+        self.assertIn("jp wr_random", text[text.index("bf_f40:"):text.index("; @proc div_hl_bc")])
 
     def test_write_error_uses_shared_fail_stub(self):
         text = source("src/bdos/bdos.zpa")
