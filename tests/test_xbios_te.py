@@ -897,7 +897,13 @@ class CdVersion(unittest.TestCase):
     def test_handler_returns_machine_and_version(self):
         body = handler_body(".cd_version:", ".cd_info:")
         self.assertIn("ld a, 3", body)
-        self.assertIn("ld bc, 0x0100", body)
+        self.assertIn("ld bc, OS_VERSION_MAJOR * 256 + OS_VERSION_MINOR", body)
+
+    def test_version_is_0_9_and_matches_tester(self):
+        text = source("src/bios/bios.zpa")
+        self.assertRegex(text, r"(?m)^OS_VERSION_MAJOR equ 0$")
+        self.assertRegex(text, r"(?m)^OS_VERSION_MINOR equ 9$")
+        self.assertIn("ld hl, 0x0009", source("src/test/xtetest.asm"))
 
     def test_tester_and_smoke_cover_version(self):
         tester = source("src/test/xtetest.asm")

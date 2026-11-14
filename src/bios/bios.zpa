@@ -782,8 +782,6 @@ bios_time:
 ; ==========================================================================
 ; XBIOS dispatch — called from common-memory userf_stub with A = func_id
 ; and caller's registers already switched to system bank by bios_call_bank4.
-; Only non-CD_VERSION IDs reach here; CD_VERSION is handled inline in the
-; common stub to save a bank switch on the hot path.
 ; ==========================================================================
 ; @proc xbios_handler
 ; @param %func_id:u8 a
@@ -847,9 +845,9 @@ xbios_handler:
     assert $ - .xb_table == 2 * ((0xE9 - 0x80) / 3 + 1), "XBIOS table must cover 80h..E9h"
 
 .cd_version:
-    ; CD_VERSION (0x00E3): A=machine type, B=major, C=minor.
+    ; CD_VERSION (0x00E3): A=machine type, B=major, C=minor (OS_VERSION_*).
     ld a, 3
-    ld bc, 0x0100
+    ld bc, OS_VERSION_MAJOR * 256 + OS_VERSION_MINOR
     ret
 
 .cd_info:
@@ -2369,11 +2367,18 @@ print_str:
 BUILD_NUM equ 0
     ENDIF
 
+; The OS version: shown on the signon line and returned by CD_VERSION
+; (B = major, C = minor).  src/test/xtetest.asm checks the same pair.
+OS_VERSION_MAJOR equ 0
+OS_VERSION_MINOR equ 9
+
 TPA_KB equ (TPA_TOP - 0x0100) / 1024
 
 signon_msg:
     db 0x0D, 0x0A
-    db "Open CP/M +3 (Build "
+    db "Open CP/M +3 v"
+    db '0' + OS_VERSION_MAJOR, '.', '0' + OS_VERSION_MINOR
+    db " (Build "
     LUA ALLPASS
     local bn = _c("BUILD_NUM")
     local hx = "0123456789ABCDEF"

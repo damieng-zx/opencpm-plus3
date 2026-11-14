@@ -583,7 +583,7 @@ checks that token `7Fh` and a 32-character string are rejected, and the
 runner reads back the slot at `A9A0h + 5*32` (length 5 plus `HELLO`).
 
 Tests 21-23 cover the remaining dispatched IDs: `CD_VERSION` (machine 3,
-version 1.0), `CD_INFO` (A = `FFh` or 0 as unit 1's drive status says,
+version 0.9; 1.0 on Locomotive's), `CD_INFO` (A = `FFh` or 0 as unit 1's drive status says,
 8 banks) and
 `DD_DRIVE_STATUS` (unit 0 ready/track 0 with the head bit, unit 1 not
 fitted, B/DE preserved).  Test 24 fills the key queue to 16, checks the

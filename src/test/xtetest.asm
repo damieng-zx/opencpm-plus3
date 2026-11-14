@@ -1592,11 +1592,16 @@ start:
     call userf_trampoline
     cp 3                        ; machine type 3 (+3)
     jp nz, .t21_fail
-    ld a, b
-    cp 1                        ; major version 1
-    jp nz, .t21_fail
-    ld a, c
-    or a                        ; minor version 0
+    ; Ours is v0.9 (OS_VERSION_MAJOR/MINOR in src/bios/bios.zpa);
+    ; Locomotive's CP/M Plus reports 1.0.
+    ld hl, 0x0100
+    ld a, (ours)
+    or a
+    jr z, .t21_cmp
+    ld hl, 0x0009
+.t21_cmp:
+    or a
+    sbc hl, bc
     jp nz, .t21_fail
 
     ld de, msg_ok
