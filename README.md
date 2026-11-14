@@ -110,6 +110,12 @@ with `SYS` added to the list (`DIRS [FULL]`).
 
 `A:`, `B:` and `C:` prefixes are accepted wherever a filespec is expected.
 
+The command line (and any program's BDOS line input) uses the CP/M 3 line
+editor: EDIT or cursor up on an empty line brings back the previous line,
+the cursor keys move through it, typing inserts, Caps+0 and Caps+9 delete,
+and EXTEND+K / EXTEND+X delete to the end or start; see
+[F10](docs/API.md#f10--read-console-buffer).
+
 ## Compatibility
 
 The system boots from a standard 40-track +3 DSK and runs real CP/M 3 software.

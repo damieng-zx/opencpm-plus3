@@ -206,7 +206,8 @@ BDOS function 124 (private, used by the CCP only):
 - **Note**: Outputs characters until '$' is found. The '$' is NOT printed.
 
 #### F10 — Read Console Buffer
-- **In**: C=10, DE=buffer address
+- **In**: C=10, DE=buffer address (0 = the DMA buffer, edited from the line
+  already in it, `+1` characters long)
 - **Out**: A=0x0D
 - **Buffer format**:
   ```
@@ -214,9 +215,28 @@ BDOS function 124 (private, used by the CCP only):
   +1: actual len (filled by BDOS)
   +2: data bytes (characters, no CR)
   ```
-- **Line editing**: BS (0x08) / DEL (0x7F) = destructive backspace.
-  Ctrl-C = abort + warm boot. CR = submit.
-- **Note**: No cursor movement, insert mode, or history.
+- **Line editing** (the CP/M 3 editor; typed characters insert at the
+  cursor, which RETURN may end anywhere in the line):
+
+  | Key | +3 key | Action |
+  |---|---|---|
+  | ^A / ^F | Caps+5 / Caps+8 | cursor left / right |
+  | ^B | EXTEND+B | to the start of the line, or the end when already at the start |
+  | ^H, DEL | Caps+0 | delete left of the cursor |
+  | ^G | Caps+9 | delete under the cursor |
+  | ^K | EXTEND+K | delete to the end of the line |
+  | ^X | EXTEND+X | delete to the start of the line |
+  | ^U | — | discard the line: `#`, new line (EXTEND+U types `]` on the +3) |
+  | ^R | EXTEND+R | retype the line: `#`, new line, the line again |
+  | ^W, 1Fh | EDIT (Caps+1), cursor up (Caps+7) | on an empty line, recall the previous line; otherwise go to its end |
+  | ^C | EXTEND+C | `^C` and warm boot |
+  | ESC | BREAK | echoed to the screen, not stored, so `ESC` sequences work at the prompt |
+
+  The previous non-empty line is kept in bank 6 (`F10_HIST`, the last 256
+  bytes of the CCP staging window) for `^W`; any program's line counts, not
+  just the CCP's.  The line is edited in the `DD_CHECK_SECTOR` compare
+  buffer, which no disc call uses while F10 runs.  `^E` (physical end of
+  line) and `^P` (printer echo) are not implemented.
 
 #### F11 — Get Console Status
 - **Out**: A=0xFF (char ready) or 0x00 (not ready)

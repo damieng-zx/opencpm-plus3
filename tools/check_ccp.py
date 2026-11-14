@@ -43,6 +43,11 @@ def check(listing: Path, ccp: Path) -> list[str]:
         errors.append(
             f"CCP.COM is {size} bytes but the staging window at "
             f"0x{stage:04X} holds only {window} bytes (CCP_MAX_BLK={blocks})")
+    hist = const(text, "F10_HIST")
+    if hist is not None and stage + size > hist:
+        errors.append(
+            f"CCP.COM is {size} bytes and would overlap F10_HIST at "
+            f"0x{hist:04X} (room for {hist - stage} bytes)")
     if not (0xB000 <= stage and stage + window <= 0xC000):
         errors.append(
             f"CCP staging window 0x{stage:04X}..0x{stage + window - 1:04X} "

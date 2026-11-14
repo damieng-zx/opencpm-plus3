@@ -97,6 +97,13 @@
 ; 8000h-BFFFh.  The initial values that matter (last_dir_*, cached_drive,
 ; f40_zfill) are set by cold_boot.
 rdbuf_ptr:  equ 0xA6B5         ; Buffer pointer for F10
+; F10 edits in the DD_CHECK_SECTOR compare buffer, which is idle while a
+; console line is read (no disc call can happen inside F10).
+F10_WORK    equ dd_compare_buf          ; 256 bytes, 256-aligned: the line
+f10_max     equ dd_compare_buf + 0x100  ; buffer[0], the most characters
+f10_len     equ dd_compare_buf + 0x101  ; characters in the line
+f10_pos     equ dd_compare_buf + 0x102  ; cursor position in the line
+    assert (F10_WORK & 0xFF) == 0, "F10_WORK must be 256-aligned"
 
 ; --- BDOS state ---
 bdos_dma:   dw 0x0080          ; Current DMA address (default 0080h)
@@ -806,6 +813,28 @@ bf_f09:
     inc de
     jr .ploop
 
+; ==========================================================================
+; F10: Read console buffer, with the CP/M 3 line editor
+; ==========================================================================
+;
+; The line is edited in F10_WORK (the DD_CHECK_SECTOR compare buffer in
+; bank 6, idle while a console line is read) and copied to the caller's
+; buffer when RETURN ends it.  Characters insert at the cursor.  The
+; editing keys are the CP/M 3 ones; the +3 cursor keys already send them:
+;
+;   ^A  (Caps+5)  cursor left           ^F  (Caps+8)  cursor right
+;   ^B            start of line, or end of line when already at the start
+;   ^H  (Caps+0), DEL   delete left     ^G  (Caps+9)  delete at the cursor
+;   ^K            delete to the end     ^X            delete to the start
+;   ^U            discard the line (#)  ^R            retype the line (#)
+;   ^W  (EDIT, Caps+1) or cursor up (Caps+7): on an empty line, recall the
+;       previous line; otherwise move to the end of the line
+;   ^C            warm boot             ESC           passed to the screen
+;
+; With DE = 0 the buffer at the DMA address is used and the line already in
+; it (buffer[1] characters) is shown for editing, as CP/M 3 specifies.
+; The previous non-empty line is kept in F10_HIST (length byte + text).
+;
 ; @proc bf_f10
 ; @param %buf:u16   de
 ; @param %func:u8   c
@@ -817,93 +846,414 @@ bf_f10:
     pop bc
     xor a
     ld (bdos_page_row), a
+    ld (f10_len), a
+    ld (f10_pos), a
+    ld a, d
+    or e
+    push af                    ; Z: edit the line already in the DMA buffer
+    jr nz, .buf
+    ld de, (bdos_dma)
+.buf:
     ld (rdbuf_ptr), de
-    call read_user_byte(de) preserving %func    ; A = max chars from buffer[0] in TPA (DE = buf addr)
-    ld b, a
-    ld c, 0                    ; C = count
-.rd_loop:
-    push bc
-    call con_in
-    pop bc
-    cp 0x0D
-    jr z, .rd_done
-    cp 0x08
-    jr z, .rd_bs
-    cp 0x7F
-    jr z, .rd_bs
-    cp 0x03
-    jr z, .rd_ctlc
-    cp 0x1B
-    jr z, .rd_esc
-    cp 0x20
-    jr c, .rd_loop
-    push af
-    ld a, c
-    cp b
-    jr nc, .rd_full
+    call read_user_byte        ; A = buffer[0], the most characters
+    ld (f10_max), a
     pop af
-    push bc
-    ld hl, (rdbuf_ptr)
-    ld e, c
-    ld d, 0
-    add hl, de
-    inc hl
-    inc hl
-    ex de, hl                  ; DE = target address in TPA
-    call write_user_byte(a, de) preserving %func ; Write A to user buffer
-    pop bc
-    inc c
+    jr nz, .loop
+    inc de
+    call read_user_byte        ; A = buffer[1], the initial line's length
+    ld hl, f10_max
+    cp (hl)
+    jr c, .pre_len
+    ld a, (hl)
+.pre_len:
+    ld (f10_len), a
+    inc de
+    ex de, hl                  ; HL = &buffer[2] in the TPA
+    ld de, F10_WORK
+    ld c, a
+    ld b, 0
+    or a
+    call nz, copy_from_user
+    call f10_to_end
+.loop:
+    call con_in
+    cp 0x0D
+    jp z, .done
+    cp 0x7F
+    jp z, .bs
+    cp 0x20
+    jr nc, .ins
+    cp 0x08
+    jr z, .bs
+    cp 0x01
+    jp z, .left
+    cp 0x06
+    jp z, .right
+    cp 0x02
+    jp z, .home
+    cp 0x07
+    jp z, .delc
+    cp 0x0B
+    jp z, .kill
+    cp 0x18
+    jp z, .cut
+    cp 0x15
+    jp z, .discard
+    cp 0x12
+    jp z, .retype
+    cp 0x17
+    jp z, .recall
+    cp 0x1F
+    jp z, .recall
+    cp 0x03
+    jp z, .ctlc
+    cp 0x1B
+    jr nz, .loop
+    ; Let ESC reach the screen: the +3 manual changes screen size and
+    ; colours by typing BREAK (ESC) sequences at the command prompt.  The
+    ; characters that follow are echoed and also enter the command line,
+    ; exactly as the manual describes.
+    call f10_putc
+    jr .loop
+
+.ins:
+    ld c, a                    ; C = character
+    ld a, (f10_len)
+    ld hl, f10_max
+    cp (hl)
+    jr nc, .loop               ; the buffer is full
+    ld e, a                    ; E = length
+    ld a, (f10_pos)
+    ld b, a                    ; B = cursor
+    ld a, e
+    sub b                      ; characters at and after the cursor
+    jr z, .ins_put
+    ld l, e
+    ld h, F10_WORK >> 8        ; HL = one past the last character
+    ld d, h
+    ld e, l                    ; DE = the same: it moves up by one
+    dec hl                     ; HL = the last character
     push bc
     ld c, a
-    call con_out
+    ld b, 0
+    lddr                       ; open a gap at the cursor
     pop bc
-    jr .rd_loop
-.rd_full:
-    pop af
-    jr .rd_loop
-.rd_bs:
+.ins_put:
+    ld l, b
+    ld h, F10_WORK >> 8
+    ld (hl), c
+    ld hl, f10_len
+    inc (hl)
     ld a, c
+    call f10_putc
+    ld hl, f10_pos
+    inc (hl)
+    ld e, 0
+    call f10_redraw            ; the rest of the line moves right
+    jp .loop
+
+.bs:
+    call f10_left
+    jp z, .loop                ; already at the start
+    call f10_del_at
+    jp .loop
+
+.left:
+    call f10_left
+    jp .loop
+
+.right:
+    ld a, (f10_pos)
+    ld hl, f10_len
+    cp (hl)
+    jp nc, .loop
+    ld l, a
+    ld h, F10_WORK >> 8
+    ld a, (hl)
+    call f10_putc              ; stepping right reprints the character
+    ld hl, f10_pos
+    inc (hl)
+    jp .loop
+
+.home:
+    ld a, (f10_pos)
     or a
-    jr z, .rd_loop
-    dec c
-    push bc
-    ld c, 0x08
-    call con_out
-    ld c, ' '
-    call con_out
-    ld c, 0x08
-    call con_out
-    pop bc
-    jr .rd_loop
-.rd_ctlc:
-    push bc
-    ld c, '^'
-    call con_out
-    ld c, 'C'
-    call con_out
-    pop bc
+    jr z, .home_end
+    ld b, a
+    xor a
+    ld (f10_pos), a
+    call f10_bs
+    jp .loop
+.home_end:
+    call f10_to_end
+    jp .loop
+
+.delc:
+    call f10_del_at
+    jp .loop
+
+.kill:
+    ld a, (f10_pos)
+    ld b, a
+    ld a, (f10_len)
+    sub b
+    jp z, .loop
+    ld e, a                    ; blank what was after the cursor
+    ld a, b
+    ld (f10_len), a
+    call f10_redraw
+    jp .loop
+
+.cut:
+    ld a, (f10_pos)
+    or a
+    jp z, .loop
+    ld e, a                    ; E = characters removed
+    ld b, a
+    call f10_bs                ; back to the start
+    ld a, (f10_len)
+    sub e
+    ld (f10_len), a
+    jr z, .cut_moved
+    ld c, a
+    ld b, 0
+    ld l, e
+    ld h, F10_WORK >> 8
+    push de
+    ld de, F10_WORK
+    ldir                       ; the rest of the line moves to the start
+    pop de
+.cut_moved:
+    xor a
+    ld (f10_pos), a
+    call f10_redraw
+    jp .loop
+
+.discard:
+    call f10_hash
+    xor a
+    ld (f10_len), a
+    ld (f10_pos), a
+    jp .loop
+
+.retype:
+    call f10_hash
+    ld a, (f10_pos)
+    push af
+    xor a
+    ld (f10_pos), a
+    call f10_to_end
+    pop af
+    ld (f10_pos), a
+    ld b, a
+    ld a, (f10_len)
+    sub b
+    ld b, a
+    call f10_bs                ; back to where the cursor was
+    jp .loop
+
+.recall:
+    ld a, (f10_len)
+    or a
+    jr nz, .recall_end
+    ld a, (F10_HIST)
+    ld hl, f10_max
+    cp (hl)
+    jr c, .recall_len
+    ld a, (hl)
+.recall_len:
+    or a
+    jp z, .loop
+    ld (f10_len), a
+    ld c, a
+    ld b, 0
+    ld hl, F10_HIST + 1
+    ld de, F10_WORK
+    ldir
+.recall_end:
+    call f10_to_end
+    jp .loop
+
+.ctlc:
+    ld a, '^'
+    call f10_putc
+    ld a, 'C'
+    call f10_putc
     jp fn_wboot
-.rd_esc:
-    ; Let ESC reach the screen: the +3 manual changes screen size and
-    ; colours by typing BREAK (ESC) sequences at the command prompt.
-    ; The following characters are echoed normally and also enter the
-    ; command line, exactly as the manual describes.
-    push bc
-    ld c, 0x1B
-    call con_out
-    pop bc
-    jr .rd_loop
-.rd_done:
-    ld hl, (rdbuf_ptr)
-    inc hl
-    ex de, hl                  ; DE = &buffer[1] in TPA
-    ld a, c
-    call write_user_byte(a, de) preserving %func ; Write char count to TPA
-    ld c, 0x0D
-    call con_out
-    ld c, 0x0A
-    call con_out
+
+.done:
+    call f10_to_end            ; RETURN with the cursor mid-line
+    ld a, (f10_len)
+    or a
+    jr z, .copy_out
+    ld (F10_HIST), a           ; keep it for ^W
+    ld c, a
+    ld b, 0
+    ld hl, F10_WORK
+    ld de, F10_HIST + 1
+    ldir
+.copy_out:
+    ld de, (rdbuf_ptr)
+    inc de
+    ld a, (f10_len)
+    call write_user_byte       ; buffer[1] = count
+    inc de
+    ld hl, F10_WORK
+    ld c, a
+    ld b, 0
+    or a
+    call nz, copy_to_user
+    call f10_crlf
     jp bdos_ret
+
+; f10_putc — Echo one character, keeping BC, DE and HL
+; @proc f10_putc
+; @param %ch:u8 a
+; @clobbers af,ix
+; @end
+f10_putc:
+    push bc
+    push de
+    push hl
+    ld c, %ch
+    call con_out
+    pop hl
+    pop de
+    pop bc
+    ret
+
+; f10_crlf — Echo CR, LF
+; @proc f10_crlf
+; @clobbers af,ix
+; @end
+f10_crlf:
+    ld a, 0x0D
+    call f10_putc
+    ld a, 0x0A
+    jr f10_putc
+
+; f10_hash — ^U/^R: '#' and a new line, as CP/M 3 shows them
+; @proc f10_hash
+; @clobbers af,ix
+; @end
+f10_hash:
+    ld a, '#'
+    call f10_putc
+    jr f10_crlf
+
+; f10_bs — Move the cursor back B places (BS does not erase here)
+; @proc f10_bs
+; @param %n:u8 b
+; @clobbers af,b,ix
+; @end
+f10_bs:
+    ld a, %n
+    or a
+    ret z
+.back:
+    ld a, 0x08
+    call f10_putc
+    djnz .back
+    ret
+
+; f10_left — Move the cursor one character left
+;   Out: Z set when it was already at the start (nothing moved)
+; @proc f10_left
+; @clobbers af,b,hl,ix
+; @end
+f10_left:
+    ld hl, f10_pos
+    ld a, (hl)
+    or a
+    ret z
+    dec (hl)
+    ld b, 1
+    call f10_bs
+    xor a
+    inc a                      ; NZ: moved
+    ret
+
+; f10_to_end — Print from the cursor to the end; the cursor ends there
+; @proc f10_to_end
+; @clobbers af,b,hl,ix
+; @end
+f10_to_end:
+    ld a, (f10_pos)
+    ld l, a
+    ld h, F10_WORK >> 8
+    ld a, (f10_len)
+    ld (f10_pos), a
+    sub l
+    ret z
+    ld b, a
+.out:
+    ld a, (hl)
+    call f10_putc
+    inc hl
+    djnz .out
+    ret
+
+; f10_redraw — Reprint from the cursor to the end, then E blanks over what
+; the line used to occupy, and step back to the cursor
+; @proc f10_redraw
+; @param %blanks:u8 e
+; @clobbers af,bc,d,hl,ix
+; @end
+f10_redraw:
+    ld a, (f10_pos)
+    ld l, a
+    ld h, F10_WORK >> 8
+    ld a, (f10_len)
+    sub l
+    ld b, a                    ; B = characters after the cursor
+    add a, %blanks
+    ld d, a                    ; D = cells to step back over
+    ld a, b
+    or a
+    jr z, .blank
+.tail:
+    ld a, (hl)
+    call f10_putc
+    inc hl
+    djnz .tail
+.blank:
+    ld b, %blanks
+    ld a, b
+    or a
+    jr z, .step
+.space:
+    ld a, ' '
+    call f10_putc
+    djnz .space
+.step:
+    ld b, d
+    jr f10_bs
+
+; f10_del_at — Delete the character under the cursor, if there is one
+; @proc f10_del_at
+; @clobbers af,bc,de,hl,ix
+; @end
+f10_del_at:
+    ld a, (f10_pos)
+    ld e, a
+    ld a, (f10_len)
+    sub e
+    ret z                      ; the cursor is at the end
+    dec a                      ; characters after the deleted one
+    jr z, .shifted
+    ld c, a
+    ld b, 0
+    ld l, e
+    ld h, F10_WORK >> 8
+    ld d, h
+    ld e, l
+    inc hl
+    ldir
+.shifted:
+    ld hl, f10_len
+    dec (hl)
+    ld e, 1
+    jr f10_redraw
 
 ; @proc bf_f11
 ; @param %param:u16 de

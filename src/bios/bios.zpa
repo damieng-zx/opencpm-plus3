@@ -56,6 +56,11 @@ CCP_STAGE   equ 0xB000            ; Staged CCP image (bank 6)
 LF_FLAGS    equ 0xA860            ; loader: which files it staged (bank 6)
 LF_CCP_LEN  equ 0xA861            ; loader: staged CCP length word (bank 6)
 CCP_MAX_BLK equ 4                 ; 1K blocks staged (the whole B000-BFFF window)
+; F10's previous line (^W recall): a length byte and up to 255 characters
+; in the last 256 bytes of the CCP window.  CCP.COM must end below it
+; (tools/check_ccp.py); the loader's last CCP block lands here at cold boot,
+; so cold boot clears the length.
+F10_HIST    equ 0xBF00
 JMP_OPCODE  equ 0xC3              ; JP instruction
 COMMON_BASE equ 0xF600            ; Start of bank-3 common memory
 ; Screen code that only runs with bank 5 paged in lives in bank 5 itself,
@@ -276,6 +281,7 @@ cold_boot:
 
     ; Initialize state
     xor a
+    ld (F10_HIST), a               ; no previous console line yet
     ld (xmove_active), a
     ld (dma_bank), a
 

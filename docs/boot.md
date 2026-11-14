@@ -128,7 +128,7 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 15,097 | 16,384 (`C000-FFFF`) | 1,287 |
+| `CPM3.SYS` head         | 15,580 | 16,384 (`C000-FFFF`) | 804   |
 | common stub             | 1,785  | 2,560 (`F600-FFFF`)  | 775   |
 | bank-5 screen code      | 2,602  | 7,488 (`62C0-7FFF`)  | 4,886 |
 | `CPM3C.SYS` (both)      | 4,387  | 7,168 (staging)      | 2,781 |

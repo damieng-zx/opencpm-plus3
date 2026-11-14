@@ -1384,6 +1384,80 @@ class Smoke:
         self.wait_for(["A>"], frames=300, attempts=10)
         self.expect("Ctrl-C warm boot", "^C")
 
+    def prompt_line(self) -> str:
+        """The last non-empty screen line: the A> prompt being edited."""
+        lines = [l.rstrip() for l in self.screen() if l.strip()]
+        if not lines:
+            raise SmokeError("blank screen")
+        return lines[-1].strip()
+
+    def edit_keys(self, *keys: str) -> None:
+        for name in keys:
+            self.key(name, 25)
+
+    def expect_prompt(self, label: str, want: str) -> None:
+        self.mcp.call("run", {"frames": 25})
+        got = self.prompt_line()
+        if got != want:
+            raise SmokeError(f"{label}: prompt line {got!r}, expected {want!r}"
+                             f" -- screen:\n{self.text()}")
+
+    def run_and_expect_smoke(self, label: str) -> None:
+        self.key("enter", 300)
+        self.wait_for(["A>"], frames=200, attempts=10)
+        out = self.last_output_line()
+        if out != "SMOKE OK":
+            raise SmokeError(f"{label}: last output {out!r}, expected 'SMOKE OK'"
+                             f" -- screen:\n{self.text()}")
+
+    def run_line_editor(self) -> None:
+        """F10's CP/M 3 line editor at the A> prompt.
+
+        EDIT (Caps+1, ^W) or cursor up (Caps+7) recalls the previous line;
+        Caps+5/Caps+8 move the cursor, typing inserts, Caps+0 deletes to the
+        left, Caps+9 (^G) under the cursor, EXTEND+K to the end of the line
+        and EXTEND+X to its start, EXTEND+B toggles start/end.  Each edited
+        line must read back as TYPE SMOKE.TXT before RETURN.
+        """
+        self.log("F10 line editor")
+        self.command("TYPE SMOKE.TXT", 500)
+        self.wait_for(["A>"], frames=200, attempts=10)
+
+        # Cursor up on an empty line recalls the previous one; it runs.
+        self.edit_keys("shift+7")
+        self.expect_prompt("cursor-up recall", "A>TYPE SMOKE.TXT")
+        self.run_and_expect_smoke("recalled line")
+
+        # EDIT (^W) recalls it too.
+        self.edit_keys("shift+1")
+        self.expect_prompt("EDIT recall", "A>TYPE SMOKE.TXT")
+        # ^X with the cursor at the end clears the line.  (^U cannot be
+        # typed on the +3: EXTEND+U is ']', as on Locomotive's keyboard.)
+        self.key("shift+sym+x", 50)
+        self.expect_prompt("^X clears", "A>")
+
+        # Insert in the middle: TYE -> ^B (start), right x2, P.
+        self.mcp.call("type", {"text": "TYE SMOKE.TXT"})
+        self.edit_keys("shift+sym+b", "shift+8", "shift+8")
+        self.mcp.call("type", {"text": "P"})
+        self.expect_prompt("insert", "A>TYPE SMOKE.TXT")
+        self.run_and_expect_smoke("inserted line")
+
+        # Delete under the cursor (^G) and to the end (^K).
+        self.mcp.call("type", {"text": "TYPEX SMOKE.TXTJUNK"})
+        self.edit_keys("shift+sym+b", *["shift+8"] * 4, "shift+9")
+        self.edit_keys(*["shift+8"] * 10, "shift+sym+k")
+        self.expect_prompt("^G and ^K", "A>TYPE SMOKE.TXT")
+        self.run_and_expect_smoke("^G/^K line")
+
+        # Delete to the start (^X), then backspace mid-line.
+        self.mcp.call("type", {"text": "JUNKTYPE SMOKEE.TXT"})
+        self.edit_keys("shift+sym+b", *["shift+8"] * 4, "shift+sym+x")
+        self.edit_keys("shift+sym+b",            # at the start, ^B goes to the end
+                       *["shift+5"] * 4, "shift+0")
+        self.expect_prompt("^X and backspace", "A>TYPE SMOKE.TXT")
+        self.run_and_expect_smoke("^X/backspace line")
+
     def run_setdef(self) -> None:
         """SETDEF's options, and the CCP behaviour they control.
 
@@ -3244,6 +3318,7 @@ class Smoke:
         self.run_ccp_dma()
         self.run_dump()
         self.run_inptest_edit()
+        self.run_line_editor()
         self.run_ccp_names()
         self.run_era()
         self.run_ren()

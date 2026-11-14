@@ -539,9 +539,46 @@ class PromptEscapeEcho(unittest.TestCase):
     def test_f10_echoes_escape(self):
         text = source("src/bdos/bdos.zpa")
         self.assertIn("cp 0x1B", text)
-        body = text[text.index(".rd_esc:"):text.index(".rd_done:")]
-        self.assertIn("ld c, 0x1B", body)
-        self.assertIn("call con_out", body)
+        body = text[text.index("bf_f10:"):text.index(".ins:")]
+        # ESC is the last control code tested; anything else is ignored, and
+        # ESC itself is echoed (not stored) so BREAK sequences reach the screen.
+        self.assertRegex(body, r"cp 0x1B\s+jr nz, \.loop\s+(;[^\n]*\s+)*call f10_putc")
+
+
+class LineEditor(unittest.TestCase):
+    """F10 is the CP/M 3 line editor, with ^W / cursor-up recall."""
+
+    def body(self):
+        text = source("src/bdos/bdos.zpa")
+        return text[text.index("bf_f10:"):text.index("; f10_putc")]
+
+    def test_editing_keys_dispatch(self):
+        body = self.body()
+        for code, label in (("0x7F", ".bs"), ("0x08", ".bs"), ("0x01", ".left"),
+                            ("0x06", ".right"), ("0x02", ".home"),
+                            ("0x07", ".delc"), ("0x0B", ".kill"),
+                            ("0x18", ".cut"), ("0x15", ".discard"),
+                            ("0x12", ".retype"), ("0x17", ".recall"),
+                            ("0x1F", ".recall"), ("0x03", ".ctlc")):
+            self.assertRegex(body, rf"cp {code}\s+j[pr] z, \{label}\b",
+                             f"{code} should go to {label}")
+
+    def test_work_buffer_and_history(self):
+        bdos = source("src/bdos/bdos.zpa")
+        self.assertIn("F10_WORK    equ dd_compare_buf", bdos)
+        bios = source("src/bios/bios.zpa")
+        self.assertIn("F10_HIST    equ 0xBF00", bios)
+        # cold boot clears the history the loader's CCP block overwrote
+        boot = bios[bios.index(".ccp_ok:"):]
+        self.assertIn("ld (F10_HIST), a", boot[:200])
+
+    def test_only_non_empty_lines_are_kept(self):
+        body = self.body()
+        done = body[body.index(".done:"):]
+        self.assertRegex(done, r"or a\s+j[pr] z, \.copy_out\s+ld \(F10_HIST\), a")
+
+    def test_ccp_must_end_below_history(self):
+        self.assertIn("F10_HIST", source("tools/check_ccp.py"))
 
 
 if __name__ == "__main__":

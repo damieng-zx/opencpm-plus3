@@ -197,7 +197,7 @@ loader.
 **System mode (mode 3: banks 4,7,6,3)**:
 - **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers
 - **4000-7FFF**: Bank 7 — C: RAM disk (16K, owned by `RAMDISK.FID`)
-- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, `DD_CHECK_SECTOR` compare buffer at 9E00h, runtime screen/scroll buffers at A000h-A5FFh, row-address table at A700h and CSV/ALV at A740h-A82Ch, BIOS/BDOS scratch at A600h-A6FFh and A82Dh-A83Ch, screen cursor/ESC scratch at A730h-A739h, viewport scratch at A73Ah-A73Fh, loader-staged screen row table at A890h-A8BFh, status-line flag at A8C0h, 24x80 state at A8C1h-A8DFh, `KM_SET_KEY` translation table at A900h-A99Fh, `KM_SET_EXPAND` slots at A9A0h-AD7Fh, FCB shadow at AD80h-ADA3h, submit-file input buffer at ADA4h-AFA3h, staged `CCP.COM` at B000h-BFFFh
+- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, `DD_CHECK_SECTOR` compare buffer at 9E00h, runtime screen/scroll buffers at A000h-A5FFh, row-address table at A700h and CSV/ALV at A740h-A82Ch, BIOS/BDOS scratch at A600h-A6FFh and A82Dh-A83Ch, screen cursor/ESC scratch at A730h-A739h, viewport scratch at A73Ah-A73Fh, loader-staged screen row table at A890h-A8BFh, status-line flag at A8C0h, 24x80 state at A8C1h-A8DFh, `KM_SET_KEY` translation table at A900h-A99Fh, `KM_SET_EXPAND` slots at A9A0h-AD7Fh, FCB shadow at AD80h-ADA3h, submit-file input buffer at ADA4h-AFA3h, staged `CCP.COM` at B000h-BEFFh (the loader's 4K window runs to BFFFh, but `CCP.COM` must end below BF00h), F10's previous line (`F10_HIST`, ^W recall) at BF00h-BFFFh
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
 
 **Screen access (mode 2: banks 4,5,6,3)**:
@@ -229,6 +229,10 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - **FCB access**: `setup_fcb` copies 36-byte FCB from TPA to `fcb_buf` (common memory).
   BDOS works with `fcb_buf` via IX. `writeback_fcb` copies back on success.
 - **String/buffer access**: `read_user_byte`/`write_user_byte` switch banks per byte.
+- **Interrupts**: the BDOS runs with interrupts on, but `tpa_in`/`tpa_out`
+  (used by `read_user_byte`, `write_user_byte` and `copy_xfer`) turn them off
+  while the TPA is paged in, so a tick never vectors through a program's
+  0038h mid-BDOS (ZSID/SID/DDT keep their RST 7 breakpoint handler there).
 - **DMA transfers**: `copy_record_to_tpa`/`copy_record_from_tpa` in FDC driver.
 - **Directory→DMA**: `copy_to_user` for search result delivery.
 
