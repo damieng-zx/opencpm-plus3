@@ -663,16 +663,9 @@ writeback_fcb:
 ; @clobbers bc
 ; @end
 read_user_byte:
-    ld a, (motor_flag)
-    or BANK0_1FFD
-    call write_1ffd                     ; switch to TPA
+    call tpa_in                    ; TPA in, interrupts off
     ld a, (%addr)                  ; read byte from TPA
-    push af
-    ld a, (motor_flag)
-    or BANK1_1FFD
-    call write_1ffd                     ; switch back to system
-    pop af
-    ret
+    jp tpa_out                     ; system back, interrupts as they were
 
 
 ; ------------------------------------------------------------------
@@ -686,17 +679,10 @@ read_user_byte:
 ; @end
 write_user_byte:
     push af                        ; save %byte
-    ld a, (motor_flag)
-    or BANK0_1FFD
-    call write_1ffd                     ; switch to TPA
+    call tpa_in                    ; TPA in, interrupts off
     pop af
     ld (%addr), a                  ; write byte to TPA
-    push af
-    ld a, (motor_flag)
-    or BANK1_1FFD
-    call write_1ffd                     ; switch back to system
-    pop af
-    ret
+    jp tpa_out                     ; system back, interrupts as they were
 
 
 ; ------------------------------------------------------------------
@@ -773,6 +759,7 @@ copy_xfer:
     ld (_cfu_src), hl
     ld (_cfu_dst), de
     ld (_cfu_cnt), bc
+    call tpa_in                    ; interrupts off for the whole copy
 copy_xfer_loop:
     ld bc, (_cfu_cnt)
     ld a, b
@@ -815,16 +802,18 @@ copy_xfer_b2:
     ld (_cfu_dst), de
     jr copy_xfer_loop
 copy_xfer_done:
-    ; Leave the system banks mapped: the last TO_USER chunk ran in TPA mode.
-    ld a, (motor_flag)
-    or BANK1_1FFD
-    call write_1ffd   ; keep call: shrinking would move the pinned common addresses
-    ret
+    ; Leave the system banks mapped (the last TO_USER chunk ran in TPA
+    ; mode) and interrupts as they were.
+    jp tpa_out
 
 _cfu_src:   dw 0
 _cfu_dst:   dw 0
 _cfu_cnt:   dw 0
 _cfu_chunk: dw 0
+
+; The TPA helpers above shrank when they moved their paging into tpa_in/
+; tpa_out; this pad keeps copy_record_to_tpa where RAMDISK.FID expects it.
+    ds 0xF97A - $, 0
 
 
 ; ==========================================================================
@@ -1273,6 +1262,56 @@ bank_sel_cpm:
 .sys:
     ld a, 1                        ; the system bank is bank_sel's non-zero
     jp bank_sel
+
+
+; ==========================================================================
+; tpa_in / tpa_out — page the TPA in for a BDOS user-memory access
+; ==========================================================================
+;
+; The BDOS runs with interrupts on, but while the TPA is paged in the 50 Hz
+; tick vectors through the *program's* 0038h.  A debugger (ZSID, SID, DDT)
+; keeps its RST 7 breakpoint handler there, so a tick inside a BDOS copy
+; would look like a breakpoint in the middle of the BDOS.  tpa_in therefore
+; turns interrupts off (remembering whether they were on) before paging the
+; TPA in, and tpa_out turns them back on after paging the system back.
+; They do not nest: read_user_byte, write_user_byte and copy_xfer each use
+; one pair and call nothing that uses another.
+
+; @proc tpa_in
+; @clobbers af,bc
+; @end
+tpa_in:
+    ld a, i                        ; P/V = IFF2: interrupts were on
+    di                             ; lint-exempt: ie
+    ld a, 0
+    jp po, .was_off
+    inc a
+.was_off:
+    ld (tpa_ie), a
+    ld a, (motor_flag)
+    or BANK0_1FFD
+    jp write_1ffd
+
+; @proc tpa_out
+; @out   a                      ; preserved
+; @clobbers bc
+; @end
+tpa_out:
+    push af
+    ld a, (motor_flag)
+    or BANK1_1FFD
+    call write_1ffd
+    ld a, (tpa_ie)
+    or a
+    jr z, .stay_off
+    pop af
+    ei                             ; lint-exempt: ie
+    ret
+.stay_off:
+    pop af
+    ret
+
+tpa_ie:     db 0                   ; 1 = tpa_in found interrupts on
 
 
 ; ==========================================================================
