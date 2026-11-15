@@ -217,8 +217,17 @@ must report no match.  `UNDELETE DUMP.COM R` plus `Y` must report
 *run* with `DUMP DUMP.COM` and must actually dump its own code, which proves
 the executable survived the round trip rather than just the directory entry.
 
-16-bit block numbers are checked with the PCW DS/DD image built as
-`build/cpm3_720.dsk` (80 cylinders x 2 sides, 2K blocks, DSM=351).  The
+`CRC.COM` is checked against the host, not against itself: `CRC SMOKE.TXT`
+must print a value equal to `zlib.crc32` of the file's `RC * 128` bytes as
+they sit on the image, so the tool and the standard are cross-checked rather
+than agreeing by construction. `CRC *.COM` must hash every match (the output
+is checked for `CRC.COM`, `DUMP.COM` and `STAT.COM`), and a bare `CRC` must
+print its usage. The strongest check is incidental: `PMAUTOAE.COM`'s line
+reads `45EB98C6`, which is the CRC-32 `tools/fetch_pmautoae.py` verifies the
+download against, so a real 31 KB third-party binary agrees with an
+independently-recorded value.
+
+16-bit block numbers are checked with the PCW DS/DD image built as`build/cpm3_720.dsk` (80 cylinders x 2 sides, 2K blocks, DSM=351).  The
 runner mounts it on B: after boot, lists and types `HELLO16.TXT`, then runs
 `DISKTEST 30` (T30 is the 16-bit block test, skipped when B: is not a
 2K-block/16-bit-block disk).  T30 creates a file, writes 20 records, checks

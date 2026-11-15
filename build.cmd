@@ -129,6 +129,8 @@ if errorlevel 1 goto :fail
 if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\undelete.com src\tools\undelete.asm
 if errorlevel 1 goto :fail
+%SJASMPLUS% --raw=build\crc.com src\tools\crc.asm
+if errorlevel 1 goto :fail
 
 echo   Assembling FID modules...
 %SJASMPLUS% --raw=build\RAMDISK.FID src\fid\ramdisk.asm
@@ -172,10 +174,10 @@ if defined PMAUTOAE_FILE echo   PMAUTOAE.COM: %PMAUTOAE_FILE% (local copy)
 :: The test image is a 720K PCW DS/DD disk (boot sector and loader built
 :: with -DDS720), so there is room for third-party toolkits such as
 :: PMAUTOAE.COM on the same disk as the system.
-python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\setkeys.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\erase.com build\dir.com build\device.com build\edit.com build\undelete.com !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3.dsk --boot build\bootsect.bin --system build\loader.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\setkeys.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\erase.com build\dir.com build\device.com build\edit.com build\undelete.com build\crc.com !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
-python3 tools\mkdsk.py create build\cpm3-test.dsk --format 720k --boot build\bootsect720.bin --system build\loader720.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\setkeys.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\erase.com build\dir.com build\device.com build\edit.com build\undelete.com build\bdostest.com build\xtetest.com build\disktest.com build\fixtest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com build\biostest.com build\chaintst.com build\fonttest.com build\screenbm.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !PMAUTOAE_FILE! !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3-test.dsk --format 720k --boot build\bootsect720.bin --system build\loader720.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\setkeys.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\erase.com build\dir.com build\device.com build\edit.com build\undelete.com build\crc.com build\bdostest.com build\xtetest.com build\disktest.com build\fixtest.com build\termtest.com build\systest.com build\regtest.com build\inptest.com build\biostest.com build\chaintst.com build\fonttest.com build\screenbm.com src\test\smoke.txt src\test\page.txt src\test\smoke.sub src\test\param.sub !PMAUTOAE_FILE! !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 python3 tools\mkdsk.py create build\cpm3_720.dsk --format 720k --add src\test\hello16.txt
@@ -185,7 +187,7 @@ if errorlevel 1 goto :fail
 :: PCW DS/DD disc with the -DDS720 boot pair.  It carries nothing extra yet;
 :: the point is the room (about 570K free vs 57K on the 180K disc) for a
 :: later larger tool set.  Still no *TEST.COM programs and no PMAUTOAE.COM.
-python3 tools\mkdsk.py create build\cpm3-dist720.dsk --format 720k --boot build\bootsect720.bin --system build\loader720.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\setkeys.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\erase.com build\dir.com build\device.com build\edit.com build\undelete.com !REF_BINS! !EXTRA_FILES!
+python3 tools\mkdsk.py create build\cpm3-dist720.dsk --format 720k --boot build\bootsect720.bin --system build\loader720.bin --add build\CPM3.SYS build\CPM3C.SYS build\CCP.COM src\bios\font51.bin src\bios\font32.bin src\bios\font64.bin build\RAMDISK.FID build\date.com build\showxdpb.com build\dump.com build\setdef.com build\submit.com build\screen.com build\set24x80.com build\setkeys.com build\format.com build\diskcopy.com build\stat.com build\sysgen.com build\erase.com build\dir.com build\device.com build\edit.com build\undelete.com build\crc.com !REF_BINS! !EXTRA_FILES!
 if errorlevel 1 goto :fail
 
 for %%A in (build\loader.bin) do echo   Loader: %%~zA bytes

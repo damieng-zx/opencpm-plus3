@@ -23,6 +23,7 @@ import subprocess
 import sys
 import threading
 import time
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -3385,6 +3386,54 @@ class Smoke:
             except OSError:
                 pass
 
+    def run_crc(self) -> None:
+        """CRC.COM: the value must match zlib.crc32 on the host.
+
+        That is the whole reason for choosing CRC-32 over a faster CRC-16, so
+        the check is a cross-check rather than self-consistent: the runner
+        computes the expected value from the same bytes and compares.
+        """
+        self.log("CRC")
+        # SMOKE.TXT is a fixture with known content.
+        self.command("CRC", 900)
+        self.expect("CRC usage", "CRC filespec")
+
+        self.command("CRC SMOKE.TXT", 1200)
+        line = [l for l in self.text().splitlines() if l.startswith("SMOKE.TXT")]
+        if not line:
+            raise SmokeError("CRC printed no line for SMOKE.TXT:\n" + self.text())
+        got = line[-1].split()[1]
+
+        # The expected value must be computed over exactly the records CP/M
+        # holds, i.e. RC * 128 bytes of the file as it sits on the image - not
+        # the source fixture (which is shorter) and not the block-padded
+        # length (which is longer).
+        tools = str(ROOT / "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import mkdsk  # noqa: E402
+
+        image = mkdsk.DSKImage().load(self.dsk)
+        records = None
+        for i in range(image.dir_entries):
+            entry = image._read_dir_entry(i)
+            if entry[1:12] == b"SMOKE   TXT" and entry[0] != 0xE5:
+                rc = entry[15] or 128
+                records = image.read_cpm_file("SMOKE.TXT")[:rc * 128]
+                break
+        if records is None:
+            raise SmokeError("SMOKE.TXT is not on the image")
+        want = f"{zlib.crc32(records) & 0xFFFFFFFF:08X}"
+        if got != want:
+            raise SmokeError(f"CRC SMOKE.TXT gave {got}, zlib says {want}")
+
+        # A wildcard must hash every match, and CRC.COM itself is one.
+        self.command("CRC *.COM", 4000)
+        screen = self.text()
+        for name in ("CRC.COM", "DUMP.COM", "STAT.COM"):
+            if name not in screen:
+                raise SmokeError(f"CRC *.COM did not hash {name}:\n{screen}")
+
     def run(self, quick: bool = False) -> None:
         self.boot()
         self.run_loader_stage()
@@ -3423,6 +3472,7 @@ class Smoke:
         self.run_ccp_external()
         self.run_pmautoae()
         self.run_stat()
+        self.run_crc()
         # Check before the scratch-image format test reboots the machine.
         self.check_bank6_sentinels()
         self.check_bank5_code("after the app tests")

@@ -310,6 +310,13 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   entry, restores the byte, writes back with `DD_WRITE` and verifies with
   `DD_CHECK_SECTOR`, then calls F13 to drop the BDOS's cached directory
   sector.  8-bit block layouts only (a 720K disc is refused), A:/B: only
+- `src/tools/crc.asm` — `CRC.COM`, per-file CRC-32. The standard reflected
+  CRC (poly `EDB88320h`, init/final `FFFFFFFF`), byte-table driven, so the
+  value matches `zlib.crc32` and friends on a host. F17/F18 collect the
+  matching names first and the files are hashed afterwards: F15/F20 reset the
+  BDOS's cached drive and directory state, so a search paused for file I/O
+  does not resume correctly. The value covers `RC * 128` bytes, the records
+  CP/M actually holds
 - `src/tools/diskcopy.asm` — `DISKCOPY.COM`, raw sector copy between A:/B:
   (including the same drive twice): `DD_LOGIN` detects the source layout,
   `DD_READ_ID` captures each source track's ID order, then `DD_FORMAT` plus
