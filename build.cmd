@@ -95,6 +95,12 @@ if errorlevel 1 goto :fail
 %SJASMPLUS% --raw=build\screenbm.com --lst=build\screenbm.lst src\test\screenbm.asm
 if errorlevel 1 goto :fail
 
+:: CKBENCH is the checksum benchmark; tools/ckbench.py runs it and reads the
+:: phase markers through a memory watchpoint.  It is a tool, not a test, so it
+:: goes on no image.
+%SJASMPLUS% --raw=build\ckbench.com src\test\ckbench.asm
+if errorlevel 1 goto :fail
+
 echo   Assembling utilities...
 %SJASMPLUS% --raw=build\date.com build\zpa\date.asm
 if errorlevel 1 goto :fail
