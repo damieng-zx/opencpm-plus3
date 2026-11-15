@@ -12,7 +12,7 @@ permissions:
 jobs:
   build-test:
     name: Build and static tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -31,7 +31,7 @@ jobs:
 
   emulator-test:
     name: zx84 emulator smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
