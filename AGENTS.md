@@ -302,6 +302,14 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 - `src/tools/stat.asm` — `STAT.COM`: per-drive free space (F46) and capacity
   (F31/DPB), file sizes and attributes from directory searches (F17/F18),
   and `$R/O`/`$R/W`/`$SYS` attribute changes (F30)
+- `src/tools/undelete.asm` — `UNDELETE.COM`, recovering a file the BDOS
+  deleted. CP/M's delete writes `0E5h` over the first byte of each directory
+  entry, so the name, extents and block pointers survive but F17/F18 skip
+  them; the tool reads the directory sectors with `DD_LOGIN` /
+  `DD_READ_SECTOR`, refuses if any of the file's blocks now belong to a live
+  entry, restores the byte, writes back with `DD_WRITE` and verifies with
+  `DD_CHECK_SECTOR`, then calls F13 to drop the BDOS's cached directory
+  sector.  8-bit block layouts only (a 720K disc is refused), A:/B: only
 - `src/tools/diskcopy.asm` — `DISKCOPY.COM`, raw sector copy between A:/B:
   (including the same drive twice): `DD_LOGIN` detects the source layout,
   `DD_READ_ID` captures each source track's ID order, then `DD_FORMAT` plus

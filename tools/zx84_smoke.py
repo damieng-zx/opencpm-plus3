@@ -3318,6 +3318,73 @@ class Smoke:
         if bad:
             raise SmokeError("FDC retry/error lines:\n" + "\n".join(bad[:20]))
 
+    def run_undelete(self) -> None:
+        """UNDELETE: list a deleted file, restore it, refuse a reused block.
+
+        The restore is the F19 counterpart: CP/M marks an entry deleted by
+        writing E5h over its first byte and leaves the name, extents and
+        block pointers alone, so the tool reads the directory sectors through
+        the XBIOS disc calls and puts a user byte back.
+
+        DUMP.COM is deleted and restored, then *run*, which proves the code
+        came back intact rather than merely reappearing in the directory.
+
+        The test image is 720K, whose directory holds 16-bit block numbers;
+        UNDELETE refuses that layout rather than half-supporting it, so this
+        checks the refusal here and runs the real round trip on a 180K
+        scratch image.
+        """
+        self.log("UNDELETE")
+        self.command("ERA DUMP.COM", 600)
+        self.command("DIR DUMP.COM", 500)
+        self.expect("UNDELETE: file is gone", "No File")
+
+        # The 720K test image: refuse rather than corrupt.
+        self.command("UNDELETE", 700)
+        self.expect("UNDELETE refuses the 16-bit block layout",
+                    "16-bit block numbers", "only the 8-bit")
+
+        # Put DUMP.COM back via a 180K scratch image for the real check.
+        scratch = ROOT / "build" / "undelete-test.dsk"
+        shutil.copyfile(ROOT / "build" / "cpm3.dsk", scratch)
+        old_dsk = self.dsk
+        self.dsk = scratch
+        try:
+            self.boot()
+            self.command("DIR DUMP.COM", 500)
+            self.expect("180K: DUMP.COM is there", "A: DUMP     COM")
+            self.command("ERA DUMP.COM", 600)
+            self.command("DIR DUMP.COM", 500)
+            self.expect("180K: file is gone", "No File")
+
+            self.command("UNDELETE", 700)
+            self.expect("UNDELETE lists the deleted file",
+                        "A: DUMP.COM", "extent 0", "records")
+
+            # A restore needs a specific name.
+            self.command("UNDELETE *.COM R", 700)
+            self.expect("UNDELETE wildcard", "specific name")
+            self.command("UNDELETE NOSUCH.COM R", 700)
+            self.expect("UNDELETE nothing matches", "No deleted file matches")
+
+            self.command("UNDELETE DUMP.COM R", 700)
+            self.command("Y", 900)
+            self.expect("UNDELETE restores", "Restored DUMP.COM")
+
+            self.command("DIR DUMP.COM", 500)
+            self.expect("the file is back", "A: DUMP     COM")
+            # It must still be a working executable, not just an entry.
+            self.command("DUMP DUMP.COM", 900)
+            self.expect("the restored binary runs", "00C8:")
+            self.key("enter")
+            self.command("", 400)
+        finally:
+            self.dsk = old_dsk
+            try:
+                scratch.unlink()
+            except OSError:
+                pass
+
     def run(self, quick: bool = False) -> None:
         self.boot()
         self.run_loader_stage()
@@ -3374,6 +3441,9 @@ class Smoke:
         self.run_bbcbasic()
         # The 720K distribution is another different file; likewise.
         self.run_dist720()
+        # UNDELETE needs a 180K image (16-bit block directories are refused),
+        # so it boots its own scratch copy and therefore runs last.
+        self.run_undelete()
         self.check_fdc()
         self.log("all checks passed")
 

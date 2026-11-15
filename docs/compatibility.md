@@ -169,6 +169,51 @@ not document; the package is therefore recorded as a known issue rather than
 automated.
 
 
+## How CP/M deletes a file, and what UNDELETE relies on
+
+Worth recording because it is what makes `UNDELETE.COM` safe rather than
+lucky, and because the save/restore tests exercise it indirectly.
+
+Deleting is **one byte**. `F19` walks the directory, and for every entry that
+matches it clears the entry's block bits in the in-memory allocation vector
+and writes `0E5h` over the entry's first byte (the user number).  The 31 bytes
+that follow — name, file type, extent, S2, record count, the 16 block
+pointers — are left exactly as they were.  `0E5h` is not a separate "deleted"
+marker: it is the same filler byte a freshly formatted disc is full of, and
+because it is outside the legal user range (0-15) the BDOS can never match it,
+so the entry is simply invisible.  That is also why allocating a new file can
+reuse the slot: it is the same test, "first byte is E5h, therefore free".
+
+So `F17`/`F18` skip such entries and no BDOS call can list them again, but the
+contents are still addressable at the sector level — which is what
+`UNDELETE.COM` does with `DD_READ_SECTOR`.  Restoring is writing a user number
+back over the `E5h`.
+
+Three consequences the tool has to handle, all of them properties of CP/M
+rather than of this implementation:
+
+- **The user number is gone.** `E5h` replaced it, so the tool asks (default 0)
+  and offers `U=n`.
+- **The blocks may have been reused.** The delete freed them in the allocation
+  vector, so anything written afterwards can own them; restoring would then
+  produce a file whose data is someone else's. The tool therefore scans every
+  live entry for a block conflict and refuses.
+- **All extents or none.** A file is several directory entries; restoring some
+  of them returns a truncated file, so the tool restores every matching entry
+  together.
+
+`?` is the other thing that looks like it belongs here and does not: in an FCB
+it is the wildcard, and F19 is given `EX = '?'` so a delete sweeps every
+extent.  Nothing about `?` is written to the disc.
+
+This system makes one part easier than on real hardware: the allocation vector
+is **in memory only**, rebuilt by `build_alv` from the directory on every
+login, so after the raw sector write the tool only has to call `F13` to drop
+the BDOS's cached directory sector and have the ALV recomputed.  There is no
+on-disc bitmap to keep in step.  The cache is also the hazard: a pending
+deblocked write must not land after the raw write, which is why `F13` comes
+last and flushes first.
+
 ## WordStar 3.0 display width
 
 WordStar 3.0 stores its screen size in two bytes at `0248h` (rows) and

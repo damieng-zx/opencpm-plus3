@@ -206,6 +206,17 @@ the first `0000:` line up to the line terminator, the `SMOKE OK..` ASCII
 gutter, the line boundary at `0006:`/`007E:` or `0078:`, and the all-1Ah
 record tail, then restore 51 columns.
 
+`UNDELETE.COM` is checked last, because it boots a 180K scratch image.  On
+the 720K test image it must refuse the layout (`16-bit block numbers`,
+`only the 8-bit`), since it will not half-support a directory it cannot
+safely scan for block conflicts.  On the 180K scratch image `DUMP.COM` is
+erased, then `UNDELETE` must list it (`A: DUMP.COM`, `extent 0`, a record
+count); `UNDELETE *.COM R` must refuse a wildcard and `UNDELETE NOSUCH.COM R`
+must report no match.  `UNDELETE DUMP.COM R` plus `Y` must report
+`Restored DUMP.COM` and `DIR` must list it again; the restored file is then
+*run* with `DUMP DUMP.COM` and must actually dump its own code, which proves
+the executable survived the round trip rather than just the directory entry.
+
 16-bit block numbers are checked with the PCW DS/DD image built as
 `build/cpm3_720.dsk` (80 cylinders x 2 sides, 2K blocks, DSM=351).  The
 runner mounts it on B: after boot, lists and types `HELLO16.TXT`, then runs
