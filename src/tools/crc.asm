@@ -707,8 +707,13 @@ CRC_STEP        macro
 ; addresses the table entry.  No call per byte.
 ;
 ; The old form kept the pointer and count in fb_ptr/fb_left and called
-; crc32_byte for every byte, ~419 T/byte.  This is the register-resident shape
-; tools/ckbench.py measures at ~281 T/byte.
+; crc32_byte for every byte.  Measured in isolation, with no disk or BDOS in
+; the loop (8K, markers around the fold only):
+;
+;     old 558 T/byte (6.1 KB/s)   ->   new 311 T/byte (11.0 KB/s)
+;
+; tools/ckbench.py measures a tighter CRC-32 byte-table loop at 282 T/byte;
+; the difference is this routine's extra `inc hl` per table byte.
 ;
 ; The walk is 256 bytes at a time so `djnz` can be the inner counter; the page
 ; count and the final partial page arrive in B and C.
