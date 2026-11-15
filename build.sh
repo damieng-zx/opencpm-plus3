@@ -64,6 +64,10 @@ echo "  Assembling test programs..."
 # SCREENBM is the screen benchmark; tools/screen_bench.py reads the phase
 # addresses from its listing, so the --lst is not optional.
 "$SJASMPLUS" --raw=build/screenbm.com --lst=build/screenbm.lst src/test/screenbm.asm
+# CKBENCH is the checksum benchmark; tools/ckbench.py runs it and reads the
+# phase markers through a memory watchpoint.  It is a tool, not a test, so it
+# goes on no image.
+"$SJASMPLUS" --raw=build/ckbench.com src/test/ckbench.asm
 
 echo "  Assembling utilities..."
 "$SJASMPLUS" --raw=build/date.com build/zpa/date.asm

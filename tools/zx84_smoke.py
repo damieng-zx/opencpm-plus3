@@ -2470,9 +2470,9 @@ class Smoke:
         self.mcp.call("run", {"frames": 800})
         self.wait_for(["A>"], frames=500)
         self.command("dir", 1200)
-        self.expect("CCP DIR after stale DMA", "EDIT     COM", "RPED     SUB")
-        self.command("dump rped.sub", 1200)
-        self.expect("CCP command tail after stale DMA", "basic rped")
+        self.expect("CCP DIR after stale DMA", "EDIT     COM", "SMOKE    TXT")
+        self.command("dump smoke.txt", 1200)
+        self.expect("CCP command tail after stale DMA", "SMOKE OK")
 
         # F44's multi-sector count is also per-program state.  Leave it at 8
         # and warm boot; the CCP must put it back to 1 or DUMP's 128-byte
@@ -2483,8 +2483,8 @@ class Smoke:
                                        "value": f"{label_address('warm_boot_stub'):04X}"})
         self.mcp.call("run", {"frames": 800})
         self.wait_for(["A>"], frames=500)
-        self.command("dump rped.sub", 1200)
-        self.expect("CCP reset multi-sector count", "basic rped")
+        self.command("dump smoke.txt", 1200)
+        self.expect("CCP reset multi-sector count", "SMOKE OK")
 
     def run_ccp_names(self) -> None:
         """Short command names, DIR/DIRSYS and the unknown-command echo."""

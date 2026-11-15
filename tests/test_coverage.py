@@ -38,7 +38,7 @@ def harnesses() -> list[Path]:
     """The scripts that drive the emulator (some are local/optional)."""
     names = ("zx84_smoke.py", "zx84_negative.py", "zx84_regtest.py",
              "zx84_dri.py", "zx84_pip.py", "zx84_diskit.py",
-             "zx84_realworld.py", "screen_bench.py")
+             "zx84_realworld.py", "screen_bench.py", "ckbench.py")
     return [ROOT / "tools" / name for name in names
             if (ROOT / "tools" / name).exists()]
 

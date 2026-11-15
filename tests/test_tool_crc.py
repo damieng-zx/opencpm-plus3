@@ -36,9 +36,10 @@ class Crc32Constants(unittest.TestCase):
 
     def test_table_stores_four_byte_entries(self):
         body = source("src/tools/crc.asm")
-        # index * 4 to reach the entry, then four bytes read.
+        # index * 4 to reach the entry, whose page is the table's page plus
+        # the high byte of that offset; then four bytes read.
         self.assertIn("add hl, hl", body)
-        self.assertIn("ld de, CRC32_TAB", body)
+        self.assertIn("add a, CRC32_TAB / 256", body)
 
 
 class SearchBeforeHash(unittest.TestCase):
