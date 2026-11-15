@@ -533,34 +533,57 @@ crc_read_all:
     ld hl, 0xFFFF
     ld (crc32 + 0), hl
     ld (crc32 + 2), hl
-    ; One record per F20 call, DMA fixed at BUFFER.
-    ld de, BUFFER
-    ld c, F_SETDMA
+
+    ; F44 sets a multi-record count, so one F20 moves up to BUFLEN/128
+    ; records instead of one: a 140K file then needs ~11 BDOS calls rather
+    ; than 1100.  The BDOS advances the DMA per record while the count is
+    ; above 1, so the DMA is reset to BUFFER after each call.
+    ld de, BUFLEN / 128
+    ld c, F_MULTI
     call BDOS
+    call set_dma_buffer
 
 .read:
     ld de, work_fcb
     ld c, F_READ
     call BDOS
+    ; A = 0 (OK), 1 (EOF), 0xFF (error).  By CP/M 3's contract H is 0 on
+    ; success and holds the record count only when the call stopped early, so
+    ; a successful call moved the whole requested count.
     or a
-    jr z, .fold                   ; 0 = another record
+    jr z, .full
     cp 1
     jr z, .at_eof
     ld de, msg_read_error
     call pstr
     scf
     ret
-.at_eof:
-    ; A = 1: EOF.  H still holds the number of records this call moved
-    ; (0 when the file ended on a record boundary), so there is nothing
-    ; left to fold.
-    jr .ok
-.fold:
+.full:
+    ld bc, BUFLEN
     ld hl, BUFFER
-    ld bc, 128
     call fold_block
-    call set_dma_buffer           ; F20 advanced it; keep reading at BUFFER
+    call set_dma_buffer           ; F20 advanced it; read the next bufferful
     jr .read
+.at_eof:
+    ; A short final read: H holds the records moved.  H = 0 means the file
+    ; ended exactly on a buffer boundary, and the previous call already
+    ; folded everything.
+    ld a, h
+    or a
+    jr z, .ok
+    ld l, a
+    ld h, 0
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl                    ; * 128
+    ld b, h
+    ld c, l
+    ld hl, BUFFER
+    call fold_block
 
 .ok:
     ; Final XOR, as the standard CRC-32 specifies.
@@ -583,11 +606,15 @@ crc_read_all:
     or a
     ret
 
-; ; fold_block - fold BC bytes at HL into crc32 and the additive sum
+; fold_block - fold BC bytes at HL into crc32
 ;   In:       HL = data, BC = length
 ;   Clobbers: everything
 ;
 ; The loop state lives in memory because crc32_byte uses every register.
+; That costs about 419 T-states per byte against the 281 a fully
+; register-resident loop reaches (tools/ckbench.py measures the latter), but
+; the BDOS read overhead per record is larger still, so the simple form is
+; kept.
 fold_block:
     ld (fb_ptr), hl
     ld (fb_left), bc
@@ -857,6 +884,8 @@ fb_ptr:         dw 0
 fb_left:        dw 0
 trim_end:       db 0
 tab_ptr:        dw 0
+moved:          db 0
+moved_n:        db 0
 match_count:    db 0
 tm_src:         dw 0
 tm_dst:         dw 0
