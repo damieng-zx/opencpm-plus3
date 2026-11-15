@@ -22,7 +22,7 @@ checks that the stage-2 loader staged the three fonts and `RAMDISK.FID`
 byte-for-byte in bank 6 (plus `LF_FLAGS`/`LF_CCP_LEN`), fills the remaining
 free bank-6 gaps with a sentinel and verifies they survive the app runs,
 then runs
-`SYSTEST`, `XTETEST`, `TERMTEST`, `DISKTEST`, `BDOSTEST` (now including an end-to-end
+`SYSTEST`, `XTETEST`, `TERMTEST`, `DISKTEST`, `BDOSTEST` (including an end-to-end
 `F59` overlay load and an `F111` print-block check), `BIOSTEST`, `CHAINTST`, `FONTTEST` (every printable code at 32, 51 and 64 columns,
 including the 64-column frame pixels),
 and the main CCP flows, and asserts the 51x24 character buffer plus an empty
@@ -149,7 +149,7 @@ wildcards, the mismatch message and the existing-target question), `USER`
 junk rejection, restore to 0),
 `DATE`, invalid `D:`, and the C: prompt. They also verify that `CCP.COM` is
 on the disk and staged byte-for-byte at `CCP_STAGE` (bank 6, B000h), and that
-`CPM3.SYS` no longer embeds the CCP image. `CPM3C.SYS` is staged at `SYS2_STAGE` (bank 5, 62C0h):
+`CPM3.SYS` does not embed the CCP image. `CPM3C.SYS` is staged at `SYS2_STAGE` (bank 5, 62C0h):
 the bank-5 screen code must match the file byte for byte both after boot
 and after the application tests (nothing may write into it), and `init`
 copies the common stub behind it to F600h. `SCREEN 64` is checked against the
@@ -482,7 +482,7 @@ Require all of:
 - `TAB:` followed by `A       B` (`A` in column 0, `B` in column 8)
 - `DELIM PASS`
 
-`SYSTEST` combines the old STKTEST, P0TEST, TABTEST and DELIMTES checks.
+`SYSTEST` covers the stack, page-zero, tab and delimiter checks.
 A stack failure stops the run; the other checks continue after a failure.
 
 Then run `DIR`: the listing must be normal.  A garbled/run-on listing means
@@ -717,8 +717,8 @@ T23/T27/T28 cover the F44 multi-sector path: T23 reads four records of
 single-record reads; T27/T28 write four records in one `F21` to A: and C:
 and read each marker back.
 
-`BDOSTEST` also reports the four calls that previously had only source-level
-coverage: `F37 RESETDRV : PASS` checks that resetting A: clears its login bit
+`BDOSTEST` also reports the four calls that have no on-disk program of their
+own: `F37 RESETDRV : PASS` checks that resetting A: clears its login bit
 and that a subsequent F31 logs it in again, `F98 CLEANUP : PASS` checks the
 no-op clean-up contract, `F107 SERIAL : PASS` compares the six bytes written
 to the TPA buffer with `OPNCP3`, and `F112 PRTBLK : PASS` checks that the

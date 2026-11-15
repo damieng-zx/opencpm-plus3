@@ -85,8 +85,8 @@ DI not yet asserted.
 - Records what it staged in `LF_FLAGS`/`LF_CCP_LEN` in bank 6 (`A860h`),
   which survive the system-image copy into bank 4.
 - Finally finds `CPM3    SYS`, walks its allocation map to `BIOS_ADDR`, and
-  jumps there.  Because the common stub is no longer inside `CPM3.SYS`, the
-  head can use the whole `C000-FFFF` window (see *Image headroom* below).
+  jumps there.  The common stub is a separate file, so the head can use the
+  whole `C000-FFFF` window (see *Image headroom* below).
 
 The head lands in **bank 3** at `C000-FFFF` because that's what mode 2 maps
 there; the common stub waits in bank 5 behind the screen code.
@@ -128,72 +128,57 @@ addresses before computing the file offsets.
 
 | Region                  | Used   | Window               | Slack |
 |-------------------------|--------|----------------------|-------|
-| `CPM3.SYS` head         | 15,580 | 16,384 (`C000-FFFF`) | 804   |
-| common stub             | 1,785  | 2,560 (`F600-FFFF`)  | 775   |
+| `CPM3.SYS` head         | 15,345 | 16,384 (`C000-FFFF`) | 1,039 |
+| common stub             | 1,828  | 2,560 (`F600-FFFF`)  | 732   |
 | bank-5 screen code      | 2,602  | 7,488 (`62C0-7FFF`)  | 4,886 |
-| `CPM3C.SYS` (both)      | 4,387  | 7,168 (staging)      | 2,781 |
+| `CPM3C.SYS` (both)      | 4,430  | 7,168 (staging)      | 2,738 |
 | loader (180K)           | 1,399  | 8,704 (17 sectors)   | 7,305 |
 | loader (720K, `-DDS720`)| 1,410  | 8,704 (17 sectors)   | 7,294 |
 
-The build prints both budgets on every run (`tools/check_layout.py`); the
+The build prints these budgets on every run (`tools/check_layout.py`); the
 table is a snapshot.
 
 Total code capacity is `16,384 + 2,560 = 18,944` bytes plus whatever
-screen code runs from bank 5, up from 16,058 before the split. The old
-326-byte ceiling is gone.
+screen code runs from bank 5.
 
 The **bank-5 screen code** (`src/bios/screen5.zpa`) is every screen routine,
 or routine tail, that runs with the screen paged in: glyph rendering, the
-scroll and clear fast paths, the 24x80 buffer edits and the page flip.  The
-24x80 work in early November 2026 left the head with 243 bytes spare;
-moving this code freed about 2.5K.  Bank 4 keeps the entry points as short
-stubs (`call _page_in / jp X_b5`), so callers did not change, and the
-escape parser and cursor logic, which run paged out, stay in bank 4.  It
-costs no speed: banks 4-7 are all contended on the +2A/+3, so instruction
-fetches cost the same in either bank, and the stubs keep the single
-page-in/page-out pair each operation already had.  Two rules keep it safe,
-and `tools/check_bank5.py` fails the build on either: bank-4 code may only
-name a bank-5 label after `call _page_in`, and bank-5 code may only leave
-with a final `jp _page_out`, never by calling something that switches
-banks.  The smoke test checks that bank 5 still matches `CPM3C.SYS` byte
-for byte after the application tests.  Programs that page bank 5 in
-themselves (`SCR_RUN_ROUTINE` callers) must not write above `5AFF`, which
-was already true of the 24x80 buffer.
+scroll and clear fast paths, the 24x80 buffer edits and the page flip.  Bank 4
+keeps the entry points as short stubs (`call _page_in / jp X_b5`), so callers
+see ordinary routines, and the escape parser and cursor logic, which run paged
+out, stay in bank 4.  It costs no speed: banks 4-7 are all contended on the
++2A/+3, so instruction fetches cost the same in either bank, and the stubs keep
+the single page-in/page-out pair each operation already had.  Two rules keep
+it safe, and `tools/check_bank5.py` fails the build on either: bank-4 code may
+only name a bank-5 label after `call _page_in`, and bank-5 code may only leave
+with a final `jp _page_out`, never by calling something that switches banks.
+The smoke test checks that bank 5 still matches `CPM3C.SYS` byte for byte after
+the application tests.  Programs that page bank 5 in themselves
+(`SCR_RUN_ROUTINE` callers) must not write above `5AFF`, which is where the
+24x80 buffer starts.
 
 The BDOS directory/FCB block (`find_free_block`, `read_dir_entry`,
 `write_dir_entry`, `dir_sector_to_bios`, `search_next_entry`, `match_fcb`,
-`bf_f15`-`bf_f18` and `close_dir_update`) was moved from bank 4 into the
-**tail of the common stub**, after `ccp_run_prog`.  That is what took the
-head from 47 bytes of slack to 650.  The move is safe because those
-routines only ever run in system mode (the BDOS dispatch switches banks
-before calling any handler), and appending them after the fixed layout
-keeps `copy_record_to_tpa/from_tpa`, `ccp_fcb` and `ccp_run_prog` at the
-addresses RAMDISK.FID and the CCP hardcode.
+`bf_f15`-`bf_f18` and `close_dir_update`) is at the end of `src/bdos/bdos.zpa`,
+below `4000h` (`tests/test_boot_split.py` checks this).  It belongs in bank 4
+rather than the common stub because common memory is the scarce one: it is the
+only place for code that must run while the banks change, so its slack is kept
+for that.  The screen colour/maths helpers (`_decode_colour` to
+`_cancel_paging`) live at the end of `src/bios/screen.zpa` for the same reason;
+bank 4 is mapped in screen mode too, so the bank-5 callers of `_mul80` still
+reach it.
 
-Once the `CPM3.SYS`/`CPM3C.SYS` split gave bank 4 about 2K of slack while
-the common stub was down to 23 bytes, the block went **back to bank 4**, at
-the end of `src/bdos/bdos.zpa` (November 2026, before 0.9).  Common memory
-is the scarce one: it is the only place for code that must run while the
-banks change, so its slack is kept for that.  `tests/test_boot_split.py`
-checks the block is below `4000h`.  The screen colour/maths helpers
-(`_decode_colour` to `_cancel_paging`) followed them back to the end of
-`src/bios/screen.zpa`; bank 4 is mapped in screen mode too, so the bank-5
-callers of `_mul80` still reach it.
+Size is kept down by four rules, each enforced by a tool:
 
-A size pass in November 2026 took the head from 16,151 bytes (233 spare)
-to 15,561 and the common stub from 2,556 (4 spare) to 2,528 without
-changing behaviour:
-
-- every `jp` whose target is in range is now `jr`, and `tools/jp2jr.py
-  --check` fails the build if one appears (`--fix` rewrites them);
-- `call X / ret` became `jp X` everywhere, and `z80lint` check 8 keeps it
-  that way (`; keep call` marks the three pinned common-memory exceptions);
-- the XBIOS compare chain became a jump table;
-- repeated sequences became shared helpers: `fdc_send_cmd_hdus`,
-  `fdc_read_result`, `deblock_invalidate`, `setup_select_fcb`,
-  `alv_bit_addr`, `_row_buf_addr`, `_lg_row_addr`, `_clear_char_row`,
-  shared escape-state exits, and `scr_init` finishing through
-  `_clear_screen`.
+- every `jp` whose target is in range is a `jr`, and `tools/jp2jr.py --check`
+  fails the build if one appears (`--fix` rewrites them);
+- `call X / ret` is `jp X`, and `z80lint` check 8 keeps it that way
+  (`; keep call` marks the three pinned common-memory exceptions);
+- the XBIOS compare chain is a jump table;
+- repeated sequences are shared helpers: `fdc_send_cmd_hdus`,
+  `fdc_read_result`, `deblock_invalidate`, `setup_select_fcb`, `alv_bit_addr`,
+  `_row_buf_addr`, `_lg_row_addr`, `_clear_char_row`, shared escape-state exits,
+  and `scr_init` finishing through `_clear_screen`.
 
 Remaining strategies, in order:
 
@@ -209,25 +194,23 @@ Remaining strategies, in order:
    built into the loader and copied to its fixed bank-6 address at boot.
    Bank 6 is mapped for the whole system lifetime, so no call site changes.
    Cost: loader space only (7.4K spare).
-2. **Pack the two boot files if *disk* space runs out.** Note the arithmetic
-   in older revisions was wrong: the head is decompressed into the same 16K
-   `C000-FFFF` window, so packing cannot buy code space.  A ZX0-style
-   container (literal runs, gamma-coded lengths and offsets, reuse of the
-   last offset) shrinks the current 18.2K of boot files to about 13.5K
-   (74%), i.e. ~4.7K more free disk, and the decoder fits in the loader.
-   It also costs one extra disk block today because the 1K-block split would
-   move `CPM3C.SYS` past 2K.
+2. **Pack the two boot files if *disk* space runs out.** Note that packing
+   cannot buy code space: the head is decompressed into the same 16K
+   `C000-FFFF` window.  A ZX0-style container (literal runs, gamma-coded
+   lengths and offsets, reuse of the last offset) shrinks the current 18.2K of
+   boot files to about 13.5K (74%), i.e. ~4.7K more free disk, and the decoder
+   fits in the loader.  It also costs one extra disk block today because the
+   1K-block split would move `CPM3C.SYS` past 2K.
 3. **Use bank 5 for screen work.** Bank 5 is only mapped while the screen
    is paged in and has `5B00-7FFF` (9,472 bytes) free after the
    bitmap/attributes.  The 24×80 virtual buffer (1,920 bytes) lives there,
    and so does the paged-in screen code (`62C0` up, about 4.9K still free).
    New screen code that runs paged in belongs in `screen5.zpa`.
 
-The status line, the 24×80 virtual screen and the fast page flip are
-implemented; together they cost about 1,850 bytes.  The 24×80 buffer lives
-in bank 5 (`5B00-62BF`), not in the image.  A flip shifts each scan line and
-re-renders only the exposed columns, so the code grew but the visible pause
-shrank.
+The status line, the 24×80 virtual screen and the fast page flip cost about
+1,850 bytes.  The 24×80 buffer lives in bank 5 (`5B00-62BF`), not in the
+image.  A flip shifts each scan line and draws only the non-blank cells of
+the exposed strip.
 
 ### Stage 4 — `cold_boot` (`src/bios/bios.zpa`, runs in bank 4)
 

@@ -9,8 +9,9 @@ on the ZX Spectrum +3.
 - **Doesn't work:** the observed failure is described below.
 - **Not yet tested:** candidate software; no claim either way.
 
-Build used for the current results: `CPM3.SYS` 16,107 bytes + `CPM3C.SYS` 2,551 bytes plus `CCP.COM` 3,845 bytes (the CCP is loaded from the disk), no FDC retries.
-Tests were run on 2026-10-28 through the zx84 MCP server; the language results were re-checked on 2026-11-07.
+Results verified on 2026-10-28 through the zx84 MCP server, and the language
+and business packages re-checked on 2026-11-07.  See [boot.md](boot.md#image-headroom-and-the-growth-plan)
+for the current image sizes.
 
 ## ✅ Works
 
@@ -26,25 +27,25 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 | **dBASE II** | 2.43 | Starts, date prompt, dot prompt, `QUIT` returns to `A>` | FCB random I/O, overlays |
 | **Multiplan** | 1.05 | Banner, command bar, 80-column grid; the 24x80 variant flips to the right half | Needs the `MP80` data overlay; terminal escapes leave artifacts |
 | **VEDIT Plus** | 2.33 | CRT installer selects VT-52 and writes `VPLUS.COM`; opens `SMOKE.TXT` and shows the `LINE:`/`FILE:` status line | The installer is interactive; the manifest drives it |
-| **Microsoft COBOL-80** | 4.65 | `COBOL` compiles `=HELLO`, `L80` links it, `HELLO` prints `HELLO, WORLD` | Full chain on a 720K image: the 4.65 set does not fit the 174 KB data area of a 180K disc, and the 4.01 archive has no `CRTDRV.REL` |
+| **Microsoft COBOL-80** | 4.65 | `COBOL` compiles `=HELLO`, `L80` links it, `HELLO` prints `HELLO, WORLD` | Full chain on a 720K image: the set does not fit the 174 KB data area of a 180K disc. Use `mscobol.zip`, which carries `CRTDRV.REL` |
 | **3CLCK** | 2.10 | Extractor writes `CLOCK.FID`/`CLOCK.F64`/`CLOCK.DOC`/`CLOCKCLR.COM`; CLOCKCLR reports the FID state | The clock FID is not loaded at boot; see below |
 | **BDS C** | 1.60 | `CC HELLO.C` compiles to `HELLO.CRL`, `CLINK HELLO` links it, and `HELLO` prints `HELLO, WORLD` | Full chain. `DEFF2.CRL` (the part-II library) must be on the disk or `CLINK` stops at `Missing function(s): PUTCHAR` |
 | **SuperCalc2** | 1.00 | Starts and prints the SuperCalc2 banner/version | Its VT-100 output (`ESC[?3h`, `ESC[2J`, `ESC[H`) is consumed by the [CSI subset](ansi-subset.md), and SGR takes effect: the column-header row draws bright and the current-column marker reversed |
-| **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Was hanging before the page-zero memory-ceiling fix |
+| **Microsoft BASIC-80** | 5.21 | Banner, `Ok` prompt, runs `HELLO.BAS` and prints `REAL OK` | Needs the page-zero memory ceiling at `0006h` to point at the TPA top |
 | **Turbo Pascal** | 3.0A | Banner, `Include error messages (Y/N)?`, loads `TURBO.MSG`, IDE menu and Work file prompt | 80-column IDE wraps on the 51-column screen; TINST+`SCREEN 64` or `turbo3_80` (24x80) fit it, though Kaypro escapes leave stray `1` characters |
 | **WordStar** | 3.0 | Banner and no-file menu appear; `INSTALL` patches terminals and writes `WS.COM` | 80-column layout wraps on the 51-column screen by default; `wordstar30_80` runs it under `SET24X80`, where the menu and right half are readable (Visual 200 escape artifacts remain) |
-| **BBC BASIC** | — | Previously exercised from the disk image | Visual/interactive test; see the smoke-test notes |
+| **BBC BASIC** | — | Exercised from the disk image | Visual/interactive test; see the smoke-test notes |
 | **PIP** | reference binary | `PIP C:=A:DATE.COM`, then `DIR C:`; local harness copies `SMOKE.TXT` interactively | Covered by the automated smoke test; `tools/zx84_pip.py` runs a local copy end to end (F44 caller) |
 | **Microsoft M80 + L80** | MACRO-80 / Link-80 3.44 | `M80 =HELLO` assembles and links to `HELLO.COM`, which prints `HELLO, WORLD` | Exercises REL output, the linker's random I/O and the FCB command line |
 | **Microsoft FORTRAN-80** | 3.44 | `F80 CHELLO=CHELLO` compiles, `L80 CHELLO,FORLIB,CHELLO/N/E` links, `CHELLO` prints `HELLO, WORLD` | Library search, larger REL files |
-| **Microsoft BASIC Compiler** | 5.3 | `BASCOM =CHELLO/O` compiles, `L80 CHELLO,OBSLIB,CHELLO/N/E` links, `CHELLO` prints `HELLO, WORLD` | Stand-alone `/O` output links the 48 KB OBSLIB runtime. `BASCOM53.ZIP` is an OEM build that probes banked memory and exits; use `BASCOM.ZIP` |
+| **Microsoft BASIC Compiler** | 5.3 | `BASCOM =CHELLO/O` compiles, `L80 CHELLO,OBSLIB,CHELLO/N/E` links, `CHELLO` prints `HELLO, WORLD` | Stand-alone `/O` output links the 48 KB OBSLIB runtime. Use `BASCOM.ZIP`; `BASCOM53.ZIP` is an OEM build that probes banked memory and exits |
 | **Aztec C** | 1.06D | `CC CHELLO`, `AS CHELLO`, `LN CHELLO.O C.LIB`, then `CHELLO` prints `HELLO, WORLD` | Compiler, assembler, linker and C.LIB. Keep `LIBC.REL` off the image: with it the disk is too full for the `.O` file |
 | **Pascal/Z** | 4.0 | `PASCAL54 HELLO`, `ASMBL MAIN,HELLO/REL`, `LINK /N:A:HELLO A:HELLO /G` prints `HELLO, WORLD` | Overlaying 54K compiler with PAS254, assembler, linker and LIB.REL. The source needs the `{$i+ }` I/O-check directive |
 | **muLISP-80** | 10/06/80 | `MULISP`, `(PLUS 2 3)` → `5`, `(TIMES 6 7)` → `42` | The Soft Warehouse LISP read-eval-print loop at the `$` prompt |
 | **APL/Z** | 1.1 | `APL`, date `010180`, `2+2` → `4`, `1 2 3 + 4 5 6` → `5 7 9` | Start-up asks for `mmddyy`; 30 KB workspace |
 | **SUBMIT** (our build) | — | Explicit `SUBMIT SMOKE.SUB`, implicit `SMOKE`, `$1`/`$2` substitution, missing-file/missing-parameter paths | Project tool, not third-party |
 | **SHOW** | DRI CP/M 3 | Prints `A: RW, Space: ...` | Local-only harness `tools/zx84_dri.py` |
-| **ED** | DRI CP/M 3 | Appends/types a line, inserts text, `E` (END) saves and the text reads back with `TYPE`, `Q`/`Y` quits | Local-only harness; the save used to hang (see below) |
+| **ED** | DRI CP/M 3 | Appends/types a line, inserts text, `E` (END) saves and the text reads back with `TYPE`, `Q`/`Y` quits | Local-only harness; FCB write-back rules in [DRI ED, SET and SETKEYS](#dri-ed-set-and-setkeys) |
 | **SET** | DRI CP/M 3 | Reports `ERROR: No options specified.` and applies a bracketed attribute (`SET FILE [RO]` prints `Read Only (RO)`) | Local-only harness; options go in `[...]` |
 | **SETKEYS** | ours (`src/tools/setkeys.asm`) | Applies a key file: parses `RESET.KEY` and programs the +3 key table through XBIOS `KM_SET_KEY`/`KM_SET_EXPAND`.  Amstrad's original is Locomotive code and is not shipped or needed | DRI harness builds a scratch image and checks the table changed |
 | **MSCP** | 1.4 | Chess board and prompt; `force` makes it play neither side, `e2e4`/`e7e5`/`g1f3`/`b8c6` are accepted and shown on the board, `bd` dumps the position, `quit` returns to `A>` | Marcel van Kervinck's engine, SDCC-built for CP/M 2.x. It loads `BOOK.BIN`, and its book choice is seeded randomly per boot, so the automated run scripts both sides with `force` |
@@ -53,54 +54,58 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 
 | Title | Observed behavior | Investigation so far |
 |---|---|---|
-| **WordStar 3.0 display** | The default run still wraps at 51 columns, but `wordstar30_80` enters `SET24X80` first: the no-file menu fits 80 columns and EXTEND+Enter shows the right half. Visual 200 escape codes leave artifacts at the line starts. | The original crash was a page-zero bug: `(0006h)` pointed at `bdos_stub` (F737) instead of the TPA top (F600), so WordStar's screen buffer landed on the BIOS jump table and destroyed it. Fixed in `common.zpa` (`bdos_vector` at F600). Remaining work: terminal escape handling. |
+| **WordStar 3.0 display** | The default run wraps at 51 columns, but `wordstar30_80` enters `SET24X80` first: the no-file menu fits 80 columns and EXTEND+Enter shows the right half. Visual 200 escape codes leave artifacts at the line starts. | 24x80 solves the width. Remaining work: the Visual 200 escape set. |
 | **Turbo Pascal display** | The default run wraps; `turbo3_80` fits the IDE in 80 columns. Kaypro terminal escapes leave stray `1` characters in the buffer. | 24x80 solves the width; the remaining work is the Kaypro terminal escape set. |
-| **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The FID is not loaded, and is not a gap to close: `CLOCK.FID` and `SERIAL.FID` are built for Locomotive's private common-memory ABI (they `CALL` fixed addresses such as `FF04`/`FF05`/`FF08`/`FF09`, which land inside this system's own common stub) and carry a different header format, so loading them would mean reserving those addresses and reimplementing an undocumented interface. The status line now shows `HH:MM` natively instead (see `docs/API.md`, *Status line*), from the `scb_date`/`scb_minute`/`scb_sec` the ISR maintains. |
+| **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The FID is not loaded, and is not a gap to close: `CLOCK.FID` and `SERIAL.FID` are built for Locomotive's private common-memory ABI (they `CALL` fixed addresses such as `FF04`/`FF05`/`FF08`/`FF09`, which land inside this system's own common stub) and carry a different header format, so loading them would mean reserving those addresses and reimplementing an undocumented interface. The status line shows `HH:MM` natively instead (see `docs/API.md`, *Status line*), from the `scb_date`/`scb_minute`/`scb_sec` the ISR maintains. |
 | **ZSID / SID / DDT breakpoints** | `G` with a stop address (and `T`/`U` tracing) stops at a random address inside the program instead of at the breakpoint, and a long ZSID command such as a large `F` fill is cut short the same way. Loading, short dumps and `G0` work. | Not fixable without breaking +3 compatibility; see [Debuggers and RST 7](#debuggers-and-rst-7). Automated as `zsid_break` (known issue). |
 | **PLAN80 (PASCAL/M)** | `PLAN80` prints `! Non-existent Proc/Seg called; At PC= D736h SP= CC94h` and returns to the prompt; no title screen. | Not a Turbo Pascal program: it is **Sorcim PASCAL/M** P-code. `PLAN80.COM` is the loader, `PLAN80.OV1` the compiled program (`&PLAN80 VERSION 2.4 (C) 1982`) and `PLAN80.OV2` the runtime library (`Sorcim PASCAL/M Library`, dated 04/22/80). The overlays are found and read correctly - a test probe read all 37,888 bytes of OV1 and 9,728 of OV2 and both matched the archive byte for byte, and removing either makes the loader say `File PLAN80.OVx not found` instead. Fragmentation, the 180K/720K layout and floppy vs RAM disk all make no difference, and the only BDOS calls it makes (F1, F2, F11, F15, F16, F20, F22, F26) are all implemented. The Proc/Seg error is the runtime failing to find a segment the program asks for, and the two files are two years apart: most likely a PASCAL/M library/program version mismatch in the archive itself. See [PLAN80 and PASCAL/M](#plan80-and-pascalm). |
 
-Recently fixed: **DRI ED/SET/SETKEYS**.  ED's `E` command corrupted page
-zero because its record-buffer base lives at `FCB+21h` (a 33-byte FCB) and
-`writeback_fcb` copied 36 bytes back after every file call, zeroing that
-base; ED then built records at address 0.  The FCB write-back now stops at
-byte 32 and only F35/F36 (which produce R0/R1/R2) write the full FCB.
-SETKEYS crashed because our CCP did not push the warm-boot return address
-(it exits with `RET`); the CCP now pushes 0000h like the real one, so
-`SP = TPA_TOP - 2` on entry.  SET.COM is a GENCOM COM-with-header file: its
-first byte is `RET` and the module sits at 0200h, so the CCP now implements
-the CP/M 3 COM header move (`comsize` at 0101h) before jumping to 0100h.
-Attached RSX modules are not installed.  `SET` options need the brackets:
-`SET FILE [RO]`.  The R/O attribute is now enforced: F19 (delete) and F23
-(rename) refuse a directory entry whose filetype byte has bit 7 set,
-returning 0xFF in F45's return modes (FFh silent, FEh with the message) or printing `Bdos Err: R/O` and warm booting,
-and the F21/F34/F40 write core refuses to write through an FCB opened from
-such an entry.  `DISKTEST` T13 checks delete and rename, then clears the
-attribute and deletes.
+## DRI ED, SET and SETKEYS
 
-Recently fixed: **SLR Z80ASM 1.32** used to fail with `Line Too Long`
-because it sets a multi-sector count (8) with F44 and assumes one F20 moved
-the whole source block.  F20/F21 now apply the count to both sequential
-directions (1..128) and report the records moved in H, so the source buffer
-is complete.  PIP's 128 request is now accepted outright instead of falling
-back, and PIP's `[V]` verify works: a short final read reports EOF in L as
-well as A, which is what PIP reads as `dcnt`.  The real-world suite reports
-it as `PASS`.
+Three DRI tools need specific loader and BDOS behaviour, all of which the
+system now provides:
 
-Recently fixed: **SuperCalc2 display**.  Its VT-100 output (`ESC[?3h`,
-`ESC[2J`, `ESC[H`, `ESC[row;colH`) used to appear in the character buffer
-as printable text; the [CSI subset](ansi-subset.md) now parses it, so the
-banner and grid are drawn through the escape sequences instead, and
-`supercalc2_80` remains the run that fits the banner in 80 columns.
+- **FCB write-back stops before R0/R1/R2.**  ED keeps its record-buffer base
+  at `FCB+21h` (a 33-byte FCB), so a full 36-byte write-back would zero it.
+  `writeback_fcb` copies bytes 0-32 only (drive, name, type, EX, S1, S2, RC,
+  allocation map and CR); F35 (file size) and F36 (set random record) write the
+  random-record bytes at 33-35 as well.
+- **The CCP pushes a warm-boot return address.**  A program that ends with
+  `RET` returns to the CCP, so `SP = TPA_TOP - 2` with `(SP) = 0000h` on
+  entry.
+- **The CCP performs the CP/M 3 COM header move.**  `SET.COM` is a GENCOM
+  "COM file with header" (first byte `RET`, `comsize` at `0101h`); the CCP
+  moves the module from `0200h` down to `0100h` before jumping.  Attached RSX
+  modules are not installed, and SET runs without its RSX.
+- **SET options need brackets:** `SET FILE [RO]`.
+- **The R/O attribute is enforced.**  F19 (delete) and F23 (rename) refuse an
+  entry whose filetype byte has bit 7 set, returning 0xFF in F45's return
+  mode (FFh silent, FEh with the message) or printing `Bdos Err: R/O` and
+  warm booting; the F21/F34/F40 write core refuses to write through an FCB
+  opened from such an entry.  `DISKTEST` T13 covers delete, rename, clearing
+  the attribute and deleting.
 
-Its SGR requests used to be consumed and ignored, so every cell was plain
-white-on-blue.  Now that SGR is implemented, `supercalc2` draws 64 bright
-cells (`4F`, the column headers) and 6 reversed ones (`79`, the
-current-column marker at row 1, columns 2-7) instead of 768 identical `0F`
-cells.  SuperCalc2 emits only `ESC[0m`, `ESC[1m` and `ESC[7m`, which is
-exactly what the Spectrum attribute register can express.  Both packages
-assert this at run time; the 80-column variant checks the bright cells only,
-because EXTEND+Enter leaves the reversed part of row 1 off the visible
-window.
+## Multi-sector file I/O
+
+F20 and F21 apply the F44 multi-sector count (1-128) to both sequential
+directions and report the records moved in H.  A caller such as SLR Z80ASM
+1.32, which sets a count of 8 and issues one F20 for its whole source block,
+therefore gets the full buffer.  PIP's 128-record (full 16K buffer) request is
+accepted outright, and its `[V]` verify works: a short final read reports EOF
+in L as well as A, which is what PIP reads as `dcnt`.
+
+## ANSI output from third-party software
+
+VT-100 output is parsed by the [CSI subset](ansi-subset.md) rather than
+appearing in the character buffer as text.  SuperCalc2 1.00 emits `ESC[?3h`,
+`ESC[2J`, `ESC[H` and `ESC[row;colH`, so its banner and grid are positioned by
+the escapes.  Its SGR requests (`ESC[0m`, `ESC[1m`, `ESC[7m`) set the Spectrum
+attribute: the 51-column run draws 64 bright cells (the column headers) and 6
+reversed ones (the current-column marker in row 1, columns 2-7) instead of 768
+identical `0F` cells.  Both SuperCalc2 packages assert the attributes at run
+time; the 80-column variant checks the bright cells only, because
+EXTEND+Enter leaves the reversed part of row 1 outside the visible window.
+
 
 ## Debuggers and RST 7
 
@@ -150,10 +155,8 @@ which is the runtime's own P-code error.  What ruled our side out:
   message to `File PLAN80.OVx not found`; with both present the runtime
   gets far enough to raise its own error.
 - **They load correctly.** A probe that opens an FCB the CCP filled in and
-  reads each file sequentially into the TPA read all 37,888 bytes of OV1
-  and all 9,728 bytes of OV2, byte for byte.  (An earlier check appeared to
-  show one corrupted byte; that was the probe writing its own completion
-  marker into its buffer.)
+  reads each file sequentially into the TPA reads all 37,888 bytes of OV1
+  and all 9,728 bytes of OV2 byte for byte.
 - **Not fragmentation**, not the disc layout (the 720K PCW image fails the
   same way), and not floppy versus RAM disk.
 - **Not a missing BDOS function.** PLAN80 calls only F1, F2, F11, F15, F16,
@@ -168,11 +171,7 @@ firm conclusion would mean a PASCAL/M segment dump, which the archive does
 not document; the package is therefore recorded as a known issue rather than
 automated.
 
-
 ## How CP/M deletes a file, and what UNDELETE relies on
-
-Worth recording because it is what makes `UNDELETE.COM` safe rather than
-lucky, and because the save/restore tests exercise it indirectly.
 
 Deleting is **one byte**. `F19` walks the directory, and for every entry that
 matches it clears the entry's block bits in the in-memory allocation vector
@@ -235,12 +234,11 @@ escape-sequence terminals, so they cannot drive our console. Every
 escape-based WordStar 3.0 terminal is 80 columns wide (or 82/96), which is
 why WordStar needs an 80-column screen mode here: 80 characters at a 3-pixel
 pitch is 240 of the 256 available pixels, so it fits without a horizontal
-scrolling/tab-flip trick. A 64-column mode (4-pixel pitch) would suit Turbo
-Pascal via TINST and leave WordStar unchanged.
+scrolling/tab-flip trick.
 
-That 64-column mode now exists (`SCREEN 64`, 4-pixel "Compression" font):
-it fits Turbo Pascal's IDE once TINST installs the editor for 64 columns.
-It does not help WordStar, whose 80-column layout is unchanged.
+`SCREEN 64` (4-pixel "Compression" font) does not help WordStar, whose
+80-column layout is unchanged; it fits Turbo Pascal's IDE once TINST installs
+the editor for 64 columns.
 
 ## Not yet tested
 

@@ -95,20 +95,14 @@ separate, explicitly triggered workflow.
 | `planetfall` | Planetfall | Multi-screen intro, status line; save, re-save and restore | Pass |
 | `starcross` | Starcross | Game's own status line updates every turn; save, re-save and restore | Pass |
 
-Notes on individual packages (the display caveats are recorded known
-issues; the others are history):
+Notes on individual packages:
 
 - **WordStar 3.0** starts and draws its no-file menu, and the automated
   check (banner and menu) passes.  It is an 80-column program, so on the
   51-column screen each line wraps and overlaps the next; the
   `wordstar30_80` variant runs it after `SET24X80` and flips with
-  EXTEND+Enter.  The 80-column menu and the right half are now readable;
+  EXTEND+Enter.  The 80-column menu and the right half are readable;
   Visual 200 escape codes still leave artifacts at the line starts.
-  The original crash was a page-zero bug - `(0006h)` held `bdos_stub`
-  (F737) instead of the TPA top (F600), so WordStar sized its screen
-  buffer from the wrong ceiling and overwrote the BIOS jump table.
-  `common.zpa` now places `bdos_vector` at F600 and page zero 0006h points
-  at it.
 - **Turbo Pascal 3.0** runs (banner, `TURBO.MSG` load, IDE menu) and its
   80-column frames wrap on the 51-column screen.  TINST can install the
   editor for a 64-column terminal (`SCREEN 64`), and the `turbo3_80`
@@ -118,10 +112,10 @@ issues; the others are history):
   80-column grid and flips to the right half, and its VT-100 output is
   consumed by the CSI subset (see [ansi-subset.md](ansi-subset.md)).  SGR is
   honoured too: in the 51-column run the grid's column-header row draws 64
-  bright cells plus 6 reversed ones (the current-column marker), where every
-  cell used to be plain.  The program only ever asks for `ESC[0m`, `ESC[1m`
-  and `ESC[7m`, which the Spectrum attribute register can express exactly, and
-  both packages assert the attributes with a step's `expect_attrs`.
+  bright cells plus 6 reversed ones (the current-column marker).  The
+  program only ever asks for `ESC[0m`, `ESC[1m` and `ESC[7m`, which the
+  Spectrum attribute register can express exactly, and both packages assert
+  the attributes with a step's `expect_attrs`.
 - **Multiplan 1.05** needs the `MP80` data overlay plus `MP.OVR`,
   `MP.HLP`, `DEFAULT.FK` and `RFILE`; `MP.COM` reports
   "no data file present (MP80 or MP40)" without it.  The
@@ -135,50 +129,46 @@ issues; the others are history):
   The installer ignores the first character of the Y/N answer, so the
   manifest answers `" yes"`.
 - **COBOL-80 4.65** runs the whole chain on a 720K image: `COBOL` compiles
-  `=HELLO`, `L80` links it and `HELLO` prints `HELLO, WORLD`.  Three things
-  had to be right.  The 4.01 archive used to be staged here has no
-  `CRTDRV.REL` at all, so the REL could never link; the 221K `mscobol.zip`
-  carries the complete 4.65 set.  That set does not fit the 174 KB data
-  area of a 180K disc, so the package overrides the boot pair to the 720K
-  layout (`"format": "720k"` plus a per-package `base`).  And L80 needs
-  `COBLOC` and `COBLBX.REL` staged alongside `COBLIB`, `CRTDRV` and a
-  terminal driver (`CDADM3`); without the terminal driver a program that
-  does cursor/erase work dies with `NO CRT DRIVER`.  The COBOL source itself
-  must give `PROCEDURE DIVISION` a named paragraph: without one the
-  compiler reports 1 error and the runtime answers `DATA UNAVAILABLE`.
+  `=HELLO`, `L80` links it and `HELLO` prints `HELLO, WORLD`.  Three
+  requirements: the 4.65 set (the 221K `mscobol.zip`) is the one that carries
+  `CRTDRV.REL`; that set does not fit the 174 KB data area of a 180K disc, so
+  the package overrides the boot pair to the 720K layout (`"format": "720k"`
+  plus a per-package `base`); and L80 needs `COBLOC` and `COBLBX.REL` staged
+  alongside `COBLIB`, `CRTDRV` and a terminal driver (`CDADM3`) - without the
+  terminal driver a program that does cursor/erase work dies with `NO CRT
+  DRIVER`.  The COBOL source itself must give `PROCEDURE DIVISION` a named
+  paragraph: without one the compiler reports 1 error and the runtime answers
+  `DATA UNAVAILABLE`.
 - **3CLCK** extracts `CLOCK.FID`, `CLOCK.F64`, `CLOCK.DOC` and
   `CLOCKCLR.COM`.  CLOCKCLR runs and correctly reports that the clock
   FID is not loaded: the clock is installed at boot through `CLOCK.FID`,
   while this BIOS only stages `RAMDISK.FID`.  Loading it is deliberately
   not planned: the Locomotive FIDs call fixed addresses in the private
   common-memory ABI (`FF04`/`FF05`/`FF08`/`FF09`) and use their own header,
-  so a native status-line clock built on `scb_date`/`scb_minute`/`scb_sec`
-  is the better route.  The package stays automated because the extractor
+  so the native status-line clock built on `scb_date`/`scb_minute`/`scb_sec`
+  is the supported route.  The package stays automated because the extractor
   and CLOCKCLR are still worth covering.
-- **BDS C 1.60** now runs end to end: `CC HELLO.C` compiles to `HELLO.CRL`,
-  `CLINK HELLO` links it and `HELLO` prints `HELLO, WORLD`.  Two earlier
-  notes were wrong.  The compiler does return to the CCP — what looked like
-  a hang was the CCP prompt waiting for input.  And `CLINK` failing with
-  `Missing function(s): PUTCHAR` was not a CP/M problem: `DEFF2.CRL`, the
-  part-II library, was missing from the staged files.  Both `DEFF.CRL` and
-  `DEFF2.CRL` must be on the disk.
-- **BASCOM 5.3** used to exit immediately because the suite pulled
-  `BASCOM53.ZIP`, which is an OEM build: its start-up probes a banked
-  machine (writes to ports 0/1 and `0EF08h`, and expects a `JP` at `0100h`
-  to survive a write) and warm-boots when the probe fails.  `BASCOM.ZIP`
-  carries the generic build.  The compile line is `BASCOM =CHELLO/O`;
-  `/O` produces a stand-alone program that links against `OBSLIB.REL`
-  instead of needing `BRUN.COM` at run time.
-- **Aztec C 1.06D** used to stop at the linker with `Not an object file!`.
-  The image was one file too full: including `LIBC.REL` left no free
-  block, so `AS` created a zero-length `CHELLO.O`.  With `LIBC.REL`
-  omitted, `LN CHELLO.O C.LIB` links and the program runs.
+- **BDS C 1.60** runs end to end: `CC HELLO.C` compiles to `HELLO.CRL`,
+  `CLINK HELLO` links it and `HELLO` prints `HELLO, WORLD`.  Both `DEFF.CRL`
+  and `DEFF2.CRL` must be on the disk; without the part-II library `CLINK`
+  stops at `Missing function(s): PUTCHAR`.
+- **BASCOM 5.3** needs `BASCOM.ZIP`, the generic build.  `BASCOM53.ZIP` is an
+  OEM build whose start-up probes a banked machine (writes to ports 0/1 and
+  `0EF08h`, and expects a `JP` at `0100h` to survive a write) and warm-boots
+  when the probe fails.  The compile line is `BASCOM =CHELLO/O`; `/O`
+  produces a stand-alone program that links against `OBSLIB.REL` instead of
+  needing `BRUN.COM` at run time.
+- **Aztec C 1.06D** needs `LIBC.REL` left off the image: with it the image is
+  one file too full, so `AS` creates a zero-length `CHELLO.O` and `LN` stops
+  with `Not an object file!`.  With `LIBC.REL` omitted, `LN CHELLO.O C.LIB`
+  links and the program runs.
 - **Z80ASM 1.32** sets a multi-sector count (8) with F44 and then reads its
-  source once, assuming the whole block was transferred.  F20/F21 now apply
-  the F44 count (1..128) to both sequential directions and report the records
-  moved in H, so the source buffer is complete and the package passes.  PIP's
-  128 (a full 16K buffer) is accepted, and its buffered copy, `[V]` verify
-  and RAM-disk transfers all work.
+  source once, assuming the whole block was transferred.  F20/F21 apply the
+  F44 count (1..128) to both sequential directions and report the records
+  moved in H, so the source buffer is complete (see
+  [compatibility.md](compatibility.md#multi-sector-file-io)).  PIP's 128 (a
+  full 16K buffer) is accepted, and its buffered copy, `[V]` verify and
+  RAM-disk transfers all work.
 
 - **Pascal/Z 4.0** compiles HELLO.PAS with `PASCAL54 HELLO` (the 54K
   compiler loads the PAS254 overlay), assembles with
@@ -201,12 +191,12 @@ issues; the others are history):
   appears, otherwise the `P` keypress arrives before the program reads input.
 - **MSCP** is the suite's chess title.  It is played with `force`, which takes
   the engine off the move, so every ply is a fixed script and the check is
-  deterministic.  The alternative is flaky: with the engine on the move its
-  reply comes out of `BOOK.BIN` chosen against a per-boot random seed, so
-  `e2e4` can be answered by `e7e5`, `c7c5`, `d7d6` or `b8c6`.  Scripting both
-  sides still exercises the real engine - move generation and legality
-  checking run for every ply - and `bd` dumps the position, `quit` returns to
-  the CCP.  `BOOK.BIN` must sit beside `MSCP.COM`.
+  deterministic.  With the engine on the move its reply comes out of
+  `BOOK.BIN` chosen against a per-boot random seed, so `e2e4` can be answered
+  by `e7e5`, `c7c5`, `d7d6` or `b8c6`.  Scripting both sides still exercises
+  the real engine - move generation and legality checking run for every ply -
+  and `bd` dumps the position, `quit` returns to the CCP.  `BOOK.BIN` must sit
+  beside `MSCP.COM`.
 
 - **Plan-80** is Sorcim PASCAL/M P-code, not Turbo Pascal: `PLAN80.COM` is a
   loader, `PLAN80.OV1` the compiled program (`VERSION 2.4 (C) 1982`) and
@@ -235,8 +225,8 @@ issues; the others are history):
   Each of the three also runs a **save/restore cycle**, which is the only
   third-party path in the suite that creates a file, writes it sequentially,
   closes it and then deletes it so a second save can reuse the name - the
-  exact sequence the bug hunt changed (`F19` per-extent delete, `F21` extent
-  and block reuse, `F22` refusing an existing name, `F16` the close).  The
+  exact sequence that exercises `F19` per-extent delete, `F21` extent and
+  block reuse, `F22` refusing an existing name and `F16` the close.  The
   script saves, takes two turns, saves again over the same name, quits, and
   runs `DIR [SIZE] <name>.SAV`.  That must report exactly one file in the
   same number of 1K blocks and exactly one extra directory entry, so a
@@ -250,7 +240,7 @@ issues; the others are history):
 
 - **WordMaster 1.07A** edits and saves.  Leaving its insert mode needs
   `ESC`, which on the +3 is the BREAK key (`Caps Shift + Space`) per the
-  CP/M Plus manual; the package now runs the full edit-save-`TYPE` cycle.
+  CP/M Plus manual; the package runs the full edit-save-`TYPE` cycle.
 - **SuperCalc 1.05** runs its grid and accepts cell entries, but saving a
   `.CAL` aborts with `SuperCalc program diskette MUST remain on disk
   drive` — its media check does not accept the image.  The archive's
@@ -264,10 +254,6 @@ CRLF text files because the CP/M tools read them directly (see
 `.gitattributes`).  `C80HELLO.C` is separate from `HELLO.C` because C/80
 resolves `printf` by `#include`ing `PRINTF.C`, and the package stages it as
 `HELLO.C` through a `fixtures` mapping.
-
-SuperCalc2 used to leave its VT-100 escape output visible in the character
-buffer (`[?3h[2J[H`); the CSI subset now parses those sequences, so the
-banner and grid are positioned by the escapes rather than by stray text.
 
 ## Adding a package
 
@@ -335,9 +321,9 @@ the program just wrote (`DIR [SIZE] STARCROS.SAV`).
 The 24x80 case is the one that catches people out.  `scr_cols` stays the
 *physical* width (32/51/64) there, and `char_buffer` only mirrors the window
 on show — `lg_off .. lg_off + scr_cols`.  Reading `char_buffer` at that
-stride therefore shows the left 51 columns of an 80-column screen and
-silently hides the rest, which is why a `_80` package could pass while its
-right-hand columns were never checked.
+stride therefore shows the left 51 columns of an 80-column screen and hides
+the rest, so a `_80` package can pass while its right-hand columns were never
+checked.
 
 Two helpers cover the other views:
 

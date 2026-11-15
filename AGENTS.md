@@ -4,7 +4,7 @@ This file provides guidance to OpenCode, Claude Code and other AI agents when wo
 
 ## Project
 
-Clean-room CP/M 3.1 for the ZX Spectrum +3. All code is original Z80 assembly — no code from the `opensource/` reference folder is used. The BIOS, BDOS, CCP, drivers, and tools are written from scratch.
+Clean-room CP/M 3.1 for the ZX Spectrum +3. All code is original Z80 assembly. The BIOS, BDOS, CCP, drivers and tools are written from scratch, and none of Locomotive's CP/M Plus is included or linked against. Third-party CP/M software that is merely *tested* against this system lives in the git-ignored `references/` tree and is never redistributed.
 
 ## Build
 
@@ -18,9 +18,9 @@ Three +3 images are produced from the same system files, plus a data image:
 - `build/cpm3.dsk` — **distribution** (180K single-sided): system, the
   utilities we build
   (`SUBMIT`, `SCREEN`, `SET24X80`, `SETDEF`, `DATE`, `SHOWXDPB`, `DUMP`,
-  `FORMAT`, `DISKCOPY`, `DIR`, `ERASE`, `DEVICE`) and
-  the local `references/binaries/` utilities (BBC BASIC, ED, PIP, ...).  No
-  test programs.
+  `FORMAT`, `DISKCOPY`, `DIR`, `ERASE`, `DEVICE`, `EDIT`, `STAT`, `SYSGEN`,
+  `CRC`, `UNDELETE`, `SETKEYS`) and the local `references/binaries/`
+  utilities (BBC BASIC, ED, PIP, SET, SHOW, TYPE, ...).  No test programs.
 - `build/cpm3-dist720.dsk` — the same CP/M files on a **720K** PCW DS/DD
   disc, booted by the `-DDS720` boot sector and loader.  Nothing extra yet;
   it exists for the ~570K free it leaves a larger tool set.  No test
@@ -41,18 +41,22 @@ Build chain: ZPA preprocessing → CCP → BIOS (BDOS, drivers, font loader) →
 `CPM3.SYS` must fit the 16K `C000-FFFF` window, the common stub the
 `F600-FFFF` window and the bank-5 screen code `62C0-7FFF` (with the stub
 behind it, `CPM3C.SYS` must fit the loader's 7K bank-5 staging budget); the
-build prints the budgets and `build/memory.map` lists every region. Before adding a large feature, read `docs/boot.md`
-§ *Image headroom and the growth plan*.
+build prints the budgets, and `tools/build_memory_map.py` writes
+`build/memory.map` (from `build/bios.lst`) listing every region.  Before
+adding a large feature, read `docs/boot.md` § *Image headroom and the growth
+plan*.
 
 `references/binaries/` is optional third-party software added to all three +3
-images (that is how BBC BASIC gets onto the distribution disks); `SUBMIT.COM`,
-`RENAME.COM`, `NULU11.COM` (an LBR library manager) and `PROFILE.SUB`
-(Amstrad's start-up script: it works, but auto-running it copies ~10K into
-the 16K C: RAM disk at every cold boot) are excluded.  The
-smoke runner adds `RENAME.COM` to a scratch copy so a real third-party F23
-caller is still covered, and drops the big optional utilities it never runs
-(`BBCBASIC.COM`, `NULU11.COM`) if they are present, to leave room for
-DISKTEST's 17K file.
+images (that is how BBC BASIC gets onto the distribution disks).  Excluded:
+`SUBMIT.COM` and `RENAME.COM` (we build SUBMIT and the CCP has a built-in
+REN), `NULU11.COM` (an LBR library manager), `PROFILE.SUB` (Amstrad's
+start-up script: it works, but auto-running it copies ~10K into the 16K C:
+RAM disk at every cold boot), and `SETKEYS.COM`/`RESET.KEY` (Locomotive code,
+which a clean-room system must not ship; the DRI harness copies both into its
+own scratch image instead).  The smoke runner adds `RENAME.COM` to a scratch
+copy so a real third-party F23 caller is still covered, and on a 180K image
+drops the big optional utilities it never runs (`BBCBASIC.COM`, `NULU11.COM`)
+to leave room for DISKTEST's 17K file.
 
 ### ZPA Preprocessing
 
@@ -117,7 +121,7 @@ Checks:
 4. **Clobber annotations** — the declared `Clobbers:`/`Out:` set must cover
    what the routine (including its callees, by actual effect) leaves changed,
    and every `Out:` register must really be produced. `; lint: ignore` on the
-   `Clobbers:` line skips a routine.
+   `Clobbers:` line skips a routine; the transient tools use it heavily.
 5. **DI/EI balance** — every `RET` leaves the interrupt-enable flag as it
    found it; primitives that deliberately change it carry
    `; lint-exempt: ie`.
@@ -130,8 +134,8 @@ Checks:
    `jp X` (a byte and 17 T-states shorter).  The two differ only when `X`
    reads or drops its own return address, or pages out the memory holding
    the `ret`; mark such a call (or its `ret`, since ZPA drops comments on
-   `call proc(args)` lines) `; keep call`.  The three in common memory below
-   `ccp_run_prog` are kept because shrinking them would move pinned
+   `call proc(args)` lines) `; keep call`.  The one such call in common
+   memory below `ccp_run_prog` is kept because shrinking it would move pinned
    addresses.
 
 `jp` that could be `jr` is checked after assembly by `tools/jp2jr.py`
@@ -148,8 +152,10 @@ carries into the generated assembly for the linter to verify.
 
 ## Testing
 
-The zx84 MCP emulator (F:\src\zx84) provides debugging tools. Key workflow:
-- `model +3` → `load build/cpm3-test.dsk` → `disk_boot` → `run 1000`
+The zx84 MCP emulator (default `F:\src\zx\zx84`, else `--zx84` or `ZX84_DIR`)
+provides debugging tools. Key workflow:
+- `model zx128kplus3` (that is the name the tools pass) → `load build/cpm3-test.dsk`
+  → `disk_boot` → `run 1000`
   (use `build/cpm3.dsk` for the distribution image; it has no test programs)
 - Snapshots are supported: `save build/prompt.szx` and later `load build/prompt.szx`
   to resume from a known-good prompt state without rebooting the DSK.
@@ -159,7 +165,9 @@ The zx84 MCP emulator (F:\src\zx84) provides debugging tools. Key workflow:
 - `registers`, `memory`, `disassemble` for debugging
 - `type "text"` + `key enter` to send commands (`.` requires sym+m fix in emulator)
 
-OCR does not work with our custom 5px font.
+`tools/zx84_smoke.py` is the automated version of all of this; prefer running
+it over driving the emulator by hand.  OCR does not work with our custom 5px
+font, so read the screen through `char_buffer`.
 
 ## Architecture
 
@@ -197,8 +205,38 @@ loader.
 **System mode (mode 3: banks 4,7,6,3)**:
 - **0000-3FFF**: Bank 4 — BIOS, BDOS, screen/kbd/FDC drivers
 - **4000-7FFF**: Bank 7 — C: RAM disk (16K, owned by `RAMDISK.FID`)
-- **8000-BFFF**: Bank 6 — FONT51 at 8000h, FONT32 at 8800h, optional RAMDISK.FID at 9000h, FONT64 at 9400h, FDC deblock buffer at 9C00h, `DD_CHECK_SECTOR` compare buffer at 9E00h, runtime screen/scroll buffers at A000h-A5FFh, row-address table at A700h and CSV/ALV at A740h-A82Ch, BIOS/BDOS scratch at A600h-A6FFh and A82Dh-A83Ch, screen cursor/ESC scratch at A730h-A739h, viewport scratch at A73Ah-A73Fh, loader-staged screen row table at A890h-A8BFh, status-line flag at A8C0h, 24x80 state at A8C1h-A8DFh, `KM_SET_KEY` translation table at A900h-A99Fh, `KM_SET_EXPAND` slots at A9A0h-AD7Fh, FCB shadow at AD80h-ADA3h, submit-file input buffer at ADA4h-AFA3h, staged `CCP.COM` at B000h-BEFFh (the loader's 4K window runs to BFFFh, but `CCP.COM` must end below BF00h), F10's previous line (`F10_HIST`, ^W recall) at BF00h-BFFFh
+- **8000-BFFF**: Bank 6 — fonts, buffers, loader hand-off and the staged CCP
+  (see the table below)
 - **F600-FFFF**: Common memory stub (bank 3, always visible)
+
+Bank 6 is mapped for the whole system lifetime, so everything in it has a
+fixed address.  These are `equ` constants in the sources; nothing checks the
+table for overlap, so a new buffer must be placed by hand and every user of a
+moved address updated.
+
+| Address | Contents |
+|---|---|
+| `8000` | `FONT51.BIN` (8px, 32/51-column) |
+| `8800` | `FONT32.BIN` |
+| `9000` | `RAMDISK.FID` when loaded |
+| `9400` | `FONT64.BIN` (4px) |
+| `9C00` | FDC deblock buffer |
+| `9E00` | `DD_CHECK_SECTOR` compare buffer |
+| `A000-A5FF` | runtime screen and scroll buffers (`char_buffer` is `A000`) |
+| `A600-A6FF` | BIOS/BDOS scratch |
+| `A700` | screen row-address table |
+| `A730-A73F` | screen cursor/ESC and viewport scratch |
+| `A740-A82C` | CSV and ALV |
+| `A82D-A83C` | more BIOS/BDOS scratch |
+| `A890-A8BF` | loader-staged screen row table |
+| `A8C0` | status-line flag |
+| `A8C1-A8DF` | 24x80 state |
+| `A900-A99F` | `KM_SET_KEY` translation table |
+| `A9A0-AD7F` | `KM_SET_EXPAND` slots |
+| `AD80-ADA3` | FCB shadow (`fcb_buf`) |
+| `ADA4-AFA3` | submit-file input buffer |
+| `B000-BEFF` | staged `CCP.COM` (must end below `BF00`) |
+| `BF00-BFFF` | `F10_HIST`, the previous command line (^W recall) |
 
 **Screen access (mode 2: banks 4,5,6,3)**:
 - **4000-7FFF**: Bank 5 — Screen RAM (paged in temporarily by `_page_in`/`_page_out`)
@@ -220,19 +258,23 @@ The common stub bridges TPA and system banks:
 - `bank_sel` — BIOS function 27 (must be in common since it switches banks)
 - Inter-bank copy routines: `copy_record_to_tpa`, `copy_record_from_tpa`, `copy_block_to_tpa`
 - User memory helpers: `read_user_byte`, `write_user_byte`, `copy_from_user`, `copy_to_user`
-- FCB shadowing: `setup_fcb`, `writeback_fcb`, `fcb_buf` (36 bytes)
+- FCB shadowing: `setup_fcb`, `writeback_fcb` (the buffer itself, `fcb_buf`, is
+  in bank 6 at `AD80h`)
 - Buffers: `dirbuf` (128B), `xfer_staging` (32B), `bdos_stack` (128B)
 
 ### BDOS Banking Model
-Interrupts are disabled during system mode. The BDOS accesses user memory
-(FCBs, strings, buffers) via common-memory helpers:
-- **FCB access**: `setup_fcb` copies 36-byte FCB from TPA to `fcb_buf` (common memory).
-  BDOS works with `fcb_buf` via IX. `writeback_fcb` copies back on success.
+The BDOS runs in system mode (bank 4) and reaches user memory (FCBs, strings,
+buffers) through common-memory helpers, which page the TPA in for the access:
+- **FCB access**: `setup_fcb` copies the 36-byte FCB from TPA to `fcb_buf`
+  (bank 6).  BDOS works with `fcb_buf` via IX. `writeback_fcb` copies bytes
+  0-32 back on success; the random-record bytes are written by F35/F36.
 - **String/buffer access**: `read_user_byte`/`write_user_byte` switch banks per byte.
-- **Interrupts**: the BDOS runs with interrupts on, but `tpa_in`/`tpa_out`
-  (used by `read_user_byte`, `write_user_byte` and `copy_xfer`) turn them off
-  while the TPA is paged in, so a tick never vectors through a program's
-  0038h mid-BDOS (ZSID/SID/DDT keep their RST 7 breakpoint handler there).
+- **Interrupts**: `bdos_stub` enters with interrupts off, then enables them once
+  the stack and bank are stable, so the BDOS body runs with interrupts on.  The
+  per-access `tpa_in`/`tpa_out` (used by `read_user_byte`, `write_user_byte` and
+  `copy_xfer`) turn them off while the TPA is paged in, so a tick never vectors
+  through a program's `0038h` mid-BDOS (ZSID/SID/DDT keep their RST 7
+  breakpoint handler there).
 - **DMA transfers**: `copy_record_to_tpa`/`copy_record_from_tpa` in FDC driver.
 - **Directory→DMA**: `copy_to_user` for search result delivery.
 
@@ -246,27 +288,29 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
 
 - `src/boot/bootsect.asm` — Boot sector (checksum must be 3 mod 256)
 - `src/boot/loader.asm` — Stage 2: stages fonts/CCP/FID in bank 6 and `CPM3C.SYS` in bank 5, then loads the `CPM3.SYS` head
-- `src/bios/bios.asm` — Init + BIOS (PHASE 0000 for bank 4) + bank-5 screen code (PHASE 62C0) + common stub (PHASE F600)
-- `src/bios/common.asm` — Common memory stub: BDOS dispatch, bank switching, inter-bank copy
-- `src/bios/screen.asm` — 32/51/64-column text display (8px, 5px and 4px fonts)
+- `src/bios/bios.zpa` — Init + BIOS (PHASE 0000 for bank 4) + bank-5 screen code (PHASE 62C0) + common stub (PHASE F600)
+- `src/bios/common.zpa` — Common memory stub: BDOS dispatch, bank switching, inter-bank copy
+- `src/bios/screen.zpa` — 32/51/64-column text display (8px, 5px and 4px fonts)
 - `src/bios/screen5.zpa` — the screen routines that only run with the screen
   paged in (glyph rendering, scrolling, the 24x80 page flip, LG_BUF edits),
   assembled for and run from bank 5 at `62C0`.  Bank-4 code enters them
   through `call _page_in / jp X_b5` stubs or while already paged in; they
   leave with a final `jp _page_out` and never call anything that switches
   banks (`tools/check_bank5.py` fails the build otherwise)
-- `src/bios/keyboard.asm` — 8×5 matrix scan, ASCII mapping, debounce/repeat
-- `src/bios/fdc765.asm` — uPD765A driver with sector deblocking (512→128 byte);
+- `src/bios/keyboard.zpa` — 8×5 matrix scan, ASCII mapping, debounce/repeat
+- `src/bios/fdc765.zpa` — uPD765A driver with sector deblocking (512→128 byte);
   login detects the format from the sector-ID group and, for the 1-9 group,
   rebuilds the XDPB from the boot sector's 10-byte AMSDOS spec (so 10-sector
   42-track layouts work)
+- `src/fid/ramdisk.asm` — `RAMDISK.FID`, the 16K C: RAM disk driver
 - `src/bios/font51.bin` — 256×8 byte font (incbin, not generated asm)
+- `src/bios/font32.bin` — 8-pixel font for 32-column mode (incbin)
 - `src/bios/font64.bin` — 4-pixel font for 64-column mode, generated from `src/bios/font64.ch8` (all 256 glyphs) by `tools/mkfont64.py`, which writes each row into both nibbles (`0xA0` -> `0xAA`) so the renderer merges a glyph into either half of a screen byte with one mask and no shift
-- `src/bdos/bdos.asm` — Z80-native BDOS (console + file I/O), including the
+- `src/bdos/bdos.zpa` — Z80-native BDOS (console + file I/O), including the
   directory/FCB helpers at its end (`find_free_block`, `read_dir_entry`,
   `write_dir_entry`, `dir_sector_to_bios`, `search_next_entry`, `match_fcb`,
-  `bf_f15`-`bf_f18`, `close_dir_update`); they spent a while in common memory
-  and came back to bank 4 to leave the common stub room; see `docs/boot.md`
+  `bf_f15`-`bf_f18`, `close_dir_update`); they live in bank 4 to leave the
+  common stub room; see `docs/boot.md`
 - `src/ccp/miniccp.zpa` — CCP with the CP/M 3 built-ins DIR, DIRSYS, ERASE, RENAME, TYPE and USER (and their short forms DIRS, ERA, REN, TYP, USE) plus HELP, `cmd1!cmd2` chaining (the rest of the line is kept by private BDOS F125) and `.COM` loading; built as `CCP.COM`.  Its work buffers are `equ` addresses above the image, so they do not count against the 4K staging window.  On a cold start it submits `PROFILE.SUB` from the default drive — the SCB byte at `0x0A` (`scb_coldboot`) marks a cold boot and the CCP clears it, so a warm boot does not run the profile again.  Lines of a submit file that begin with `<` are queued for the running program (BDOS F124, a private CCP helper) and served by `con_in`/`con_status` as console input
 - `src/tools/dir.asm` — `DIR.COM`, the option form of DIR that the CCP's
   built-in hands over (`FULL`, `SIZE`, `ATT`, `DIR`/`SYS`/`RO`/`RW`,
@@ -291,6 +335,16 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   `3000-F000`; a final `^Z` is preserved on save.
 - `src/tools/screen.asm` — `SCREEN.COM`, the screen-width utility (BIOS fn 32)
 - `src/tools/set24x80.asm` — `SET24X80.COM`, enter/leave the virtual 80x24 screen
+- `src/util/date.zpa` — `DATE.COM`, CP/M 3.1 date and time utility
+  (Y2K-compliant, four-digit year)
+- `src/tools/dump.asm` — `DUMP.COM`, hex/ASCII file viewer; bytes-per-line
+  adapts to the console width (6 at 32 columns up to 16 in 24x80)
+- `src/tools/setdef.asm` — `SETDEF.COM`, configure system defaults:
+  `[ORDER=(COM,SUB)]` search order, default drive/user and search path
+- `src/tools/showxdpb.asm` — `SHOWXDPB.COM`, display each drive's XDPB with
+  interpreted values
+- `src/tools/submit.asm` — `SUBMIT.COM`, writes the CP/M 2.2 `$$$.SUB` queue
+  the CCP drains (not DRI's `SYSINnn.$$$`); `$1`-`$9` substitution, no nesting
 - `src/tools/setkeys.asm` — `SETKEYS.COM`, apply a +3 key-definition file
   through XBIOS `KM_SET_KEY`/`KM_SET_EXPAND` (replaces Amstrad's Locomotive
   build, which is never shipped)
@@ -337,6 +391,9 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   numbers, and the build writes it as `build/cpm3_720.dsk`
 - `tools/zpa.py` — ZPA preprocessor (see **ZPA Preprocessing**)
 - `tools/patchsum.py` — Boot sector checksum patcher (sum=3)
+- `tools/build_memory_map.py` — Emits `build/memory.map` from `build/bios.lst`
+- `tools/check_layout.py` — Verifies the init copy source, the head/common
+  budgets and the bank-5 staging budget
 - `tools/check_ccp.py` — Fails the build if `CCP.COM` does not fit the bank-6 staging window
 - `tools/split_sys.py` — Splits the raw BIOS blob into `CPM3.SYS` (head) and `CPM3C.SYS` (bank-5 screen code + common stub)
 - `tools/check_bank5.py` — Fails the build if bank-4/common code names a
@@ -352,6 +409,14 @@ Interrupts are disabled during system mode. The BDOS accesses user memory
   code brings more targets into range.  It skips the BIOS
   jump table, self-modified jumps, pinned common memory before
   `ccp_run_prog`, and lines marked `; keep jp`
+- `src/test/*.asm` — the on-disk test programs (`SYSTEST`, `XTETEST`,
+  `TERMTEST`, `DISKTEST`, `BDOSTEST`, `BIOSTEST`, `CHAINTST`, `FONTTEST`,
+  `REGTEST`, `INPTEST`, `FIXTEST`, `CKBENCH`, `SCREENBM`) built onto
+  `build/cpm3-test.dsk` only
+- `tests/test_*.py` — the host-side suite (no emulator needed).  Run it with
+  `python3 -m unittest discover -s tests -t .`; CI runs the same command.
+  Several tests read the docs and assert on their text, so a doc edit can
+  break the build (see **Documentation**)
 
 ## Conventions
 
@@ -366,8 +431,8 @@ Every routine MUST document In/Out/Clobbers:
 `z80lint.py` validates both the clobber list and stack balance across all return paths.
 It also verifies the annotations themselves: every register a routine (or its callees,
 by actual effect) leaves changed must appear in `Clobbers:` or `Out:`, and every `Out:`
-register must actually be produced. Annotation findings are informational by default
-(pass `--gate-annotations` to enforce once the backlog is cleaned up).
+register must actually be produced. The build runs the linter with
+`--gate-annotations`, so a finding fails the build.
 `Out` registers are return values, not clobbers. `; Stack: …` comments are free-form
 documentation and do not affect the linter. To suppress the stack-balance check on a routine
 that intentionally leaves SP non-zero (e.g. a jp-based shim), add `; lint-exempt: stack`.
@@ -387,7 +452,7 @@ When copying memory blocks with LDIR (forward) or LDDR (backward), source and de
 - **LDIR** (forward, HL→HL+BC to DE→DE+BC): safe only if `DE >= HL + BC` or `HL >= DE + BC`
 - **LDDR** (backward, HL down to HL-BC to DE down to DE-BC): safe even with overlap
 
-The init code copies `system_image` to bank 4 first because that copy overwrites the loader; nothing may need the loader afterwards. The common stub no longer overlaps it: it comes from behind the bank-5 screen code in the staged `CPM3C.SYS` (`SYS2_STAGE + (common_image - screen5_image)`, bank 5) and is a plain LDIR to F600h, since bank 5 and bank 3 are different banks. `tools/check_layout.py` verifies the init copy source from `build/bios.lst` and the head/common size budgets.
+The init code copies `system_image` to bank 4 first because that copy overwrites the loader; nothing may need the loader afterwards. The common stub does not overlap it: it comes from behind the bank-5 screen code in the staged `CPM3C.SYS` (`SYS2_STAGE + (common_image - screen5_image)`, bank 5) and is a plain LDIR to F600h, since bank 5 and bank 3 are different banks. `tools/check_layout.py` verifies the init copy source from `build/bios.lst` and the head/common size budgets.
 
 ## Standard +3 Disk Format (DPB)
 ```
@@ -396,9 +461,52 @@ AL0=C0h  AL1=00h  CKS=16  OFF=1  PSH=2  PHM=3
 ```
 One reserved track. 9 sectors/track, 512 bytes/sector, 1K blocks.
 
-## Debugging Approach
-- Develop and enhance tools (MCP commands, Python scripts, linters) to ensure accurate and timely resolution of issues and improve project consistency.
-- Do not go down long rabbit holes without a solid reason. Use breakpoints, watchpoints, traps, and other emulator tools to gather evidence before theorizing. Let the data lead.
+## Documentation
+
+The docs are **current reference**, not a changelog.  Describe how the system
+behaves now: no "was broken and is now fixed", no "used to", no narrative of
+how a decision was reached.  Rationale belongs in a sentence only where it
+stops someone making the same mistake (a pinned address, a compatibility
+edge); git history holds everything else.
+
+### Which doc to update when
+
+| Change | Update |
+|---|---|
+| BDOS function behaviour, error returns, FCB rules | `docs/API.md` (its `Fnn` entry) and the matching `src/bdos/bdos.zpa` header |
+| Escape sequence, cursor/erase/SGR, screen mode | `docs/API.md` § Escape Sequences; `docs/ansi-subset.md` for anything reached through `ESC [` |
+| Keyboard map, XBIOS `KM_*` | `docs/API.md` § Keyboard; `docs/cpm-plus-xbios.md` |
+| A new or changed XBIOS/TE call | `docs/cpm-plus-xbios.md` (function table + limitations) |
+| Banking, boot stages, memory map, pinned addresses, image budgets | `docs/boot.md`; the budget table there is a snapshot, refresh it after a size change |
+| On-disk structures, DPB, extents, AMSDOS/PLUS3DOS headers | `docs/filesystem.md` |
+| Any user-visible utility (`DIR`, `ERASE`, `EDIT`, `FORMAT`, ...) | `README.md` § the tool's command; `AGENTS.md` Source Structure for the file |
+| A new distribution file, or a changed `build/` image set | `AGENTS.md` § Build; `README.md` § the image table |
+| A third-party package that now passes, fails differently, or needs staging steps | `docs/compatibility.md` (works / doesn't-work tables) and `docs/realworld-suite.md` (package notes) |
+| A new or changed real-world package in the harness | `docs/realworld-suite.md`; `tests/realworld/manifest.json` |
+| A test program's coverage, or a new `*TEST.COM` | `docs/mcp-smoke-test.md`; `AGENTS.md` Source Structure |
+| Screen benchmark phases or figures | `docs/screen-benchmark.md` — re-run `tools/screen_bench.py`; never hand-edit the table |
+| Lint rule, build gate, or CI job | `AGENTS.md` § Linting / Build; `docs/ci.md` for the workflow |
+
+### Rules
+
+- **Re-measure, don't re-quote.**  Any table of byte sizes, T-states or free
+  space drifts on every build.  Re-run the tool that produced it; if you
+  cannot, say where the number came from rather than adjusting it by hand.
+- **Several tests assert on doc text.**  `tests/test_bdos_readonly.py`,
+  `test_ccp_program_entry.py`, `test_dri_harness.py`, `test_realworld_80.py`
+  and `test_third_party.py` read `docs/*.md` and `README.md` and fail if a
+  required fact disappears, and some forbid a claim that is no longer true.
+  Run `python3 -m unittest discover -s tests -t .` after editing a doc.
+- **Keep anchors working.**  Cross-doc links use `file.md#heading-slug`; if
+  you rename a heading, `grep` for it and fix the links.
+- **`README.md` is for users** — what the disc does and how to drive it.  No
+  internals; those belong in `docs/`.
+
+## Debugging
+
+Gather evidence before theorising: use breakpoints, watchpoints, traps,
+`fdc_log` and `char_buffer` dumps rather than reasoning from the source alone.
+Do not go down long rabbit holes without a solid reason.
 
 ## Build Number
 Stored in `build/buildnum` (ignored by git) and incremented by the build

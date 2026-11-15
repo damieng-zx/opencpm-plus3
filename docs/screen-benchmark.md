@@ -48,8 +48,8 @@ boot, so without this the same workload would not be doing the same work.
 | 8 | `flip` | the same, paging on, plus the character that pages the display |
 | 9 | `erase` | 1000 x `ESC K` from column 0 (a whole row of cells) |
 
-Phase 6 isolates the per-call cost from the per-glyph cost.  Phase 7 minus
-phase 8's difference is the cost of a 24x80 page flip.
+Phase 6 isolates the per-call cost from the per-glyph cost.  Phase 8 minus
+phase 7 (and one glyph) is the cost of a 24x80 page flip.
 
 ## Results
 
@@ -60,61 +60,47 @@ state the measurement starts from is the same every time:
 
 | Phase | OpenCP/M +3 | Locomotive | Relative |
 |-------|------------:|-----------:|---------:|
-| `glyphs` | 39,665,631 | 79,612,208 | **0.50x** |
-| `scroll` | 152,265,060 | 181,510,689 | **0.84x** |
-| `clear` | 10,168,529 | 13,090,080 | **0.78x** |
-| `cursor` | 10,210,924 | 35,454,124 | **0.29x** |
-| `page` | 19,834,545 | 39,772,237 | **0.50x** |
-| `call` | 2,146,319 | 9,299,178 | **0.23x** |
-| `noflip` | 12,922,808 | 29,430,207 | 0.44x |
-| `flip` | 59,402,555 | 30,099,588 | 1.97x |
-| `erase` | 15,395,919 | 33,948,037 | **0.45x** |
+| `glyphs` | 39,535,547 | 79,544,264 | **0.50x** |
+| `scroll` | 152,289,125 | 181,510,689 | **0.84x** |
+| `clear` | 10,189,128 | 13,092,522 | **0.78x** |
+| `cursor` | 10,253,981 | 35,453,957 | **0.29x** |
+| `page` | 19,763,054 | 39,851,546 | **0.50x** |
+| `call` | 2,149,835 | 9,299,178 | **0.23x** |
+| `noflip` | 12,980,073 | 29,430,039 | **0.44x** |
+| `flip` | 25,731,030 | 30,099,588 | **0.85x** |
+| `erase` | 15,421,499 | 33,945,174 | **0.45x** |
 
-Per glyph, this system costs 4227 T-states and Locomotive 8484; per BDOS
-console call, 1073 against 4650.
+Per glyph, this system costs 4213 T-states and Locomotive 8477; per BDOS
+console call, 1075 against 4650.
+
+One page flip, isolated as phase 8 minus phase 7 minus one glyph, costs about
+506,000 T-states here against 18,305 on Locomotive - about 28x.  That is
+consistent with the `flip` row: phase 8 is dominated by drawing 1,275
+characters, and in 24x80 mode a character costs 10,181 T-states here against
+23,082 on Locomotive (2.3x cheaper), which absorbs most of the flip's cost.  So
+the phase as a whole wins at 0.85x while each individual flip loses.
+(`screen_bench.py` labels this derived figure `(flip)`; its cross-image ratio
+reads 19x because it divides the two phase 8 minus phase 7 totals without
+removing the per-flip glyph, and this system's cheaper glyph flatters the
+ratio.)
 
 ## What the numbers say
 
 - **Per-call overhead dominates small output.**  A BDOS console call costs
-  1074 T-states here against 4650 on Locomotive, so anything that writes a
+  1075 T-states here against 4650 on Locomotive, so anything that writes a
   character at a time is much cheaper.  This is the single biggest reason
   `glyphs`, `cursor` and `page` come out ahead.
-- **A full-row erase must not draw glyphs.**  `ESC E` and `ESC K` both used to
-  re-render one space glyph per cell: a font load and eight masked scan-line
-  merges per cell, to produce "these bytes are zero".  Blanking the row's
-  bitmap, attribute cells and buffer directly is the same work the scroll path
-  already did (`_blank_row_direct`), and it took `clear` from 2,884,815 to
-  254,213 T-states per call and `erase` from 125,002 to 15,396 per row.
-  Both are now faster than Locomotive.
-- **Paging is the one phase still behind.**  Locomotive's flip costs about
-  18,000 T-states; ours about 1,855,000.  A flip here shifts 24 rows x 8 scan
-  lines of bitmap, stamps a whole attribute row, mirrors the window into
-  `char_buffer` and re-renders the newly exposed columns one glyph at a time
-  (29 cells x 24 rows at 51 columns).  At 4227 T-states per glyph that
-  re-render alone is about 2.9 million T-states, so Locomotive is evidently
-  not re-rendering 696 glyphs per flip.  Matching it needs the exposed strip
-  drawn from the logical buffer without a full per-glyph render pass; that is
-  the next piece of work, and the benchmark is now in place to prove a change
-  helps.
-
-## Three compatibility bugs it found
-
-Building the benchmark turned up three places where this system disagreed with
-the +3 manual and with Locomotive.  All three are fixed.
-
-1. **`ESC 5 n` polarity was inverted.**  The manual (Appendix III) defines
-   `0` = enable automatic paging and `1` = disable.  This system read it the
-   other way round, so software that turned paging on silently turned it off.
-   `src/test/termtest.asm` now checks the documented polarity.
-2. **`ESC 3 2` did not clear when already in 24x80.**  `_enter80` returned
-   immediately if `mode80` was already set, so re-entering 24x80 to reset the
-   logical screen (which is how software refreshes it) left the old contents
-   and the old window offset in place.  It now always clears, and keeps
-   `lg_savecols` intact across a re-entry.
-3. **A page flip triggered on cursor motion.**  This system re-pages when the
-   cursor moves outside the window; Locomotive pages when a character is
-   *written* past it.  Phase 8 of the benchmark writes the extra character so
-   both do the same work.
+- **Erasing a row does not render glyphs.**  `ESC E` and `ESC K` blank the
+  row's bitmap, attribute cells and logical buffer directly
+  (`_blank_row_direct`) instead of re-rendering one space glyph per cell, so
+  `clear` costs 254,728 T-states per call and `erase` 15,422 per row.  Both
+  are ahead of Locomotive.
+- **A page flip is the one operation still behind.**  A flip shifts 24 rows x
+  8 scan lines of bitmap, stamps a whole attribute row, mirrors the window
+  into `char_buffer` and draws only the non-blank cells of the exposed strip.
+  Locomotive's 18,305 T-states per flip shows it does not re-render the
+  exposed columns at all; closing the remaining 28x needs the strip maintained
+  incrementally in `LG_BUF` rather than drawn at flip time.
 
 ## Adding a phase
 
@@ -131,9 +117,9 @@ its seven pages at 32, 51 and 64 columns.  The program writes 1 to `0x3F00`
 as a draw starts and 2 when it ends, and the tool reads the emulator's
 T-state counter at each write, the same way `screen_bench.py` does.
 
-Drawing a page was taking most of a second at 51 columns.  A page is about a
-thousand characters, and the console costs around 4,000 T-states for each
-rendered glyph, so the program's own overhead is the smaller part:
+A page draw costs most of a second at 51 columns.  A page is about a thousand
+characters, and the console costs around 4,000 T-states for each rendered
+glyph, so the program's own overhead is the smaller part:
 
 | | 32 col | 51 col | 64 col |
 |---|---:|---:|---:|
@@ -143,8 +129,8 @@ rendered glyph, so the program's own overhead is the smaller part:
 (T-states for all seven pages.)  Buffering the output and sending it with
 function 111 saves about 8%: it removes a BDOS call per byte, and four per
 cursor move, but not the time the BIOS spends rendering.  Replacing each space
-with a cursor-forward escape was tried and made no difference, since blanks are
-already cheap in the BIOS.  An instruction trace of a page draw puts about 56%
-of the executed instructions in the bank-5 glyph renderer, with the attribute
-stamp and the page-in/page-out port writes next, so further gains are in the
+with a cursor-forward escape makes no difference, since blanks are already
+cheap in the BIOS.  An instruction trace of a page draw puts about 56% of the
+executed instructions in the bank-5 glyph renderer, with the attribute stamp
+and the page-in/page-out port writes next, so further gains are in the
 console path, where they would speed up every program.

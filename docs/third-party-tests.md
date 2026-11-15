@@ -93,20 +93,21 @@ checks:
   `src/tools/setkeys.asm`; `RESET.KEY` itself is plain data and is taken from
   your `references/binaries/`, so the test is skipped when it is absent.
 
-The three failures this harness originally found are fixed:
+Three DRI behaviours this harness depends on, all provided by the system:
 
-* **ED `E` (end/save)** built its records at address 0 and destroyed page
-  zero.  ED keeps its record-buffer base at `FCB+21h`, i.e. right after a
-  33-byte FCB, and the BDOS copied 36 bytes back into the FCB after every
-  file call, zeroing it.  `writeback_fcb` now stops at byte 32; only F35
-  (file size) and F36 (set random record) write the random-record bytes.
-* **SETKEYS** crashed on exit because it ends with `RET` and the CCP never
-  pushed a return address.  The CCP now pushes 0000h, exactly like the
-  CP/M 3 CCP, so the entry stack is `SP = TPA_TOP - 2` with `(SP) = 0000h`.
-* **SET** is a GENCOM "COM file with header" (first byte `RET`, module at
-  0200h, `comsize` at 0101h).  The CCP now performs the CP/M 3 loader's
-  module move from 0200h down to 0100h.  Attached RSX modules are not
-  installed (this system has no RSX chain), and SET runs without its RSX.
+* **FCB write-back stops before R0/R1/R2.**  ED keeps its record-buffer base
+  at `FCB+21h`, i.e. right after a 33-byte FCB, so `writeback_fcb` copies bytes
+  0-32 only; F35 (file size) and F36 (set random record) write the
+  random-record bytes too.  Without this ED builds its records at address 0 and
+  destroys page zero.
+* **The CCP pushes a warm-boot return address.**  A program that ends with
+  `RET` returns to the CCP, so the entry stack is `SP = TPA_TOP - 2` with
+  `(SP) = 0000h`.
+* **The CCP performs the CP/M 3 COM header move.**  SET is a GENCOM "COM file
+  with header" (first byte `RET`, module at `0200h`, `comsize` at `0101h`),
+  so the CCP moves the module from `0200h` down to `0100h`.  Attached RSX
+  modules are not installed (this system has no RSX chain), and SET runs
+  without its RSX.
 
 Without the binaries the tool prints the notice and exits 0, so CI never
 needs them.
