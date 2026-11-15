@@ -11,13 +11,12 @@
 ; The optional $SUM is a 16-bit additive sum of the bytes, which is what the
 ; AMSDOS and PLUS3DOS file headers carry.
 ;
-; Reading is sequential through BDOS F20 with the DMA moved to an 8K buffer,
-; so a 64K file costs 512 BDOS calls rather than 512, and the CRC folds whole
-; records at a time.
+; Reading is sequential through BDOS F20 with F44 set to an 8K multi-record
+; count, the DMA moved to an 8K buffer, and the CRC folding whole records at a
+; time, so a 64K file costs 8 BDOS calls.
 ;
-; Speed at 3.5 MHz: a byte-table CRC-32 measures about 12 KB/s (see
-; tools/ckbench.py), so a full 175K disc takes ~15 s and a typical .COM well
-; under a second.
+; A filespec may carry a drive letter, "CRC C:FOO.COM"; the letter goes into
+; both the search FCB and the open FCB.
 ;
 ; Build: sjasmplus --raw=build/crc.com src/tools/crc.asm
 
@@ -75,6 +74,7 @@ start:
     cp 0x0D
     jp z, usage
 
+    call parse_drive               ; "X:" prefix, if any; HL -> the name
     call parse_filespec            ; Cy = bad
     jp c, usage
 
@@ -83,6 +83,44 @@ start:
 
 ; --------------------------------------------------------------------------
 ; Command line
+; parse_drive - recognise an "X:" prefix on the filespec
+;   In:       HL = the filespec
+;   Out:      HL = past any "X:", otherwise unchanged
+;             spec_drive = drive number, 1-based (0 = the current drive)
+;   Clobbers: AF, B, HL
+;
+; An FCB's drive byte is 1 for A:, 2 for B: and 0 for "current", so this is
+; the same number work_fcb and FCB1 want.  Without it the colon of "C:" was
+; copied into the 8-character name field and the rest of the name shifted into
+; the extension.
+;
+; A drive that does not exist is not rejected here: the search finds nothing
+; and the caller reports "No file", which is how DIR behaves.
+parse_drive:
+    xor a
+    ld (spec_drive), a            ; default: the current drive
+    ld a, (hl)
+    and 0xDF                      ; uppercase; only A-Z pass the range test
+    cp 'A'
+    ret c
+    cp 'Z' + 1
+    ret nc
+    inc hl
+    ld a, (hl)
+    cp ':'
+    jr nz, .not_a_drive
+    dec hl
+    ld a, (hl)
+    and 0xDF
+    sub 'A' - 1                   ; 'A' -> 1, 'C' -> 3
+    ld (spec_drive), a
+    inc hl
+    inc hl                        ; past the name letter and the colon
+    ret
+.not_a_drive:
+    dec hl                        ; the letter was part of the name
+    ret
+
 ; --------------------------------------------------------------------------
 ; parse_filespec - copy "NAME.EXT" from HL into spec_name/spec_ext, and into
 ;   the FCB at 005Ch so F17 can search for it.
@@ -153,9 +191,10 @@ parse_filespec:
 .no_ext:
 
     ; Mirror into FCB1 for the directory search: drive byte plus 11 name
-    ; bytes, then zero the rest.
+    ; bytes, then zero the rest.  The drive byte is 1-based and 0 means "the
+    ; current drive", which is exactly what parse_drive left in spec_drive.
     push hl                       ; keep the tail pointer for parse_options
-    xor a
+    ld a, (spec_drive)
     ld (FCB1 + 0), a
     ld hl, spec_name
     ld de, FCB1 + 1
@@ -494,6 +533,10 @@ open_work:
     ld (hl), 0
     inc hl
     djnz .clr
+    ; Same drive byte as the FCB1 the search used, or the open would look on
+    ; the current drive while the search found the file somewhere else.
+    ld a, (spec_drive)
+    ld (work_fcb + 0), a
     ld hl, work_name
     ld de, work_fcb + 1
     ld bc, 11
@@ -896,6 +939,7 @@ finish:
 ; Data
 ; --------------------------------------------------------------------------
 saved_drive:    db 0
+spec_drive:     db 0                 ; 1-based drive from "X:", 0 = current
 name_idx:       db 0
 star_seen:      db 0
 name_save:      db 0
