@@ -46,6 +46,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 | **ED** | DRI CP/M 3 | Appends/types a line, inserts text, `E` (END) saves and the text reads back with `TYPE`, `Q`/`Y` quits | Local-only harness; the save used to hang (see below) |
 | **SET** | DRI CP/M 3 | Reports `ERROR: No options specified.` and applies a bracketed attribute (`SET FILE [RO]` prints `Read Only (RO)`) | Local-only harness; options go in `[...]` |
 | **SETKEYS** | ours (`src/tools/setkeys.asm`) | Applies a key file: parses `RESET.KEY` and programs the +3 key table through XBIOS `KM_SET_KEY`/`KM_SET_EXPAND`.  Amstrad's original is Locomotive code and is not shipped or needed | DRI harness builds a scratch image and checks the table changed |
+| **MSCP** | 1.4 | Chess board and prompt; `force` makes it play neither side, `e2e4`/`e7e5`/`g1f3`/`b8c6` are accepted and shown on the board, `bd` dumps the position, `quit` returns to `A>` | Marcel van Kervinck's engine, SDCC-built for CP/M 2.x. It loads `BOOK.BIN`, and its book choice is seeded randomly per boot, so the automated run scripts both sides with `force` |
 
 ## ❌ Doesn’t work yet
 
@@ -55,7 +56,6 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 | **Turbo Pascal display** | The default run wraps; `turbo3_80` fits the IDE in 80 columns. Kaypro terminal escapes leave stray `1` characters in the buffer. | 24x80 solves the width; the remaining work is the Kaypro terminal escape set. |
 | **3CLCK clock display** | `CLOCKCLR` says `CLOCK.FID is not loaded`; the clock never appears on the status line. | The FID is not loaded, and is not a gap to close: `CLOCK.FID` and `SERIAL.FID` are built for Locomotive's private common-memory ABI (they `CALL` fixed addresses such as `FF04`/`FF05`/`FF08`/`FF09`, which land inside this system's own common stub) and carry a different header format, so loading them would mean reserving those addresses and reimplementing an undocumented interface. The status line now shows `HH:MM` natively instead (see `docs/API.md`, *Status line*), from the `scb_date`/`scb_minute`/`scb_sec` the ISR maintains. |
 | **ZSID / SID / DDT breakpoints** | `G` with a stop address (and `T`/`U` tracing) stops at a random address inside the program instead of at the breakpoint, and a long ZSID command such as a large `F` fill is cut short the same way. Loading, short dumps and `G0` work. | Not fixable without breaking +3 compatibility; see [Debuggers and RST 7](#debuggers-and-rst-7). Automated as `zsid_break` (known issue). |
-| **Sargon (chess)** | Prints nothing after the command line; the CPU spins polling port `2FFD`. | Copy protection. The program issues raw uPD765 `READ DATA` commands against the boot track (`C=1`, `R=1..N`) and waits for the original disk's sector IDs, which never match, so it never reaches its title screen. Not a BIOS bug: no CP/M file or console call is involved. |
 | **PLAN80 (PASCAL/M)** | `PLAN80` prints `! Non-existent Proc/Seg called; At PC= D736h SP= CC94h` and returns to the prompt; no title screen. | Not a Turbo Pascal program: it is **Sorcim PASCAL/M** P-code. `PLAN80.COM` is the loader, `PLAN80.OV1` the compiled program (`&PLAN80 VERSION 2.4 (C) 1982`) and `PLAN80.OV2` the runtime library (`Sorcim PASCAL/M Library`, dated 04/22/80). The overlays are found and read correctly - a test probe read all 37,888 bytes of OV1 and 9,728 of OV2 and both matched the archive byte for byte, and removing either makes the loader say `File PLAN80.OVx not found` instead. Fragmentation, the 180K/720K layout and floppy vs RAM disk all make no difference, and the only BDOS calls it makes (F1, F2, F11, F15, F16, F20, F22, F26) are all implemented. The Proc/Seg error is the runtime failing to find a segment the program asks for, and the two files are two years apart: most likely a PASCAL/M library/program version mismatch in the archive itself. See [PLAN80 and PASCAL/M](#plan80-and-pascalm). |
 
 Recently fixed: **DRI ED/SET/SETKEYS**.  ED's `E` command corrupted page
@@ -264,7 +264,7 @@ It does not help WordStar, whose 80-column layout is unchanged.
 - [x] The Hitchhiker's Guide to the Galaxy - automated as `hitchhiker`
 - [x] Planetfall - automated as `planetfall`
 - [x] Starcross - automated as `starcross`
-- [x] Sargon chess - automated as `sargon` (fails its copy-protection check)
+- [x] MSCP chess - automated as `mscp`
 - [ ] Creative Computing games
 - [ ] Nemesis
 - [ ] Catchum

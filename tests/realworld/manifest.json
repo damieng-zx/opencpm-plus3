@@ -847,18 +847,85 @@
       "notes": "Board game, compiled from FORTRAN; the paged prompt exercises the console wait-for-key path."
     },
     {
-      "id": "sargon",
-      "title": "Sargon (chess)",
-      "url": "http://www.retroarchive.org/cpm/games/sargon.zip",
-      "archive": "file",
-      "save_as": "SARGON.COM",
-      "command": "SARGON",
+      "id": "mscp",
+      "title": "MSCP 1.4 (chess)",
+      "url": "https://github.com/Tronix286/mscp/archive/e50bbb5f3e869b7e464ec4835433b9696dedd0e0.zip",
+      "archive": "zip",
+      "members": [
+        "mscp-e50bbb5f3e869b7e464ec4835433b9696dedd0e0/MSCP.COM",
+        "mscp-e50bbb5f3e869b7e464ec4835433b9696dedd0e0/BOOK.BIN"
+      ],
+      "command": "MSCP",
       "expect": [
-        "HAYDEN BOOK"
+        "MSCP 1.4",
+        "White to move",
+        "book of size"
       ],
       "frames": 4000,
-      "known_issue": "This Sargon build is copy-protected: it issues raw uPD765 READ DATA commands against the boot track (reads of C=1 R=1..N on port 2FFD) and loops forever waiting for the original disk's sector IDs. Our FDC returns the real disk, so nothing is drawn and the program never reaches its title screen.",
-      "notes": "Chess engine that fails its media check; kept to document the copy-protection case rather than as a working title."
+      "steps": [
+        {
+          "text": "force",
+          "frames": 2000,
+          "expect": [
+            "mscp>"
+          ]
+        },
+        {
+          "text": "e2e4",
+          "frames": 2500,
+          "expect": [
+            "1. Black to move",
+            "4  - - - - P - - -"
+          ]
+        },
+        {
+          "text": "e2e7",
+          "frames": 2000,
+          "expect": [
+            "no such move or command: e2e7",
+            "1. Black to move"
+          ]
+        },
+        {
+          "text": "e7e5",
+          "frames": 2500,
+          "expect": [
+            "2. White to move",
+            "5  - - - - p - - -"
+          ]
+        },
+        {
+          "text": "g1f3",
+          "frames": 2500,
+          "expect": [
+            "2. Black to move",
+            "3  - - - - - N - -"
+          ]
+        },
+        {
+          "text": "b8c6",
+          "frames": 2500,
+          "expect": [
+            "3. White to move",
+            "6  - - n - - - - -"
+          ]
+        },
+        {
+          "text": "bd",
+          "frames": 2000,
+          "expect": [
+            "a b c d e f g h"
+          ]
+        },
+        {
+          "text": "quit",
+          "frames": 2000,
+          "expect": [
+            "A>"
+          ]
+        }
+      ],
+      "notes": "Marcel van Kervinck's MSCP, built with SDCC for CP/M 2.x. `force` takes the engine off the move, so every ply is scripted and the check is deterministic: the random-seed-driven opening book would otherwise pick a different reply each boot. Covers an accepted move, a rejected one, the `bd` board dump and a clean `quit` back to the CCP; BOOK.BIN must sit beside MSCP.COM."
     },
     {
       "id": "advent",

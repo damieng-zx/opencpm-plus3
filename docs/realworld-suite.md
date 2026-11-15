@@ -89,7 +89,7 @@ separate, explicitly triggered workflow.
 | `hunt` | Hunt | Shop screen, maze redraw | Pass |
 | `ladder` | Ladder | High-score menu, live status line, `.DAT` file | Pass |
 | `othello` | Othello | Paged prompt, FORTRAN-built board game | Pass |
-| `sargon` | Sargon (chess) | Copy-protected; raw boot-track reads spin forever | Known issue |
+| `mscp` | MSCP 1.4 (chess) | Scripted game: moves accepted/rejected, `bd` board dump, `quit` | Pass |
 | `advent` | Colossal Cave Adventure (A02) | 3-digit seed, movement, on-disk message files | Pass |
 | `hitchhiker` | The Hitchhiker's Guide to the Galaxy | 113K `.DAT` streamed as the game runs | Pass |
 | `planetfall` | Planetfall | Multi-screen intro, status line | Pass |
@@ -199,9 +199,14 @@ issues; the others are history):
   (Hunt), a randomised starship name (STAR), a menu and status line (Ladder)
   and a paged prompt (Othello).  Ladder needs one settle step after its menu
   appears, otherwise the `P` keypress arrives before the program reads input.
-- **Sargon** is copy-protected.  It issues raw uPD765 `READ DATA` commands
-  against the boot track (C=1, R=1..N, polled on port `2FFD`) and loops forever
-  waiting for the original disk's sector IDs, so it never draws its title.
+- **MSCP** is the suite's chess title.  It is played with `force`, which takes
+  the engine off the move, so every ply is a fixed script and the check is
+  deterministic.  The alternative is flaky: with the engine on the move its
+  reply comes out of `BOOK.BIN` chosen against a per-boot random seed, so
+  `e2e4` can be answered by `e7e5`, `c7c5`, `d7d6` or `b8c6`.  Scripting both
+  sides still exercises the real engine - move generation and legality
+  checking run for every ply - and `bd` dumps the position, `quit` returns to
+  the CCP.  `BOOK.BIN` must sit beside `MSCP.COM`.
 
 - **Plan-80** is Sorcim PASCAL/M P-code, not Turbo Pascal: `PLAN80.COM` is a
   loader, `PLAN80.OV1` the compiled program (`VERSION 2.4 (C) 1982`) and
@@ -429,7 +434,7 @@ need conversion first.
 | Software | Download |
 |---|---|
 | Large text-adventure collection | [MANYGAME.ZIP](http://www.retroarchive.org/cpm/games/manygame.zip) - automated as `pacman95`, `star`, `hunt` and `othello` |
-| Sargon chess | [SARGON.ZIP](http://www.retroarchive.org/cpm/games/sargon.zip) - automated as `sargon` (copy-protected) |
+| MSCP 1.4 (chess) | [MSCP](https://github.com/Tronix286/mscp) (pinned commit `e50bbb5`) - automated as `mscp` |
 | Creative Computing games | [CCGAMES.ZIP](http://www.retroarchive.org/cpm/games/ccgames.zip) |
 | Nemesis | [nemesis.zip](http://www.retroarchive.org/cpm/games/nemesis.zip) |
 | Ladder | [LADDER.ZIP](http://www.retroarchive.org/cpm/misc/LADDER.ZIP) - automated as `ladder` |

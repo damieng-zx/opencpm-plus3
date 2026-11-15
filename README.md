@@ -129,8 +129,9 @@ emulator.
 - **Applications** — Zork I-III, dBASE II, SuperCalc, Multiplan, WordStar,
   WordMaster, VEDIT Plus, Turbo Pascal and BASIC-80 work; the large data files,
   overlays and random FCB I/O they use are the interesting part.
-- **Games** — Pac-Man 95, STAR, Hunt, Ladder, Othello and Colossal Cave run,
-  which covers dense full-screen redraws and keyboard input at play speed.
+- **Games** — Pac-Man 95, STAR, Hunt, Ladder, Othello, MSCP chess and Colossal
+  Cave run, which covers dense full-screen redraws and keyboard input at play
+  speed.
 - **Interactive fiction** — Hitchhiker's Guide, Planetfall and Starcross run
   from their Infocom CP/M disks, streaming large `.DAT` files as they play.
 - **DRI utilities** — ED, SET, SETKEYS and SHOW, including GENCOM files with a
@@ -140,10 +141,9 @@ emulator.
   720K disc can be the *boot* disc: the stage-2 loader and boot sector are
   built for both layouts, and the test image uses the 720K pair.
 
-The known gaps are documented rather than hidden: Sargon fails a
-copy-protection check on the boot track.  WordStar, Turbo Pascal, SuperCalc2
-and Multiplan need the [24x80 screen](#screen-modes) or, for Turbo Pascal,
-`SCREEN 64` after a TINST 64-column install.
+The known gaps are documented rather than hidden: WordStar, Turbo Pascal,
+SuperCalc2 and Multiplan need the [24x80 screen](#screen-modes) or, for Turbo
+Pascal, `SCREEN 64` after a TINST 64-column install.
 
 Per-package results, the exact checks run and why the failures fail are in the
 [compatibility tables](docs/compatibility.md); the harness is described in the

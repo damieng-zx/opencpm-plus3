@@ -8,6 +8,57 @@ import unittest
 from .layout import ROOT, source
 
 
+class ChessPackage(unittest.TestCase):
+    """The chess title must be a game that actually plays.
+
+    The suite used to carry Sargon, which never got past its copy-protection
+    check on the boot track, so the "chess" coverage was really only a
+    known-issue note.  MSCP plays, so guard the things that keep its run
+    deterministic and self-contained.
+    """
+
+    def setUp(self) -> None:
+        manifest = json.loads(
+            (ROOT / "tests" / "realworld" / "manifest.json").read_text(
+                encoding="utf-8"))
+        self.packages = {p["id"]: p for p in manifest["packages"]}
+
+    def test_the_chess_package_is_not_a_known_issue(self):
+        chess = [p for p in self.packages.values() if "chess" in p["title"]]
+        self.assertTrue(chess, "no chess package in the manifest")
+        for pkg in chess:
+            self.assertNotIn("known_issue", pkg, pkg["id"])
+
+    def test_mscp_ships_its_opening_book(self):
+        pkg = self.packages["mscp"]
+        members = [m.rsplit("/", 1)[-1].upper() for m in pkg["members"]]
+        # BOOK.BIN is loaded at start-up; without it the engine still runs but
+        # the run no longer covers the book search.
+        self.assertEqual(sorted(members), ["BOOK.BIN", "MSCP.COM"])
+        self.assertEqual(pkg["command"], "MSCP")
+
+    def test_mscp_scripts_both_sides(self):
+        """The book reply comes from a random seed, so `force` must come first.
+
+        Without `force` the engine answers `e2e4` with a book move chosen from
+        a per-boot random seed, so any `expect` naming that reply is flaky.
+        """
+        pkg = self.packages["mscp"]
+        steps = pkg["steps"]
+        self.assertEqual(steps[0]["text"], "force")
+        self.assertTrue(any(s.get("text") == "e7e5" for s in steps),
+                        "both sides must be scripted")
+        self.assertTrue(any(s.get("text") == "quit" for s in steps))
+        self.assertIn("A>", steps[-1]["expect"])
+
+    def test_mscp_checks_move_rejection(self):
+        """An illegal move must be reported, not silently accepted."""
+        pkg = self.packages["mscp"]
+        rejected = [s for s in pkg["steps"]
+                    if any("no such move" in e for e in s.get("expect", []))]
+        self.assertTrue(rejected, "no rejected-move step")
+
+
 class RealWorld24x80(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = json.loads(
