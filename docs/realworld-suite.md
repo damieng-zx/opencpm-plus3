@@ -91,9 +91,9 @@ separate, explicitly triggered workflow.
 | `othello` | Othello | Paged prompt, FORTRAN-built board game | Pass |
 | `mscp` | MSCP 1.4 (chess) | Scripted game: moves accepted/rejected, `bd` board dump, `quit` | Pass |
 | `advent` | Colossal Cave Adventure (A02) | 3-digit seed, movement, on-disk message files | Pass |
-| `hitchhiker` | The Hitchhiker's Guide to the Galaxy | 113K `.DAT` streamed as the game runs | Pass |
-| `planetfall` | Planetfall | Multi-screen intro, status line | Pass |
-| `starcross` | Starcross | Game's own status line updates every turn | Pass |
+| `hitchhiker` | The Hitchhiker's Guide to the Galaxy | 113K `.DAT` streamed as the game runs; save, re-save and restore | Pass |
+| `planetfall` | Planetfall | Multi-screen intro, status line; save, re-save and restore | Pass |
+| `starcross` | Starcross | Game's own status line updates every turn; save, re-save and restore | Pass |
 
 Notes on individual packages (the display caveats are recorded known
 issues; the others are history):
@@ -232,6 +232,22 @@ issues; the others are history):
   `HITCnnn`/`PLANnnn` build for the TPA size, so the suite runs the 128K
   variants directly and leaves the stubs on the disk.
 
+  Each of the three also runs a **save/restore cycle**, which is the only
+  third-party path in the suite that creates a file, writes it sequentially,
+  closes it and then deletes it so a second save can reuse the name - the
+  exact sequence the bug hunt changed (`F19` per-extent delete, `F21` extent
+  and block reuse, `F22` refusing an existing name, `F16` the close).  The
+  script saves, takes two turns, saves again over the same name, quits, and
+  runs `DIR [SIZE] <name>.SAV`.  That must report exactly one file in the
+  same number of 1K blocks and exactly one extra directory entry, so a
+  duplicate extent or a leaked block fails the run.  Restoring in a *fresh
+  session* must then return to the **second** save's turn count - the turn
+  counter is printed on the status line every turn, so replaying the first
+  save, or a stale file, is a visible mismatch rather than a silent pass.
+  All three saves are 11-15K, i.e. a single 16K extent, so `F21`'s
+  mid-file extent step is not reached; that branch is covered by
+  `FIXTEST.COM` and the static checks in `tests/test_bug_hunt.py`.
+
 - **WordMaster 1.07A** edits and saves.  Leaving its insert mode needs
   `ESC`, which on the +3 is the BREAK key (`Caps Shift + Space`) per the
   CP/M Plus manual; the package now runs the full edit-save-`TYPE` cycle.
@@ -290,7 +306,9 @@ is better than renaming it at the prompt (a `REN` leaves the old name on the
 disk).
 
 Set `"format": "720k"` and a matching per-package `base` to build on the
-720K layout instead of 180K.
+720K layout instead of 180K.  A per-package `files` list adds built files to
+the shared `base` list for that package only - the Infocom games add
+`build/DIR.COM` so a step can report the size of a save file.
 
 `setup` is optional: each entry is typed at the `A>` prompt before
 `command` (a string is a command, or an object with `command`, `frames` and
@@ -301,7 +319,9 @@ Steps run in order. A step with `text` types a command, `key` presses a key,
 and `wait: true` just runs the emulator for `frames` without typing — use it
 when a tool needs time after its last output (for example Link-80 writing a
 large `.COM`) before the next command is sent.  `key: "shift+sym+enter"` is
-the EXTEND+Enter chord that flips the 24x80 halves.
+the EXTEND+Enter chord that flips the 24x80 halves, and `shell` types a CCP
+command after a program has exited, which is how a package inspects a file
+the program just wrote (`DIR [SIZE] STARCROS.SAV`).
 
 ### Reading the screen
 

@@ -19,6 +19,7 @@ Tests were run on 2026-10-28 through the zx84 MCP server; the language results w
 | **Zork I** | Revision 88 | Boots, prints the Zork banner, reaches “West of House” | Large `.DAT` file, random reads |
 | **Zork II** | Release 48 | Banner, “Inside the Barrow”, inventory, `save` writes `ZORK2.SAV`, `quit` returns to `A>` | Large `.DAT` reads plus a save-file write |
 | **Zork III** | Release 17 | Paged intro (one More prompt), save and quit | Same engine as Zork I/II |
+| **Infocom save/restore** | Hitchhiker's, Planetfall, Starcross | `save`, two turns, a second `save` over the same name, `quit`, then `DIR [SIZE]` shows one file in unchanged blocks and one new directory entry; `restore` in a fresh session returns to the second save's turn count | Covers `F19` (per-extent delete), `F21` (extent/block reuse on rewrite), `F22` (refuse an existing name) and `F16` (close). All three saves are 11-15K, a single 16K extent |
 | **ZSID** | 1.4 | Loads a `.COM`, `D100` dumps memory, `G0` warm-boots | Debugger file load and console output |
 | **SuperCalc** | 1.05 | Banner, grid, cell entry, `/Q` + `Y` quit | `SCHAZ15.COM`, the Hazeltine build. Saving a `.CAL` fails its “program diskette” media check |
 | **WordMaster** | 1.07A | Banner, edit, `BREAK` (Caps+Space = ESC) to leave insert mode, `E` saves, `TYPE` shows the text | Uses the official +3 BREAK mapping |

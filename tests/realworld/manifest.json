@@ -989,6 +989,9 @@
         "Infocom interactive fiction"
       ],
       "frames": 5000,
+      "files": [
+        "build/DIR.COM"
+      ],
       "steps": [
         {
           "text": "inventory",
@@ -1004,9 +1007,117 @@
           "expect": [
             "It is pitch black."
           ]
+        },
+        {
+          "text": "save",
+          "frames": 2500,
+          "expect": [
+            "Load SAVE disk",
+            "HITCHHIK.SAV"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "key": "enter",
+          "frames": 3000,
+          "expect": [
+            "Ok.",
+            "Score: 0/2"
+          ]
+        },
+        {
+          "text": "z",
+          "frames": 2500,
+          "expect": [
+            "Score: 0/5"
+          ]
+        },
+        {
+          "text": "z",
+          "frames": 2500,
+          "expect": [
+            "Score: 0/8"
+          ]
+        },
+        {
+          "text": "save",
+          "frames": 2500,
+          "expect": [
+            "Load SAVE disk"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "key": "enter",
+          "frames": 3000,
+          "expect": [
+            "Ok.",
+            "Score: 0/8"
+          ]
+        },
+        {
+          "text": "q",
+          "frames": 2500,
+          "expect": [
+            "Score: 0/8"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "text": "y",
+          "frames": 2500,
+          "expect": [
+            "A>"
+          ]
+        },
+        {
+          "shell": "DIR [SIZE] HITCHHIK.SAV",
+          "frames": 2500,
+          "expect": [
+            "HITCHHIK SAV   11K",
+            "Total 1K Blocks =    11",
+            "Used/Max Dir Entries For Drive A:   19/  64"
+          ]
+        },
+        {
+          "shell": "HITC128",
+          "frames": 5000,
+          "expect": [
+            "THE HITCHHIKER'S GUIDE TO THE GALAXY",
+            "Score: 0/0"
+          ]
+        },
+        {
+          "text": "restore",
+          "frames": 2500,
+          "expect": [
+            "Load SAVE disk",
+            "HITCHHIK.SAV"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "key": "enter",
+          "frames": 3000,
+          "expect": [
+            "Ok.",
+            "Score: 0/8"
+          ]
         }
       ],
-      "notes": "Infocom's Hitchhiker's Guide (Douglas Adams and Steve Meretzky). HITCHHIK.COM is a stub that picks HITC64/HITC128/HITC256 for the TPA size; the suite runs the 128K build. The 113K .DAT is streamed from disk as the game runs, so it exercises repeated small random reads."
+      "notes": "Infocom's Hitchhiker's Guide (Douglas Adams and Steve Meretzky). HITCHHIK.COM is a stub that picks HITC64/HITC128/HITC256 for the TPA size; the suite runs the 128K build. The 113K .DAT is streamed from disk as the game runs, so it exercises repeated small random reads. The save/restore half covers the bug-hunt file paths: saving at 0/2, waiting twice to 0/8 and saving again over the same name, then quitting and confirming with DIR that there is one 11K HITCHHIK.SAV in 11 blocks and one extra directory entry (19 of 64). Restoring in a fresh session must return to 0/8, the *second* save, so a duplicate extent or a leaked block from the overwrite changes the turn count or the file's size."
     },
     {
       "id": "planetfall",
@@ -1024,6 +1135,9 @@
         "Deck Nine"
       ],
       "frames": 5000,
+      "files": [
+        "build/DIR.COM"
+      ],
       "steps": [
         {
           "text": "look",
@@ -1039,9 +1153,113 @@
             "You are carrying:",
             "Patrol uniform"
           ]
+        },
+        {
+          "text": "save",
+          "frames": 2500,
+          "expect": [
+            "Load SAVE disk",
+            "PLANETFA.SAV"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "key": "enter",
+          "frames": 3000,
+          "expect": [
+            "Ok.",
+            "Score: 0/4486"
+          ]
+        },
+        {
+          "text": "look",
+          "frames": 2500,
+          "expect": [
+            "Score: 0/4495"
+          ]
+        },
+        {
+          "text": "look",
+          "frames": 2500,
+          "expect": [
+            "Score: 0/4504"
+          ]
+        },
+        {
+          "text": "save",
+          "frames": 2500,
+          "expect": [
+            "Load SAVE disk"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "key": "enter",
+          "frames": 3000,
+          "expect": [
+            "Ok.",
+            "Score: 0/4504"
+          ]
+        },
+        {
+          "text": "q",
+          "frames": 2500,
+          "expect": [
+            "Do you wish to leave"
+          ]
+        },
+        {
+          "text": "yes",
+          "frames": 2500,
+          "expect": [
+            "A>"
+          ]
+        },
+        {
+          "shell": "DIR [SIZE] PLANETFA.SAV",
+          "frames": 2500,
+          "expect": [
+            "PLANETFA SAV   15K",
+            "Total 1K Blocks =    15",
+            "Used/Max Dir Entries For Drive A:   19/  64"
+          ]
+        },
+        {
+          "shell": "PLAN128",
+          "frames": 4000,
+          "expect": [
+            "Deck Nine",
+            "Score: 0/4459"
+          ]
+        },
+        {
+          "text": "restore",
+          "frames": 2500,
+          "expect": [
+            "Load SAVE disk",
+            "PLANETFA.SAV"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "key": "enter",
+          "frames": 3000,
+          "expect": [
+            "Ok.",
+            "Score: 0/4504"
+          ]
         }
       ],
-      "notes": "Infocom's Planetfall. PLANET.COM is the TPA-size stub; the suite runs PLAN128.COM. The opening screen is several screens of setup text, which covers scrolling and the status line."
+      "notes": "Infocom's Planetfall. PLANET.COM is the TPA-size stub; the suite runs PLAN128.COM. The opening screen is several screens of setup text, which covers scrolling and the status line. The second half is a save/restore cycle over the bug-hunt paths: save at 0/4486, take two turns to 0/4504, save again over the same name, then quit and check with DIR that the image holds exactly one 15K PLANETFA.SAV in 15 blocks and one extra directory entry (19 of 64). Restoring in a fresh session must replay the *second* save (0/4504), which proves the re-save replaced the file instead of adding a second extent or leaking its blocks."
     },
     {
       "id": "starcross",
@@ -1058,6 +1276,9 @@
         "Infocom"
       ],
       "frames": 5000,
+      "files": [
+        "build/DIR.COM"
+      ],
       "steps": [
         {
           "text": "look",
@@ -1072,9 +1293,113 @@
           "expect": [
             "You are empty handed."
           ]
+        },
+        {
+          "text": "save",
+          "frames": 2500,
+          "expect": [
+            "Load SAVE disk",
+            "Type <ENTER> for default."
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "key": "enter",
+          "frames": 3000,
+          "expect": [
+            "Ok.",
+            "Score: 0/3"
+          ]
+        },
+        {
+          "text": "look",
+          "frames": 2500,
+          "expect": [
+            "Score: 0/4"
+          ]
+        },
+        {
+          "text": "look",
+          "frames": 2500,
+          "expect": [
+            "Score: 0/5"
+          ]
+        },
+        {
+          "text": "save",
+          "frames": 2500,
+          "expect": [
+            "Load SAVE disk"
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "key": "enter",
+          "frames": 3000,
+          "expect": [
+            "Ok.",
+            "Score: 0/6"
+          ]
+        },
+        {
+          "text": "q",
+          "frames": 2500,
+          "expect": [
+            "Score: 0/6"
+          ]
+        },
+        {
+          "text": "y",
+          "frames": 2500,
+          "expect": [
+            "A>"
+          ]
+        },
+        {
+          "shell": "DIR [SIZE] STARCROS.SAV",
+          "frames": 2500,
+          "expect": [
+            "STARCROS SAV   11K",
+            "Total 1K Blocks =    11",
+            "Used/Max Dir Entries For Drive A:   17/  64"
+          ]
+        },
+        {
+          "shell": "STARCROS",
+          "frames": 5000,
+          "expect": [
+            "Living Quarters",
+            "Score: 0/0"
+          ]
+        },
+        {
+          "text": "restore",
+          "frames": 2500,
+          "expect": [
+            "Load SAVE disk",
+            "Type <ENTER> for default."
+          ]
+        },
+        {
+          "key": "enter",
+          "frames": 2500
+        },
+        {
+          "key": "enter",
+          "frames": 3000,
+          "expect": [
+            "Ok.",
+            "Score: 0/6"
+          ]
         }
       ],
-      "notes": "Infocom's Starcross, a two-file build (no TPA-size stub). Exercises the game's own status line, which updates on every turn."
+      "notes": "Infocom's Starcross, a two-file build (no TPA-size stub). Exercises the game's own status line, which updates on every turn. The save/restore half walks the bug-hunt paths: the first save lands at 0/3, two turns reach 0/5, a second save over the same name lands at 0/6, and DIR then reports exactly one 11K STARCROS.SAV in 11 blocks and one extra directory entry (17 of 64). Quitting and restoring in a fresh session must return to 0/6 - the *second* save - so a duplicate extent or leaked block from the overwrite would show up as a wrong turn count or a bigger file."
     },
     {
       "id": "wordmaster",

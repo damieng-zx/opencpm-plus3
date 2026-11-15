@@ -81,6 +81,16 @@ def check_base(manifest: dict, pkg: dict | None = None) -> dict[str, Path]:
         if not p.exists():
             raise SetupError(f"{p} does not exist; run build.cmd/build.sh first")
         files.append(p)
+    # A package can also name extra built files for its own image, e.g.
+    # DIR.COM so a save-file check can ask for its size.  These add to the
+    # shared base list rather than replacing it.
+    if pkg:
+        for raw in pkg.get("files", []):
+            p = ROOT / raw
+            if not p.exists():
+                raise SetupError(
+                    f"{p} does not exist; run build.cmd/build.sh first")
+            files.append(p)
     paths["files"] = files
     return paths
 
@@ -475,13 +485,19 @@ class RealWorld:
             # large .COM) finish before the next command is sent.
             self.mcp.call("run", {"frames": int(step.get("frames", 900))})
             self.record()
+        elif "shell" in step:
+            # A CCP command, typed after the game has exited.  This is how a
+            # package inspects a file the program just wrote, e.g.
+            # `DIR [SIZE] STARCROS.SAV` to read the save file's allocation.
+            self.mcp.call("type", {"text": step["shell"]})
+            self.mcp.call("key", {"name": "enter"})
         elif "key" in step:
             self.mcp.call("key", {"name": step["key"]})
         elif "text" in step:
             self.mcp.call("type", {"text": step["text"]})
             self.mcp.call("key", {"name": "enter"})
         else:
-            raise RunError(f"step has no key/text/wait: {step}")
+            raise RunError(f"step has no key/text/wait/shell: {step}")
         self.mcp.call("run", {"frames": int(step.get("frames", 900))})
         self.record()
         if step.get("expect"):
