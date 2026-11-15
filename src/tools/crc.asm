@@ -606,85 +606,105 @@ crc_read_all:
     or a
     ret
 
-; fold_block - fold BC bytes at HL into crc32
-;   In:       HL = data, BC = length
-;   Clobbers: everything
+; --------------------------------------------------------------------------
+; One CRC-32 step: fold the byte at (DE) into crc32, then advance DE.
 ;
-; The loop state lives in memory because crc32_byte uses every register.
-; That costs about 419 T-states per byte against the 281 a fully
-; register-resident loop reaches (tools/ckbench.py measures the latter), but
-; the BDOS read overhead per record is larger still, so the simple form is
-; kept.
-fold_block:
-    ld (fb_ptr), hl
-    ld (fb_left), bc
-.loop:
-    ld hl, (fb_left)
-    ld a, h
-    or l
-    ret z
-    dec hl
-    ld (fb_left), hl
-    ld hl, (fb_ptr)
-    ld a, (hl)
-    inc hl
-    ld (fb_ptr), hl
-    ; CRC-32
-    call crc32_byte
-    jr .loop
-
-; crc32_byte - fold one byte (in A) into the 32-bit crc32
-;   Clobbers: AF, BC, DE, HL
-crc32_byte:
-    push bc
-    ld hl, crc32
-    xor (hl)                      ; index = byte ^ crc[0]
-    ; The table entry is 4 bytes wide, so the byte offset is index * 4,
-    ; which needs a 16-bit add: index*4 = index*2*2.
+; A macro, so the page loop and the tail loop cannot drift apart -- the subtle
+; bugs in this routine's history were all copies of the body that had come to
+; differ by a byte or an instruction.
+;
+; Registers: B = djnz counter (must survive), C = the byte, DE = buffer,
+; HL = table entry, A = scratch.
+; --------------------------------------------------------------------------
+CRC_STEP        macro
+    ld a, (de)                    ; A = the byte
+    ld c, a
+    ld a, (crc32 + 0)
+    xor c                         ; index = byte ^ crc[0]
     ld l, a
     ld h, 0
     add hl, hl
-    add hl, hl
-    ld de, CRC32_TAB
-    add hl, de                    ; HL = entry address
-    ld a, (hl)
-    ld (t0), a
-    inc hl
-    ld a, (hl)
-    ld (t1), a
-    inc hl
-    ld a, (hl)
-    ld (t2), a
-    inc hl
-    ld a, (hl)
-    ld (t3), a
-    ; crc >>= 8 (little-endian: shift bytes down)
+    add hl, hl                    ; HL = index * 4
+    ld a, h
+    add a, CRC32_TAB / 256        ; entry page = table page + index >> 6
+    ld h, a                       ; HL = address of the 4-byte entry
+    ; crc >>= 8: little-endian, so the bytes each move down one slot
     ld a, (crc32 + 1)
     ld (crc32 + 0), a
     ld a, (crc32 + 2)
     ld (crc32 + 1), a
     ld a, (crc32 + 3)
     ld (crc32 + 2), a
-    xor a
+    ; xor the entry into it; crc[3] is loaded rather than xored because the
+    ; shift left it zero and e[3] is the whole top byte.
+    ld a, (crc32 + 0)
+    xor (hl)
+    ld (crc32 + 0), a
+    inc hl
+    ld a, (crc32 + 1)
+    xor (hl)
+    ld (crc32 + 1), a
+    inc hl
+    ld a, (crc32 + 2)
+    xor (hl)
+    ld (crc32 + 2), a
+    inc hl
+    ld a, (hl)
     ld (crc32 + 3), a
-    ; xor the table entry
-    ld a, (t0)
-    ld hl, crc32 + 0
-    xor (hl)
-    ld (hl), a
-    ld a, (t1)
-    inc hl
-    xor (hl)
-    ld (hl), a
-    ld a, (t2)
-    inc hl
-    xor (hl)
-    ld (hl), a
-    ld a, (t3)
-    inc hl
-    xor (hl)
-    ld (hl), a
-    pop bc
+    inc de                        ; next byte
+    endm
+
+; --------------------------------------------------------------------------
+; fold_block - fold BC bytes at HL into crc32
+;   In:       HL = data, BC = length
+;   Clobbers: everything
+;
+; The 32-bit CRC has to live in memory (the Z80 has no 32-bit register), but
+; everything else is in registers: DE walks the buffer, B drives `djnz` and HL
+; addresses the table entry.  No call per byte.
+;
+; The old form kept the pointer and count in fb_ptr/fb_left and called
+; crc32_byte for every byte, ~419 T/byte.  This is the register-resident shape
+; tools/ckbench.py measures at ~281 T/byte.
+;
+; The walk is 256 bytes at a time so `djnz` can be the inner counter; the page
+; count and the final partial page arrive in B and C.
+;
+; index * 4 needs ten bits, hence a 16-bit shift of HL rather than two
+; `add a,a` -- the latter truncates every index >= 64 to the wrong entry, which
+; was the first bug this routine had.  The table is 256-byte aligned, so the
+; high byte of index * 4 plus the table's page is the entry's page, and the low
+; byte is its offset within that page.
+fold_block:
+    ex de, hl                     ; DE = buffer; HL is free for the table
+    ld a, b
+    or a
+    jr z, .short                  ; fewer than 256 bytes in total
+    ld (fb_pages), a              ; full 256-byte pages
+    ld a, c
+    ld (fb_tail), a               ; leftover bytes, folded after them
+.page:
+    ld b, 0                       ; 256 iterations
+.byte:
+    CRC_STEP
+    djnz .byte
+    ld a, (fb_pages)
+    dec a
+    ld (fb_pages), a
+    jr nz, .page
+    ld a, (fb_tail)
+    or a
+    ret z                         ; the buffer ended on a page boundary
+    ld b, a
+    jr .tail
+.short:
+    ld b, c                       ; B was 0, so the count is C alone
+    ld a, b
+    or a
+    ret z                         ; nothing to fold
+.tail:
+    CRC_STEP
+    djnz .tail
     ret
 
 ; --------------------------------------------------------------------------
@@ -880,8 +900,8 @@ name_idx:       db 0
 star_seen:      db 0
 name_save:      db 0
 match_idx:      db 0
-fb_ptr:         dw 0
-fb_left:        dw 0
+fb_pages:       db 0                 ; fold_block: full 256-byte pages left
+fb_tail:        db 0                 ; fold_block: leftover bytes after them
 trim_end:       db 0
 tab_ptr:        dw 0
 moved:          db 0
