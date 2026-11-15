@@ -1,541 +1,335 @@
 # OpenCP/M +3
 
-A complete, from-scratch CP/M 3.1 (CP/M Plus) for the ZX Spectrum +3. The
-BIOS, BDOS, CCP, screen, keyboard and uPD765A drivers, the utilities and the
-build and test tooling are all original Z80 assembly written for this project.
+A brand-new CP/M Plus (CP/M 3.1) for the ZX Spectrum +3, written from scratch.
 
-**It is not Locomotive Software's CP/M Plus, and contains no part of it.** No
-Locomotive ROM, binary or disassembly was used: everything here was written
-against the published CP/M 3 documentation and the +3's documented hardware
-behaviour.
+Boot the disc and you get the familiar `A>` prompt, a choice of 32, 51 or 64
+column text, an 80-column virtual screen, a RAM disk, a full-screen editor and
+a set of disc tools — and the classic CP/M software of the 1980s (WordStar,
+dBASE II, Turbo Pascal, the Infocom adventures and plenty more) runs on it.
 
-## Compared with Locomotive CP/M +3
+**It is not Locomotive Software's CP/M Plus, and contains none of it.** Every
+part of the system, from the BIOS to the utilities, was written for this
+project from the published CP/M 3 documentation and the +3's documented
+hardware.
 
-Both systems speak CP/M 3.1 and the +3's XBIOS, so the same applications run.
-Beyond that, this system offers:
+## Getting started
+
+Use `cpm3.dsk`, the 180K distribution disc:
+
+- **In an emulator** — select a Spectrum +3, insert `cpm3.dsk` in drive A: and
+  choose **Loader** from the start-up menu.
+- **On a real +3** — write `cpm3.dsk` to a 3" disc (or put it on a Gotek or
+  similar drive emulator) and choose **Loader**.
+
+After a few seconds you are at the `A>` prompt. Type `DIR` to see what is on
+the disc and `HELP` for the built-in commands.
+
+To build the disc yourself, see [Building from source](#building-from-source).
+
+## How it compares with Locomotive's CP/M Plus
+
+Both speak CP/M 3.1 and the +3's extended BIOS, so the same applications run.
+On top of that you get:
 
 | | Locomotive CP/M Plus (+3) | OpenCP/M +3 |
 |---|---|---|
-| Origin | Locomotive Software, 1987 | clean-room, this project |
 | Text widths | 32 and 51 columns | 32, 51 and **64** columns |
-| Virtual 80-column screen (`SET24X80`) | rendered in 51 columns | rendered in **51 or 64** columns |
-| Full-screen text editor | — (`ED`, a line editor) | **`EDIT.COM`** |
-| Formatting a disk | `DISCKIT` | **`FORMAT.COM`** (7 layouts) |
-| Copying a disk | `DISCKIT` | **`DISKCOPY.COM`** (track level, verified) |
-| Undeleting a file | — | **`UNDELETE.COM`** |
-| File checksums | — | **`CRC.COM`** |
-| RAM disk | `RAMDISC.FID` | **`RAMDISK.FID`**, 16K C: |
-| Serial (AUX) device | supported | **not implemented** |
-| Parallel (printer) | supported | **not implemented** |
-| BASIC | Mallard BASIC | **BBC BASIC** |
+| Virtual 80-column screen | shown in 51 columns | shown in **51 or 64** columns |
+| Full-screen text editor | — (`ED`, a line editor) | **`EDIT`** |
+| Formatting a disc | `DISCKIT` | **`FORMAT`** (7 layouts) |
+| Copying a disc | `DISCKIT` | **`DISKCOPY`** (verified) |
+| Undeleting a file | — | **`UNDELETE`** |
+| File checksums | — | **`CRC`** |
+| Command-line recall | — | **cursor up** brings back the last command |
+| RAM disk | `RAMDISC.FID` | **`RAMDISK.FID`**, 16K `C:` |
+| Serial and parallel ports | supported | **not yet** |
+| BASIC | Mallard BASIC | **BBC BASIC** (optional, see below) |
 
-## Features
+## Using the system
 
-- **Display** — 32, 51 and 64 columns plus the paged 24x80 virtual screen; see
-  [Screen modes](#screen-modes).
-- **Status line**: `ESC 0`/`ESC 1` toggle the bottom row for BIOS messages
-  (23 text rows while it is on).  It shows the time as `HH:MM` from the
-  software clock the ISR keeps, right-aligned so the 24x80 `<`/`>`
-  hidden-column markers keep the edge cells; `TE_STL_ASK` reports it as
-  disabled in 24x80, as the +3 manual specifies.
-- **Terminal**: VT52/ADM-3A cursor and erase sequences, colour and BRIGHT via
-  `ESC b`/`ESC c`, wrap control (`ESC v`/`ESC w`), a settable viewport
-  (`ESC X`), and the `ESC 3`/`ESC 4` screen-size and page-mode controls from
-  the +3 CP/M manual.
-- **XBIOS/TE**: the +3 extended BIOS terminal, disk and keyboard calls through
-  BIOS function 30 (`USERF`) — `TE_ASK`, `TE_RESET`, `TE_SET_INK`,
-  `TE_SET_BORDER`, `TE_SET_SPEED`, `SCR_RUN_ROUTINE`, the `DD_*` disk calls and
-  the `KM_*` keyboard calls; see
-  [XBIOS/TE Interface](docs/cpm-plus-xbios.md).
-- **Keyboard**: the +3 CP/M matrix — BREAK (`Caps Shift`+`Space`) sends ESC,
-  `Caps Shift`+`Symbol` sends control codes, EXTEND+Enter flips the 24x80
-  halves, plus the function-key mappings.
-- **BDOS**: console and file I/O plus the CP/M 3 extensions real software
-  uses — F44/F45/F46/F47/F48/F49/F50, F59, F99, F104/F105, F107-F112 and
-  F120-F123 (SETDEF order/path). F46 computes free space from the allocation
-  vector; F47 chains to a program without a prompt.
-- **uPD765A FDC driver** with 512→128 byte sector deblocking.  Reads and
-  writes the formats described by the XDPB, including 8-bit and 16-bit block
-  numbers (DSM > 255), probing the geometry from the boot sector.
-- **Banked memory**: 61K TPA, a separate system bank, and a common-memory stub
-  that bridges TPA calls into the BIOS/BDOS; see
-  [Memory Layout](#memory-layout).
-- **Clock**: tick-driven date/time (F104/F105), maintained by an ISR in common
-  memory so it keeps running while a TPA program executes.
-- **C: RAM disk**: optional 16K `RAMDISK.FID` in bank 7.
+### The screen
 
-### Screen modes
-
-| Mode | Font | Select with |
+| Width | Font | Command |
 |---|---|---|
-| 32x24 | 8px | `SCREEN 32` |
-| 51x24 | 5px | `SCREEN 51` (default) |
-| 64x24 | 4px | `SCREEN 64` |
-| 80x24 | current | `SET24X80` (virtual, paged) |
+| 32 columns | 8 pixels | `SCREEN 32` |
+| 51 columns | 5 pixels | `SCREEN 51` (the default) |
+| 64 columns | 4 pixels | `SCREEN 64` |
+| 80 columns | current font | `SET24X80` |
 
-All modes are 24 rows high.  The 80x24 buffer lives in bank 5 at
-`5B00-62BF`, outside the image and the visible character buffer, so it costs no
-TPA or bank-6 space.  `SET24X80` / `ESC x` enters it, `ESC y` leaves, `ESC 3 2`
-enters at the current width.  The window changes page on EXTEND+Enter (or
-CAPS SHIFT+SYMBOL SHIFT+Enter), not when output crosses its edge, which
-would flicker; a program can ask for automatic paging with `ESC 5 0`.  The window steps by 24, 29 or 16 columns at
-32/51/64 columns.  A flip shifts the bitmap and re-renders only the exposed
-columns; `<`/`>` on the status line mark hidden text.
+The 80-column screen is a virtual one: the Spectrum shows part of it, and
+**EXTEND+Enter** flips to the other half. `<` and `>` on the status line show
+when text is hidden off either edge. `SET24X80 OFF` goes back to normal.
 
-## CCP commands
+The bottom line can show a status line with the time (`ESC 0` / `ESC 1` turn
+it off and on).
 
-`CCP.COM` is loaded from the boot disk at cold boot like real CP/M 3.  It
-loads `.COM` files (including GENCOM files with a 256-byte header), pushes the
-CP/M 3 warm-boot return address so a program may exit with `RET`, chains submit
-files and supports F47 program chaining.
+### The keyboard
 
-Everything not built in is loaded from `?.COM` on the current drive or the
-SETDEF search path.
-
-| Command | Action |
+| Keys | Does |
 |---|---|
-| `DIR [filespec] [[options]]` | list the files without the SYS attribute (wildcards `*` and `?`; a name with no type matches only a blank type; the column count follows the screen width); `SYSTEM FILE(S) EXIST` when SYS files match; with an option list `DIR.COM` takes over (below) |
-| `DIRSYS` / `DIRS [filespec] [[options]]` | list the files with the SYS attribute; `NON-SYSTEM FILE(S) EXIST` when others match; with an option list it runs `DIR.COM` as `DIR [SYS,...]` |
-| `ERASE` / `ERA [filespec] [[CONFIRM]]` | delete files; any wildcard asks `ERASE spec (Y/N)?` first; no name asks `Enter filename:`; `[CONFIRM]` asks about each file (`ERASE.COM`) |
-| `RENAME` / `REN new=old` | rename files (`REN new old` also works; the wildcards of both names must correspond, as in `REN A*.T*=S*.T*`); an existing target asks `delete (Y/N)?`; no name asks `Enter New Name:` / `Enter Old Name:` |
-| `TYPE` / `TYP [filespec] [[NO PAGE]]` | display a text file; no name asks `Enter filename:`; `[NO PAGE]` turns the page pause off |
-| `USER` / `USE [n]` | set the user area (0-15); no number asks `Enter User# :`; the prompt shows a non-zero user as `3A>` |
+| BREAK (Caps Shift+Space) | ESC |
+| EXTEND (Caps Shift+Symbol Shift) then a letter | that control key |
+| EXTEND+Enter | flip halves of the 80-column screen |
+| Caps+5/6/7/8 | cursor keys |
+| Caps+0 | delete |
+
+### Typing commands
+
+The command line is a proper line editor: **cursor up** (or EDIT) on an
+empty line brings back the previous command, the cursor keys move along it,
+typing inserts, Caps+0 and Caps+9 delete, and EXTEND+K / EXTEND+X delete to
+the end or the start. The same editor works in any program that reads a line
+of input from CP/M.
+
+These commands are built in:
+
+| Command | Does |
+|---|---|
+| `DIR [filespec]` | list files (`DIR *.COM`) |
+| `DIRSYS` / `DIRS` | list the system (hidden) files |
+| `ERA filespec` | delete files (asks first when there is a wildcard) |
+| `REN new=old` | rename a file |
+| `TYPE filespec` | show a text file, a screenful at a time |
+| `USER n` | change user area (0-15) |
 | `HELP` | list the built-ins |
+| `A:` `B:` `C:` | change drive |
 
-`cmd1!cmd2` runs the commands one after the other, each after its own prompt
-(up to 126 characters after the first `!`).  An unknown command is repeated
-followed by `?`.  The built-ins give a name with an option list
-(`DIR [FULL]`, `ERA x.* [CONFIRM]`) to the related transient, as the CP/M 3
-User's Guide describes: `DIR.COM` and `ERASE.COM` are shipped (`ERA` loads
-`ERASE.COM`); `RENAME.COM` is not, so `REN x=y [...]` answers `RENAME?`.
-`DIRSYS [options]` is not in the manual's option table; here it means `DIR`
-with `SYS` added to the list (`DIRS [FULL]`).
+Anything else runs the program of that name, so `EDIT LETTER.TXT` runs
+`EDIT.COM`. `DIR` and `ERA` take an option list too (`DIR [FULL]`,
+`ERA *.BAK [CONFIRM]`), and several commands can go on one line separated by
+`!` (`DIR!TYPE README.TXT`).
 
-`A:`, `B:` and `C:` prefixes are accepted wherever a filespec is expected.
+`C:` is a 16K RAM disk: quick, but emptied when the machine is switched off.
 
-The command line (and any program's BDOS line input) uses the CP/M 3 line
-editor: EDIT or cursor up on an empty line brings back the previous line,
-the cursor keys move through it, typing inserts, Caps+0 and Caps+9 delete,
-and EXTEND+K / EXTEND+X delete to the end or start; see
-[F10](docs/API.md#f10--read-console-buffer).
+## What's on the disc
 
-## Compatibility
+### Everyday programs
 
-The system boots from a standard 40-track +3 DSK and runs real CP/M 3 software.
-It has been exercised end to end with 34 third-party packages — interpreters,
-compilers, assemblers, debuggers, screen editors, databases and games — plus
-the DRI CP/M 3 utilities, all downloaded, booted and driven under the zx84 MCP
-emulator.
-
-- **Compilers and toolchains** — M80/L80, FORTRAN-80, BASIC Compiler, Aztec C,
-  Pascal/Z and SLR Z80ASM assemble, link and run.
-- **Applications** — Zork I-III, dBASE II, SuperCalc, Multiplan, WordStar,
-  WordMaster, VEDIT Plus, Turbo Pascal and BASIC-80 work; the large data files,
-  overlays and random FCB I/O they use are the interesting part.
-- **Games** — Pac-Man 95, STAR, Hunt, Ladder, Othello, MSCP chess and Colossal
-  Cave run, which covers dense full-screen redraws and keyboard input at play
-  speed.
-- **Interactive fiction** — Hitchhiker's Guide, Planetfall and Starcross run
-  from their Infocom CP/M disks, streaming large `.DAT` files as they play.
-- **DRI utilities** — ED, SET, SETKEYS and SHOW, including GENCOM files with a
-  COM header.
-- **Disk formats** — +3/CPC 8-bit blocks, the CP/M 3 16-bit block format (DSM >
-  255) and PCW 720K images, with `SHOWXDPB` reporting the probed geometry.  A
-  720K disc can be the *boot* disc: the stage-2 loader and boot sector are
-  built for both layouts, and the test image uses the 720K pair.
-
-The known gaps are documented rather than hidden: WordStar, Turbo Pascal,
-SuperCalc2 and Multiplan need the [24x80 screen](#screen-modes) or, for Turbo
-Pascal, `SCREEN 64` after a TINST 64-column install.
-
-Per-package results, the exact checks run and why the failures fail are in the
-[compatibility tables](docs/compatibility.md); the harness is described in the
-[real-world suite](docs/realworld-suite.md).  See [Documentation](#documentation)
-for the API references.
-
-## Tools
-
-- `DIR.COM` — `DIR` with options, the list taking any place in the line (one
-  list only; each option may be shortened while unambiguous):
-
-  | Option | Effect |
-  |---|---|
-  | `FULL` | name, allocated K, records, attributes (`Dir`/`Sys`, `RW`/`RO`), then totals and `Used/Max Dir Entries`; the default |
-  | `SIZE` | name and K only, several to a line |
-  | `ATT` | also the user attributes F1-F4 |
-  | `DIR` / `SYS` | only files without / with the SYS attribute (both or neither: all) |
-  | `RO` / `RW` | only Read-Only / Read-Write files |
-  | `DRIVE=ALL`, `d` or `(d,d)` | the drives to list (`DISK=` is the same); `ALL` is every logged-in drive plus those named in the filespecs |
-  | `USER=ALL`, `n` or `(n,n)` | the user areas to list |
-  | `EXCLUDE` | the files the filespecs do **not** match |
-  | `NOSORT` | directory order instead of alphabetical |
-  | `LENGTH=n` | repeat the `FULL` heading every *n* lines (5 or more) |
-  | `MESSAGE` | name each drive and user area as it is searched |
-  | `NOPAGE` / `FF` | no pause when the screen fills (there is no printer for `FF`'s form feed) |
-  | `DATE` | prints `Date and Time Stamping Inactive`: directory labels and stamps are not supported |
-
-  Several filespecs may be given (`DIR *.COM *.SUB [SIZE]`); each directory is
-  read once, so a file two specs match is listed once.
-- `EDIT.COM` — full-screen text editor: `EDIT [file]`. 23 text rows and an
-  inverted status row (file name, `line:col`, `INS`/`OVR`, `WRAP`, `WS`),
-  laid out for whichever width is active: 32, 51, 64 or the 80-column
-  virtual screen. The cursor keys (Caps+5/6/7/8) move, typing inserts or
-  overwrites, Caps+0 deletes back and Caps+4 types a tab. Commands are EXTEND (Caps+Symbol) or BREAK
-  followed by a letter:
-
-  | Key | Command | Key | Command |
-  |---|---|---|---|
-  | `O` | open a file | `S` | save (asks for a name if there is none) |
-  | `N` | new, empty buffer | `Q` | quit |
-  | `F` | find | `R` | replace (`Y`/`N`/`A`ll/`Q`uit at each match) |
-  | `V` | show spaces and tabs | `W` | word wrap on/off |
-  | `I` | insert/overwrite | `Z` | undo the last edit |
-  | `D` | delete the character under the cursor | `L` | redraw the screen |
-  | `H` | help | | |
-
-  EXTEND+C in the find and replace prompts switches between case-sensitive
-  (`[Aa]`) and case-insensitive (`[aa]`) matching. A bare BREAK, or holding
-  EXTEND for about a second, opens the command menu. New, open and quit ask
-  `Save changes? (Y/N/C)` when the text has changed. Saving writes
-  `$$$$$$$$.TMP` first and renames it over the file only once every record is
-  on the disc, so a full disc or a write error never loses the original; a
-  final `^Z` is kept. The text lives in a gap buffer at `3000-F000`, so a
-  file can be up to about 48K. Keys are read as raw tokens through XBIOS
-  `KM_KT_GET`, which is how EXTEND+letter and the cursor keys stay apart
-  from the characters they would otherwise type.
-- `ERASE.COM` — what `ERA`/`ERASE` load for `[CONFIRM]` (abbreviated `C`):
-  `A:NAME.TYP (Y/N)?` for each matching file, Y erases it.  It also works run
-  directly.
-- `DEVICE.COM` — shows and assigns the character devices (`DEVICE`,
-  `DEVICE NAMES`, `DEVICE VALUES`, `DEVICE LST`, `DEVICE LST:=CRT`,
-  `DEVICE LST:=NULL`, `DEVICE CONSOLE [PAGE | LINES=n | COLUMNS=n]`).  The
-  physical devices are the BIOS table (`CRT`, `LPT`, `SIO`, as on Locomotive's CP/M Plus); an
-  assignment writes the SCB redirection vector, which the BIOS applies to
-  `LST:` and `AUX:` (an unassigned device is a sink).  `CONIN:` and `CONOUT:`
-  take only `CRT`; none of the devices is a serial port, so `[XON, 9600]`
-  style options are refused.  `LINES` sets the page length the pause uses
-  (4-24); `COLUMNS` is 32, 51 or 64 (`SET24X80` gives 80).
-- `SCREEN.COM` — show or set the screen width (32, 51 or 64 columns).
-- `SET24X80.COM` — enter (`ON` or no argument) or leave (`OFF`) the virtual
-  80-column screen.
-- `SETKEYS.COM` — apply a key-definition file (`SETKEYS [file]`, default
-  `SETKEYS.KEY`): `n C "string"` sets key *n*'s translation and `E n "string"`
-  sets expansion token *n*.  Strings accept `^X` control characters and the
-  `^'#NN'` hex form, so the stock `RESET.KEY` works unchanged.  Writes the
-  bank-6 table through XBIOS `KM_SET_KEY`/`KM_SET_EXPAND`, so it survives a
-  warm boot.
-- `DATE.COM` — set/show the clock (4-digit year, tick-driven).
-- `DUMP.COM` — hex dump that adapts to the current screen width.
-- `SETDEF.COM` — show/set the search order and search path (F120-F123).
-- `SHOWXDPB.COM` — show the extended disk parameter blocks and detected
-  geometry.
-- `SUBMIT.COM` — build the `$$$.SUB` file the CCP drains (supports `$1`..`$9`;
-  nested submits are rejected; a line beginning with `<` is passed to the
-  running program as console input, so a script can drive `PIP`).
-- `FORMAT.COM` — format a disk in A: or B: (`FORMAT A:` / `FORMAT B:`). Asks
-  for the disk to be swapped, then for a layout:
-
-  | # | Layout | Geometry |
-  |---|---|---|
-  | 1 | 180K SS/40 (PCW) | 9 sectors, 1 reserved track |
-  | 2 | 720K DS/80 (PCW) | 9 sectors, 1 reserved track |
-  | 3 | CPC System 40 | 9 sectors, 2 reserved, IDs 41h-49h |
-  | 4 | CPC Data 40 | 9 sectors, no reserved, IDs C1h-C9h |
-  | 5 | HiForm 203 42 | 10 sectors, 12/22 gaps, interleave 3 |
-  | 6 | SuperMat 192 40 | 10 sectors, 3 dir blocks, interleave 1 |
-  | 7 | CPC IBM 40 | 8 sectors, interleave 2 |
-
-  Formats one track and verifies it sector by sector before moving on, with a
-  live `percentage / track / side / FORMAT|VERIFY` line. It writes the AMSDOS
-  disk spec into the boot sector of the layouts that reserve one, and the login
-  probe rebuilds the geometry from that spec, so 10-sector and 42-track disks
-  are detected as themselves. CPC Data is identified by its sector IDs
-  instead. `FORMAT A: /Q` skips the read-back — about a third off the total
-  time, and the summary says `not verified (/Q)`; bad-sector mapping is still
-  to do. Making the result bootable is `SYSGEN B:` afterwards.
-- `STAT.COM` — `STAT` shows each drive's free space (`A: 59K free of 175K`);
-  `STAT filespec` lists matching files with size and attributes (`R/O`,
-  `SYS`); `STAT filespec $R/O` / `$R/W` / `$SYS` sets or clears an attribute.
-  Free space comes from BDOS F46, capacity from the DPB, sizes by summing the
-  directory extents, attributes from the entry and F30. Wildcards work for
-  listing only (F30 matches exact names).
-- `UNDELETE.COM` — recover a file the BDOS deleted. `UNDELETE` lists the
-  deleted files on the current drive (`UNDELETE d:` or `UNDELETE filespec` to
-  narrow it); `UNDELETE filespec R` puts one back, `R U=n` into user area *n*.
-  Deleting writes `0E5h` over the first byte of each directory entry and
-  leaves the name, extents and block pointers on the disc, but F17/F18 skip
-  those entries, so the tool reads the directory sectors itself through the
-  XBIOS disc calls. Restoring is that one byte — after checking that none of
-  the file's blocks have been given to something written since, which would
-  mean the data is no longer intact. Every extent is restored together, each
-  rewritten sector is verified with `DD_CHECK_SECTOR`, and `F13` then drops
-  the BDOS's cached directory sector. A: and B: only (the C: RAM disk has no
-  directory sectors), and 8-bit block layouts only: a 720K disc is refused
-  rather than half-supported.
-- `CRC.COM` — checksums files. `CRC filespec` prints each matching file's
-  CRC-32, the standard reflected CRC (polynomial `EDB88320h`, initial and final
-  `FFFFFFFF`), so the value is directly comparable with `crc32`, `zlib.crc32`,
-  7-Zip and PKZIP on a host — the reason for choosing CRC-32 over a faster
-  CRC-16. Wildcards work, so `CRC *.COM` hashes a whole set. At 3.5 MHz a
-  byte-table CRC-32 runs at roughly 12 KB/s (`tools/ckbench.py`), which is
-  about 15 seconds for a full 175K disc and well under a second for a normal
-  `.COM`. The value covers exactly the records CP/M holds, i.e. `RC * 128`
-  bytes, so a file whose source is shorter reads as padded with `1Ah`.
-- `DISKCOPY.COM` — copy one disk to another: `DISKCOPY A: B:`,
-  `DISKCOPY B: A:`, or the same drive twice (`A: A:` / `B: B:`).  It asks for
-  the source (and target) disks, detects the source layout with the same login
-  probe the BIOS uses, then copies track by track.  With two drives each track
-  is read and written straight away; on one drive it reads as many tracks as
-  fit in a 48K buffer (up to 10), asks for the target, writes them, and asks
-  for the source back.  A live line shows the percentage, the logical track,
-  the side and READ/FORMAT/WRITE.  The target does not have to be
-  pre-formatted: as each track is written, the target track is formatted first,
-  using the source track's own ID layout (captured with repeated READ ID, so
-  the interleave and skew are copied rather than re-chosen).  The absolute
-  rotational phase is not observable, so the target's ID order can be a
-  rotation of the source's cycle.  Every written track is then read back and
-  compared with the data still in the buffer (DD_CHECK_SECTOR), so a write that
-  silently failed is caught on the spot.
-- `SYSGEN.COM` — make a formatted disk bootable: `SYSGEN B:` or `SYSGEN A:`.
-  The system is read from A: (track 0 — boot sector and stage-2 loader — plus
-  `CPM3.SYS`, `CPM3C.SYS` and `CCP.COM`) and buffered in memory, so the target
-  can be the same drive: SYSGEN then asks for the disks to be swapped. The
-  target's geometry is checked against the source's first; only the boot track
-  and the three system files are written, so other files on the target are
-  kept. Every written file is read back and compared with the buffered copy
-  (`Checking CPM3.SYS... ok`), and for the same drive the boot track is written
-  after the swap.
-
-## Disk contents and provenance
-
-`build/cpm3.dsk` is assembled from three sources: the system and utilities we
-assemble, the fonts and data in `src/`, and third-party binaries copied from
-`references/binaries/` when that (git-ignored) directory is present.  Every
-third-party binary below except `RPED.SUB` states its notice in its sign-on
-banner — `TYPE` or `DUMP` the file to read the same text.
-
-### Built from this repository
-
-| File | What it is |
+| Program | What it is for |
 |---|---|
-| `CPM3.SYS` | BIOS, BDOS, drivers — `src/bios/`, `src/bdos/` |
-| `CPM3C.SYS` | Bank-5 screen code and the common memory stub |
-| `CCP.COM` | MiniCCP — `src/ccp/miniccp.zpa` |
-| `RAMDISK.FID` | 16K `C:` RAM disk — `src/fid/ramdisk.asm` |
-| `FONT51.BIN` | 5-pixel font, 51-column mode |
-| `FONT32.BIN` | 8-pixel font, 32-column mode |
-| `FONT64.BIN` | 4-pixel font, 64-column mode |
-| `DATE.COM` `DUMP.COM` `SETDEF.COM` `SUBMIT.COM` | `src/tools/` |
-| `SCREEN.COM` `SET24X80.COM` `SETKEYS.COM` `SHOWXDPB.COM` | `src/tools/` |
-| `FORMAT.COM` `DISKCOPY.COM` `STAT.COM` `SYSGEN.COM` | `src/tools/` |
-| `DIR.COM` `ERASE.COM` `DEVICE.COM` `EDIT.COM` | `src/tools/` |
-| `UNDELETE.COM` `CRC.COM` | `src/tools/` |
+| `EDIT` | full-screen text editor |
+| `DIR` | directory listings with sizes, attributes and sorting |
+| `ERASE` | delete files, asking about each one |
+| `STAT` | free space, file sizes, and read-only / system attributes |
+| `TYPE`, `DUMP` | show a file as text or as hex |
+| `DATE` | show or set the date and time |
+| `SUBMIT` | run a batch file of commands |
 
-The fonts are 256-glyph, 8-bytes-per-character sets.  `FONT64.BIN` is
-generated by `tools/mkfont64.py` from `src/bios/font64.ch8`, the
-**Compression** typeface in the
-[ZX Origins](https://damieng.com/typography/zx-origins/compression/)
-collection; the 32- and 51-column sets cover the same 256 code points at
-8 and 5 pixels respectively.  The generator stores each 4-pixel row in both
-halves of its byte, so the 64-column renderer needs no shifting.
+### Disc tools
 
-### Third-party
+| Program | What it is for |
+|---|---|
+| `FORMAT` | format a disc in one of seven layouts |
+| `DISKCOPY` | copy a whole disc, on one drive or two |
+| `SYSGEN` | make a formatted disc bootable |
+| `UNDELETE` | get back a file you deleted |
+| `CRC` | checksum files, to check a copy is good |
+| `SHOWXDPB` | show a disc's format |
 
-| File | Origin | Copyright |
+### Setting things up
+
+| Program | What it is for |
+|---|---|
+| `SCREEN` | 32, 51 or 64 columns |
+| `SET24X80` | the 80-column virtual screen on or off |
+| `SETKEYS` | redefine keys from a key-definition file |
+| `SETDEF` | where to look for programs, and screen paging |
+| `DEVICE` | show and assign the printer and auxiliary devices |
+
+### Optional extras
+
+Builds made with the third-party programs present (see
+[Building from source](#building-from-source)) also carry Digital Research's
+`PIP` (file copying), `ED`, `SET` and `SHOW`, and R.T. Russell's
+**BBC BASIC**.
+
+## Program guide
+
+### EDIT
+
+`EDIT [file]` opens the file, or an empty page. You get 23 rows of text and a
+status line showing the file name, the cursor's `line:col` and the modes in
+use, at any screen width including 80 columns.
+
+The cursor keys move, typing inserts (or overwrites), Caps+0 deletes
+backwards and Caps+4 types a tab. Commands are EXTEND or BREAK followed by a
+letter — or press BREAK on its own, or hold EXTEND for a second, to see the
+menu:
+
+| Key | Command | Key | Command |
+|---|---|---|---|
+| `O` | open a file | `S` | save |
+| `N` | new, empty file | `Q` | quit |
+| `F` | find | `R` | replace (`Y`/`N`/`A`ll/`Q`uit at each match) |
+| `V` | show spaces and tabs | `W` | word wrap on/off |
+| `I` | insert/overwrite | `Z` | undo |
+| `D` | delete the character under the cursor | `L` | redraw the screen |
+| `H` | help | | |
+
+EXTEND+C in the find and replace prompts switches between matching case
+(`[Aa]`) and ignoring it (`[aa]`). EDIT asks before throwing away unsaved
+changes, and saving is safe: the new text is written in full before it
+replaces the old file, so a full disc never costs you the original. Files can
+be up to about 48K.
+
+### DIR
+
+`DIR` with an option list in square brackets. Options can be shortened as
+long as they stay unambiguous:
+
+| Option | Shows |
+|---|---|
+| `FULL` | name, size, records and attributes, then totals (the default) |
+| `SIZE` | names and sizes, several to a line |
+| `ATT` | also the user attributes F1-F4 |
+| `DIR` / `SYS` | only ordinary / only system files |
+| `RO` / `RW` | only read-only / only read-write files |
+| `DRIVE=ALL`, `d` or `(d,d)` | other drives |
+| `USER=ALL`, `n` or `(n,n)` | other user areas |
+| `EXCLUDE` | the files that do **not** match |
+| `NOSORT` | directory order instead of alphabetical |
+| `NOPAGE` | no pause when the screen fills |
+
+Several filespecs may be given: `DIR *.COM *.SUB [SIZE]`.
+
+### ERASE
+
+`ERA filespec [CONFIRM]` asks `A:NAME.TYP (Y/N)?` for each matching file.
+
+### STAT
+
+`STAT` shows each drive's free space (`A: 59K free of 175K`). `STAT filespec`
+lists matching files with their size and attributes, and
+`STAT filespec $R/O`, `$R/W` or `$SYS` changes them.
+
+### FORMAT
+
+`FORMAT A:` or `FORMAT B:` asks you to put in the disc, then for a layout:
+
+| # | Layout | Notes |
 |---|---|---|
-| `BBCBASIC.COM` | BBC BASIC (Z80) 5.00, by R.T. Russell | © R.T. Russell 1982-2025 |
-| `ED.COM` | DR CP/M 3 ED | © 1982 Digital Research |
-| `PIP.COM` | DR CP/M 3 PIP 3.0 (12/06/82) | © 1982 Digital Research |
-| `SET.COM` | DR CP/M 3 SET | © 1982 Digital Research |
-| `SHOW.COM` | DR CP/M 3 SHOW 3.1 | © 1982 Digital Research |
-| `TYPE.COM` | DR CP/M 3 TYPE | © 1982 Digital Research |
-| `RPED.SUB` | local one-line helper (`basic rped`) | none stated |
+| 1 | 180K +3 / PCW | the standard +3 disc |
+| 2 | 720K PCW | double-sided, 80 tracks |
+| 3 | CPC System | |
+| 4 | CPC Data | |
+| 5 | HiForm 203 | 203K on a standard disc |
+| 6 | SuperMat 192 | 192K on a standard disc |
+| 7 | CPC IBM | |
 
-**Digital Research tools.**  DRDOS, Inc. (successor to Digital Research) grants
-"a right to use, distribute, modify, enhance, and otherwise make available in a
-nonexclusive manner CP/M and its derivatives" — see the
-[CP/M licence](http://www.cpm.z80.de/license.html).  That covers the `ED`,
-`PIP`, `SET`, `SHOW` and `TYPE` binaries.  Source for all of them is in the
-CP/M 3 source archive published at
-<https://www.seasip.info/Cpm/software/dri.html>.
+Each track is formatted and then read back to check it, with a progress line
+as it goes. `FORMAT A: /Q` skips the read-back for about a third off the
+time. Making the result bootable is `SYSGEN B:` afterwards.
 
-**BBC BASIC.**  R.T. Russell makes BBC BASIC (Z80) available free of charge,
-with the condition that the versions be distributed together with the other
-files in his release archive.  This disk ships only `BBCBASIC.COM`; if that
-condition is read strictly it is not satisfied, so the interpreter is added
-only when you put it in `references/binaries/` yourself.  Recent releases of
-the interpreter's source are also available under the zlib licence.
+### DISKCOPY
 
-### Deliberately not shipped
+`DISKCOPY A: B:` copies a whole disc, track by track, and checks every track
+it writes. With a single drive, `DISKCOPY A: A:` reads as much as fits in
+memory and asks you to swap discs. The target does not need formatting first:
+each track is formatted to match the source as it is copied.
 
-`references/binaries/` may hold more than the disk carries.  These are kept out
-of the image by name in `build.cmd` and `build.sh`:
+### SYSGEN
 
-| File | Why not |
-|---|---|
-| `SETKEYS.COM`, `RESET.KEY` | Amstrad's originals are Locomotive Software code — the banner reads "Developed by Locomotive Software Ltd."  This project is a clean-room CP/M 3.1 and contains no part of Locomotive's system, so their `SETKEYS.COM` stays off the disk.  Our own `SETKEYS.COM` (above) does the same job, and `RESET.KEY` is data, not code: add it yourself and it works unchanged. |
-| `PROFILE.SUB` | Amstrad's start-up script; running it at every cold boot would copy ~10K into the 16K `C:` RAM disk before the first prompt.  It works if you add it. |
-| `RENAME.COM` | the CCP's built-in `REN` covers it |
-| `NULU11.COM` | an LBR library manager, not needed on the distribution disk |
-| `PMAUTOAE.COM` | 31K archive extractor, 720K test image only |
-| `*.COMx` | renamed on purpose so the `*.COM` glob skips them — they are reference copies (`DISCKIT`, `BASIC`, `FORMAT`, ...), some of them Locomotive's |
+`SYSGEN B:` (or `SYSGEN A:`) copies the system from the disc in A: onto
+another formatted disc so it can boot. Other files on the target are kept,
+and everything written is read back to check it. With one drive it asks you
+to swap discs.
 
-Because `references/` is untracked, a fresh clone and CI build a source-only
-disk: everything in the first table, nothing in the second.
+### UNDELETE
 
-## Wishlist / TODO
+`UNDELETE` lists the deleted files that can still be recovered
+(`UNDELETE B:` or `UNDELETE *.TXT` to narrow the list).
+`UNDELETE LETTER.TXT R` brings one back, and `R U=n` restores it into user
+area *n*. A file is only restored if nothing written since has reused its
+space, so what comes back is intact. Works on A: and B: with the standard
++3 formats (not 720K discs).
 
-- **FORMAT bad-sector mapping** — a sector that fails to format or read back
-  is reported and the disc abandoned; mapping it into a hidden file (so a
-  slightly damaged disc still yields a CP/M volume) is not implemented.
-  `FORMAT d: /Q` covers the other option from that list: it skips the
-  read-back for a known-good disc.
-- **ANSI extras** — the CSI subset (see
-  [docs/ansi-subset.md](docs/ansi-subset.md)) covers cursor motion, erase,
-  save/restore, SGR (`ESC [ … m`: bold, blink, reverse video and the 8 ANSI
-  colours) and the private autowrap modes (`ESC [ ? 7 h/l`).  What is left is
-  the hardware's own limit: faint, underline and the extended colour forms
-  have no equivalent in the Spectrum attribute register.
-- **Richer command-line file specs** (wildcards for `TYPE`, and the like).
+### CRC
 
-## Technical
+`CRC filespec` prints each matching file's CRC-32 (`CRC *.COM` does a whole
+set). It is the same CRC-32 that `zip`, 7-Zip and `crc32` use on a PC, so you
+can check a file survived a copy to or from the +3.
 
-### Memory Layout
+### And the rest
 
-| Range | TPA mode | System mode |
-|-------|----------|-------------|
-| 0000–3FFF | Bank 0 — TPA | Bank 4 — BIOS, BDOS, drivers |
-| 4000–7FFF | Bank 1 — TPA | Bank 7 — C: RAM disk (16K) |
-| 8000–BFFF | Bank 2 — TPA | Bank 6 — fonts, FID, FDC/text buffers |
-| C000–F5FF | Bank 3 — TPA | Bank 3 — `CPM3.SYS` head (unused after init) |
-| F600–FFFF | Common stub (bank 3) | Common stub (bank 3) |
+- `DATE` shows the date and time, `DATE S` sets them and `DATE C` keeps the
+  display running.
+- `DUMP file` shows a file in hex and ASCII, sized to the screen width.
+- `SUBMIT file [args]` runs a `.SUB` file of commands, with `$1`..`$9`
+  replaced by the arguments. A line starting with `<` is typed into the
+  running program instead, so a script can drive `PIP`.
+- `SETDEF` shows the settings; `SETDEF [PAGE]` / `[NOPAGE]` turn the
+  screenful pause on and off, and `SETDEF A:,B:` sets where programs are
+  looked for.
+- `SETKEYS [file]` loads a key-definition file (`SETKEYS.KEY` by default);
+  the `RESET.KEY` from Locomotive's CP/M Plus works unchanged.
+- `DEVICE` shows the devices; `DEVICE LST:=NULL` and similar reassign them,
+  and `DEVICE CONSOLE [PAGE | LINES=n | COLUMNS=n]` sets up the screen.
+- `SHOWXDPB` shows the format of each drive's disc.
 
-`CPM3.SYS` is loaded at `C000` and can run past `F600` during the load; `init`
-copies it to bank 4, then copies the common stub to `F600–FFFF` from
-`CPM3C.SYS`, which the loader stages in bank 5 at `62C0` behind the screen
-code that runs from there.
+## Running CP/M software
 
-Banking is controlled via port `0x1FFD`. See [AGENTS.md](AGENTS.md) for the
-full architecture and [docs/boot.md](docs/boot.md) for the boot sequence.
+Dozens of classic packages have been tested from their original files:
 
-### Building
+- **Word processing and business** — WordStar, WordMaster, VEDIT Plus,
+  dBASE II, SuperCalc and Multiplan.
+- **Programming** — Turbo Pascal, BASIC-80, BBC BASIC, M80/L80, FORTRAN-80,
+  the BASIC Compiler, Aztec C, Pascal/Z and the Z80ASM assembler.
+- **Adventures** — Zork I-III, Hitchhiker's Guide, Planetfall, Starcross and
+  Colossal Cave, including saving and restoring games.
+- **Games** — Pac-Man 95, Ladder, STAR, Hunt, Othello and MSCP chess.
 
-Requires [sjasmplus](https://github.com/z00m128/sjasmplus) and Python 3.
+Programs written for an 80-column terminal (WordStar, SuperCalc2, Multiplan,
+Turbo Pascal) want `SET24X80` first; Turbo Pascal also works in `SCREEN 64`
+once installed for 64 columns. Discs in the CP/M 3 16-bit block format and
+PCW 720K discs can be read as well as the standard +3 format.
 
-```bash
-# Build the disk image
-build.cmd
+The full list, with what was checked for each, is in the
+[compatibility tables](docs/compatibility.md).
 
-# or, on a Unix-like shell
-./build.sh
+## Building from source
 
-# Build with additional files
-build.cmd --add FILE ...
-```
-
-Output: three +3 images and one data image.
-
-| Image | Contents |
-|---|---|
-| `build/cpm3.dsk` | **Distribution.** A 180K single-sided +3 disc: the system files, the utilities under [Tools](#tools), and — when `references/binaries/` is present — the local third-party utilities, including **BBC BASIC**. |
-| `build/cpm3-dist720.dsk` | **720K distribution.** The same CP/M files as `cpm3.dsk`, on a 720K PCW DS/DD disc (80 cylinders, two alternating sides, 2K blocks) booted by the `-DDS720` pair. Nothing extra on it yet: it exists for the ~570K free it gives a larger tool set later. |
-| `build/cpm3-test.dsk` | **Test image.** A 720K PCW DS/DD disc carrying everything on the distribution image plus the on-disk regression suite, its fixtures and, when fetched, `PMAUTOAE.COM`. The smoke runner boots this image. |
-| `build/cpm3_720.dsk` | PCW DS/DD 720K data image used by the 16-bit block tests. |
-
-A 720K disc is not readable by an unmodified +3 (its drive is single-sided
-180K), so `cpm3.dsk` remains the image for real hardware; the 720K pair suits
-emulators, PCW drives and the larger third-party toolkits.
-
-A disk without `CCP.COM` boots to a diagnostic instead of a prompt; a disk
-without `CPM3C.SYS` does not boot.
-
-The third-party binaries under `references/binaries/` are untracked and
-optional. When present they are added to **every** +3 image automatically, so
-each distribution disk carries BBC BASIC and your other tools; a fresh clone
-(and CI) builds a source-only disk, and the smoke runner skips the checks that
-need them.  Those files are copyrighted: they are not part of the repository and
-are never shipped with a release.  `RENAME.COM` is deliberately excluded (the
-CCP's built-in `REN` covers it); the smoke runner adds it to a scratch copy so
-a real third-party F23 caller is still covered.  `NULU11.COM` (an LBR library
-manager) is left off the image, and so is `PROFILE.SUB`: it is Amstrad's
-start-up script, and running it at every cold boot would copy ~10K into the
-16K `C:` RAM disk before the first prompt.  The file itself works: add it to a
-disk and it runs as it did on the original system.
-
-`PMAUTOAE.COM` (the PMARC toolkit self-extractor by Yoshihiko Mino) is
-handled differently: it is third-party too, so it goes **only on the 720K
-test image**, and only when `tools/fetch_pmautoae.py` has downloaded it into
-`references/binaries/`.  The 720K image has room for the 31K archive *and*
-the ten files it extracts, which the 180K distribution image does not.  The
-720K distribution image deliberately carries neither.
-
-### Testing
-
-Use the [zx84](https://github.com/damieng-zx/zx84) MCP emulator:
-
-```
-model +3
-load build/cpm3.dsk          ; the distribution image
-disk_boot
-run 1000
-```
-
-To run the on-disk test suite use `build/cpm3-test.dsk` instead; the programs
-and what each covers are listed in the [smoke test](docs/mcp-smoke-test.md).
-
-zx84 snapshots can also be saved and loaded through MCP. After reaching a clean
-prompt, use `save build/prompt.szx`; later use `load build/prompt.szx` to resume
-testing from that prompt without rebooting the disk image.
-
-Automated runners:
+You need [sjasmplus](https://github.com/z00m128/sjasmplus) and Python 3.
 
 ```bash
-python3 tools/zx84_smoke.py              # boot, system tests, CCP, terminal
-python3 tools/zx84_negative.py           # corrupted images must not boot
-python3 tools/zx84_dri.py                # DRI utilities (needs local copies)
-python3 tools/zx84_realworld.py          # the third-party packages
-python3 tools/screen_bench.py            # screen rendering, in T-states
-python3 -m unittest discover -s tests -t .
+build.cmd        # Windows
+./build.sh       # Linux, macOS
+build.cmd --add FILE ...   # put extra files on the discs
 ```
 
-The screen benchmark runs the same binary on this system and on Locomotive's
-CP/M Plus, and `--compare` tabulates the two; see
-[screen benchmark](docs/screen-benchmark.md).
+That makes:
 
-The smoke runner defaults to the test image; pass `--dsk build/cpm3.dsk` to
-boot the distribution image (that only makes sense with `--quick`).  When BBC
-BASIC is in `references/binaries/` the smoke also boots a copy of the
-distribution image and checks that it starts (`BBC BASIC (Z80)` and the `>`
-prompt).
+| Image | What it is |
+|---|---|
+| `build/cpm3.dsk` | the 180K distribution disc, for real hardware |
+| `build/cpm3-dist720.dsk` | the same files on a 720K PCW disc, with more free space |
+| `build/cpm3-test.dsk` | the 720K disc plus the test programs |
 
-### Project Structure
+To include the optional extras, put `PIP.COM`, `ED.COM`, `SET.COM`,
+`SHOW.COM`, `TYPE.COM` and `BBCBASIC.COM` in `references/binaries/` before
+building. They are copyrighted by their authors and are not part of this
+repository.
 
-```
-src/
-  boot/     Boot sector and stage-2 loader
-  bios/     BIOS, screen/keyboard/FDC drivers, common memory stub, fonts
-  bdos/     BDOS (console + file I/O)
-  ccp/      MiniCCP command processor
-  fid/      RAM disk FID module
-  util/     CP/M utilities
-  test/     Sources for the on-disk regression programs
-tools/      Build tools (DSK image builder, font generator) and test runners
-docs/       API reference, filesystem and compatibility documentation
-```
-
-## Documentation
+How the system works inside — memory banking, the boot sequence, the BDOS
+and extended BIOS calls — and how it is tested are covered in the
+documentation:
 
 - [Boot, Paging and Common Memory](docs/boot.md)
 - [CP/M 3.1 BDOS API Reference](docs/API.md)
-- [Filesystem Layout](docs/filesystem.md)
 - [XBIOS/TE Interface](docs/cpm-plus-xbios.md)
+- [Filesystem Layout](docs/filesystem.md)
 - [CP/M Software Compatibility](docs/compatibility.md)
 - [Real-world CP/M Suite](docs/realworld-suite.md)
-- [Screen Rendering Benchmark](docs/screen-benchmark.md)
 - [zx84 MCP Smoke Test](docs/mcp-smoke-test.md)
-- [Third-party Application Tests](docs/third-party-tests.md)
+- [Screen Rendering Benchmark](docs/screen-benchmark.md)
 - [CI with zx84](docs/ci.md)
 
-## License
+## Credits and licences
 
-This project is licensed under the [MIT License](LICENSE).
+OpenCP/M +3 is released under the [MIT License](LICENSE).
+
+The optional Digital Research programs (`PIP`, `ED`, `SET`, `SHOW`, `TYPE`)
+are © 1982 Digital Research and may be redistributed under the
+[CP/M licence](http://www.cpm.z80.de/license.html).
+
+[BBC BASIC (Z80)](https://github.com/rtrussell/BBCZ80) is © R.T. Russell,
+who makes it available free of charge.
